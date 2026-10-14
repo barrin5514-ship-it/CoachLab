@@ -1,6 +1,6 @@
 # CoachLab development and learning requirements
 
-Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md; Phase 3 has not been approved. Do not push without the user's approval.
+Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md; the user explicitly authorized Phase 3 in the message following documentation commit b060b76. Stop after Phase 3; Phase 4 is not approved. Do not push without the user's approval.
 
 After each verified development step:
 

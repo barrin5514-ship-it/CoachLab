@@ -1,12 +1,12 @@
 # CoachLab code walkthrough
 
-Verified source snapshot: 2026-10-14, application commit c56967a. Documentation-only changes do not change this source snapshot.
+Verified source snapshot: 2026-10-14, Phase 3 source in the commit containing this walkthrough. Prior application baseline: c56967a; prior documentation milestone: b060b76.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
 ## How the pieces connect
 
-Browser → Vite serves index.html → main.jsx renders App → App fetches /api/health → Vite forwards to Express → Express returns JSON → App updates its status text. CSS styles the HTML produced by React. Node reads optional .env configuration and validates the future SQLite path before Express listens. There is no database call in this flow yet.
+Browser → Vite serves index.html → main.jsx renders App → App fetches /api/health → Vite forwards to Express → Express returns JSON → App updates its status text. CSS styles the HTML produced by React. Node reads optional .env configuration and validates the future SQLite path before Express listens. There is no database call in this browser flow yet. Separately, npm run db:migrate runs migrate.js → database.js opens the external SQLite file → migrations.js applies the SQL and records its version → migrate.js closes the connection.
 
 ## Reading the syntax
 
@@ -248,7 +248,7 @@ Vite reads this file through the npm frontend/build commands. The development pr
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\config.js`
 
-Executed when server/index.js imports it. It exports a path for future database code, but does not create a file, directory, connection, or migration.
+Executed when server/index.js imports it. It exports the path used by database.js, but does not create a file, directory, connection, or migration.
 
 ### Lines 1–14
 
@@ -370,49 +370,59 @@ npm reads this JSON manifest for commands and dependency versions. JSON has quot
 3 |   "version": "0.1.0",
 4 |   "private": true,
 5 |   "type": "module",
-6 |   "engines": { "node": ">=24.19.0 <25" },
-7 |   "scripts": {
-8 |     "dev:client": "vite --config client/vite.config.js",
-9 |     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
-10 |     "build": "vite build --config client/vite.config.js"
-11 |   },
-12 |   "dependencies": {
-13 |     "express": "5.3.0",
-14 |     "react": "19.3.0",
-15 |     "react-dom": "19.3.0"
+6 |   "engines": {
+7 |     "node": ">=24.19.0 <25"
+8 |   },
+9 |   "scripts": {
+10 |     "dev:client": "vite --config client/vite.config.js",
+11 |     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
+12 |     "build": "vite build --config client/vite.config.js",
+13 |     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
+14 |     "test": "node --test server/database.test.js"
+15 |   },
 ```
 
-- **Line 1:** Opens the root JSON object.
-- **Line 2:** Names the package coachlab; the comma separates the next property.
-- **Line 3:** Sets the project's own version, not a dependency version.
-- **Line 4:** Marks the project private so npm will refuse accidental publication.
-- **Line 5:** Makes .js files use JavaScript modules with import/export in Node.
-- **Line 6:** Declares Node &gt;=24.19.0 and &lt;25. The range requires this supported Node major version; --engine-strict was used during installation to enforce compatibility.
-- **Line 7:** Opens the scripts object, which maps command names to shell commands.
-- **Line 8:** Defines npm run dev:client to start Vite with the explicit client configuration.
-- **Line 9:** Defines npm run dev:server to run server/index.js, load .env if present, and restart on source changes with --watch. Missing .env is allowed.
-- **Line 10:** Defines npm run build to produce a frontend production build using the same Vite configuration. This does not bundle Express or start a server.
-- **Line 11:** Closes scripts; the comma separates the next object property.
-- **Line 12:** Opens the runtime dependencies object.
-- **Line 13:** Pins Express to version 5.3.0 for the backend.
-- **Line 14:** Pins React to version 19.3.0 for components and hooks.
-- **Line 15:** Pins React DOM to version 19.3.0 for browser rendering. No comma follows because this is the last property in this object.
+- **Line 1:** Opens the JSON manifest object.
+- **Line 2:** Names the package coachlab.
+- **Line 3:** Sets the application's own version number.
+- **Line 4:** Prevents accidental publication to the npm registry.
+- **Line 5:** Enables JavaScript import/export modules for .js files in this package.
+- **Line 6:** Opens the engines object containing supported runtime versions.
+- **Line 7:** Requires Node at least 24.19.0 but below 25; --engine-strict enforces this during installation.
+- **Line 8:** Closes the engines object and separates the next property.
+- **Line 9:** Opens scripts, the map of npm command names to shell commands.
+- **Line 10:** Runs Vite with client/vite.config.js to serve the frontend locally.
+- **Line 11:** Runs Express with an optional .env file and Node's source watch/restart mode.
+- **Line 12:** Builds the frontend using the same Vite configuration; this does not run the API or migrate SQLite.
+- **Line 13:** Defines npm run db:migrate: Node reads optional .env and executes server/migrate.js without watch mode.
+- **Line 14:** Defines npm test to run the database tests using Node's built-in test runner.
+- **Line 15:** Closes scripts and separates the next object.
 
-### Lines 16–20
+### Lines 16–25
 
 ```text
-16 |   },
-17 |   "devDependencies": {
-18 |     "vite": "8.3.4"
-19 |   }
-20 | }
+16 |   "dependencies": {
+17 |     "better-sqlite3": "13.0.3",
+18 |     "express": "5.3.0",
+19 |     "react": "19.3.0",
+20 |     "react-dom": "19.3.0"
+21 |   },
+22 |   "devDependencies": {
+23 |     "vite": "8.3.4"
+24 |   }
+25 | }
 ```
 
-- **Line 16:** Closes runtime dependencies and separates the next property.
-- **Line 17:** Opens development-only dependencies used for building and serving frontend source.
-- **Line 18:** Pins Vite to version 8.3.4. The lockfile additionally records transitive dependencies and integrity hashes.
-- **Line 19:** Closes devDependencies without a trailing comma, as required for the final JSON property.
-- **Line 20:** Closes the manifest's root object.
+- **Line 16:** Opens runtime dependencies.
+- **Line 17:** Pins better-sqlite3 to 13.0.3, providing the SQLite connection and prepared-query API.
+- **Line 18:** Pins Express to 5.3.0.
+- **Line 19:** Pins React to 19.3.0.
+- **Line 20:** Pins React DOM to 19.3.0; no comma follows the object's last property.
+- **Line 21:** Closes runtime dependencies.
+- **Line 22:** Opens development dependencies.
+- **Line 23:** Pins Vite to 8.3.4 for serving and building the frontend.
+- **Line 24:** Closes development dependencies.
+- **Line 25:** Closes the root JSON object.
 
 ## .env.example
 
@@ -488,12 +498,360 @@ Git reads these patterns to exclude untracked local/generated files. Ignore rule
 - **Line 17:** Ignores macOS Finder metadata files named .DS_Store.
 - **Line 18:** Ignores Windows thumbnail cache files named Thumbs.db.
 
+## server/database.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\database.js`
+
+Opens the configured SQLite file when called by the migration command or future backend code. Importing the module alone does not open a database.
+
+### Lines 1–9
+
+```text
+1 | import Database from 'better-sqlite3';
+2 | import { mkdirSync } from 'node:fs';
+3 | import path from 'node:path';
+4 | import { databasePath } from './config.js';
+5 |
+6 | export function openDatabase() {
+7 |   mkdirSync(path.dirname(databasePath), { recursive: true });
+8 |   return new Database(databasePath);
+9 | }
+```
+
+- **Line 1:** Imports the default Database constructor from the installed better-sqlite3 package, the JavaScript interface to SQLite.
+- **Line 2:** Imports mkdirSync, Node's synchronous directory-creation function.
+- **Line 3:** Imports the path utility object for platform-aware path operations.
+- **Line 4:** Imports the validated databasePath value from config.js; configuration validation runs during that import.
+- **Line 5:** Blank line separates related sections for readability; it performs no operation.
+- **Line 6:** Exports a named function so other modules can open the configured database; braces begin its body.
+- **Line 7:** Computes the parent directory with dirname, then creates it if necessary. recursive: true also creates missing ancestor directories and tolerates an existing directory. Filesystem errors are allowed to propagate.
+- **Line 8:** Constructs and returns a SQLite connection to the file. SQLite creates the file if absent; the caller must close the connection. Errors are not disguised as success.
+- **Line 9:** Closes the openDatabase function.
+
+## server/migrations/001_create_lessons.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations\001_create_lessons.sql`
+
+Version 1 of the schema. migrations.js reads this fixed local SQL file and executes it within a transaction. SQL keywords describe database operations; commas separate columns and constraints. Do not edit a migration already applied to shared databases: add a new version instead.
+
+### Lines 1–11
+
+```text
+1 | CREATE TABLE lessons (
+2 |   id INTEGER PRIMARY KEY,
+3 |   title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+4 |   discipline TEXT NOT NULL CHECK (discipline IN ('Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training')),
+5 |   skill_level TEXT NOT NULL DEFAULT 'Beginner' CHECK (skill_level IN ('Beginner', 'Intermediate', 'Advanced')),
+6 |   duration_minutes INTEGER CHECK (duration_minutes > 0),
+7 |   goal TEXT NOT NULL DEFAULT '',
+8 |   drills TEXT NOT NULL DEFAULT '',
+9 |   coaching_notes TEXT NOT NULL DEFAULT '',
+10 |   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+11 | ) STRICT;
+```
+
+- **Line 1:** CREATE TABLE defines a new lessons table; the opening parenthesis begins its column definitions. The runner checks its version before executing this statement.
+- **Line 2:** Defines id as the integer primary key, a unique row identifier. In SQLite this aliases the row ID and is generated when an insert omits it. A comma separates the next column.
+- **Line 3:** Requires a text title that is not NULL. CHECK evaluates length(trim(title)) &gt; 0: remove ordinary surrounding spaces, count remaining characters, and reject zero length. This does not replace future API validation for all whitespace or length rules.
+- **Line 4:** Requires a text discipline chosen from the six quoted values. IN tests membership; the parentheses hold the choices and close the CHECK expression.
+- **Line 5:** Requires skill_level text, defaults it to Beginner when omitted, and restricts it to the three listed values with CHECK and IN.
+- **Line 6:** Defines duration_minutes as an integer. CHECK rejects zero or negative values. With no NOT NULL constraint, NULL is allowed to represent an unspecified duration; STRICT rejects fractional values that cannot become integers.
+- **Line 7:** Requires goal text and supplies the empty string default when omitted; two single quotes mean an empty SQL string.
+- **Line 8:** Requires drills text with an empty-string default.
+- **Line 9:** Requires coaching_notes text with an empty-string default.
+- **Line 10:** Requires a creation timestamp as text. DEFAULT evaluates strftime using SQLite's current UTC time; %Y/%m/%d are date pieces, %H/%M/%f are hours/minutes/seconds with fractions, T separates date/time, and Z indicates UTC. Parentheses enclose the default expression.
+- **Line 11:** Closes the table definition and enables STRICT typing, so stored values must conform to the column types under SQLite's conversion rules. The semicolon ends the SQL statement.
+
+## server/migrations.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations.js`
+
+Tracks applied versions in schema_migrations. Each schema change and its version record are committed together, so a failure cannot falsely mark a version as applied. It receives an open connection; it does not choose the database path.
+
+### Lines 1–15
+
+```text
+1 | import { readFileSync } from 'node:fs';
+2 |
+3 | export function migrate(database) {
+4 |   database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+5 |     version INTEGER PRIMARY KEY,
+6 |     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+7 |   ) STRICT`);
+8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }];
+9 |   for (const migration of migrations) {
+10 |     database.transaction(() => {
+11 |       const applied = database.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(migration.version);
+12 |       if (applied) return;
+13 |       const sql = readFileSync(new URL(`./migrations/${migration.file}`, import.meta.url), 'utf8');
+14 |       database.exec(sql);
+15 |       database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration.version);
+```
+
+- **Line 1:** Imports the named readFileSync function to read migration SQL from disk as text.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Exports migrate, a function taking an already-open database connection; braces open its body.
+- **Line 4:** Begins a multiline template string containing SQL and passes it to exec. CREATE TABLE IF NOT EXISTS creates the tracking table only when it is missing; parentheses open its columns. Backticks delimit multiline JavaScript strings.
+- **Line 5:** Defines the tracking version as a unique integer primary key. The comma separates the timestamp column.
+- **Line 6:** Defines a required applied_at UTC timestamp with a default evaluated at insertion, using the same strftime format as lesson timestamps.
+- **Line 7:** Closes the tracking table columns, enables STRICT typing, closes the template string and exec call, and ends the JavaScript statement. Creating this bookkeeping table occurs before each version transaction.
+- **Line 8:** Creates an ordered array containing one migration descriptor. Its object pairs version 1 with a fixed SQL filename. Later versions can be appended to this array in order.
+- **Line 9:** Iterates the descriptors with for...of. const migration holds the current descriptor; braces open the loop.
+- **Line 10:** Creates a transaction wrapper around the arrow callback. The callback's queries will run as one atomic unit when the wrapper is called below.
+- **Line 11:** Prepares a SELECT query with a ? placeholder and binds the current version through get. This keeps data separate from SQL syntax; get returns one row or undefined.
+- **Line 12:** If a version row already exists, returns from this transaction callback without changing lessons. The outer loop can still continue to later migrations.
+- **Line 13:** Builds a file URL relative to this module using import.meta.url and interpolates the fixed migration filename using a dollar sign followed by braces. readFileSync reads UTF-8 SQL text. No user input supplies this SQL file.
+- **Line 14:** Executes the trusted migration SQL, creating the lessons table for version 1. A database failure throws rather than pretending to succeed.
+- **Line 15:** Records the version using a parameterized INSERT and run. The applied_at default supplies the timestamp. This insert shares the schema-change transaction.
+
+### Lines 16–18
+
+```text
+16 |     })();
+17 |   }
+18 | }
+```
+
+- **Line 16:** Closes the callback and transaction factory call, then immediately calls the returned wrapper with (). Success commits; an exception rolls back the changes and propagates.
+- **Line 17:** Closes the for loop.
+- **Line 18:** Closes migrate.
+
+## server/migrate.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrate.js`
+
+The executable entry point behind npm run db:migrate. It opens the external database, applies pending migrations, and closes the connection. Express routes remain unchanged.
+
+### Lines 1–10
+
+```text
+1 | import { openDatabase } from './database.js';
+2 | import { migrate } from './migrations.js';
+3 |
+4 | const database = openDatabase();
+5 | try {
+6 |   migrate(database);
+7 |   console.log('Database migrations are up to date.');
+8 | } finally {
+9 |   database.close();
+10 | }
+```
+
+- **Line 1:** Imports the function that opens the configured SQLite file.
+- **Line 2:** Imports the versioned migration runner.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Opens the database and stores the connection in a constant. Opening failures stop execution without printing success.
+- **Line 5:** Starts a try block for the operations that need connection cleanup.
+- **Line 6:** Applies pending schema versions; throws on failure.
+- **Line 7:** Prints a success message only after migrate returns successfully; it does not print environment values.
+- **Line 8:** Closes try and begins finally. A finally block runs whether the preceding work succeeded or threw.
+- **Line 9:** Closes the SQLite connection to release file handles. Errors still propagate to Node and produce a failing command exit.
+- **Line 10:** Closes the finally block.
+
+## server/database.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\database.test.js`
+
+Automated checks using Node's built-in test runner. Tests create an isolated temporary database and fresh Node processes, then remove only their own verified temporary directory. They never insert sample rows into the normal CoachLab database. The rollback test deliberately simulates a database failure inside an isolated test, not a production bug.
+
+### Lines 1–15
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { mkdtempSync, rmSync } from 'node:fs';
+4 | import { tmpdir, homedir } from 'node:os';
+5 | import path from 'node:path';
+6 | import { spawnSync } from 'node:child_process';
+7 | import Database from 'better-sqlite3';
+8 | import { migrate } from './migrations.js';
+9 |
+10 | function run(code, filename) {
+11 |   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+12 |     cwd: new URL('../', import.meta.url),
+13 |     env: { ...process.env, DATABASE_PATH: filename }, encoding: 'utf8',
+14 |   });
+15 |   assert.equal(result.error, undefined);
+```
+
+- **Line 1:** Imports Node's built-in test function for defining named test cases.
+- **Line 2:** Imports strict assertions; these throw when actual behavior differs from the expected value.
+- **Line 3:** Imports synchronous temporary-directory creation and removal helpers.
+- **Line 4:** Imports functions for the system temporary folder and user home directory.
+- **Line 5:** Imports path helpers to construct and verify filesystem paths.
+- **Line 6:** Imports spawnSync to run a child Node process and wait for it to finish.
+- **Line 7:** Imports the SQLite constructor for direct schema and data assertions.
+- **Line 8:** Imports the migration function for the isolated rollback test.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** Declares a helper function accepting JavaScript source and a database filename.
+- **Line 11:** Starts the current Node executable with module mode and -e to execute the supplied test code. The final object contains process options.
+- **Line 12:** Sets the child working directory to the project root using a URL relative to this test module; this makes its relative imports reliable.
+- **Line 13:** Copies the existing environment with spread syntax, overrides DATABASE_PATH for isolation, and requests UTF-8 output strings. These environment values are not printed.
+- **Line 14:** Closes the options object and spawnSync call.
+- **Line 15:** Checks that the child process could be spawned. Normal program failures are checked through status by the caller.
+
+### Lines 16–30
+
+```text
+16 |   return result;
+17 | }
+18 |
+19 | test('database configuration accepts external paths and rejects unsafe paths', () => {
+20 |   const code = "import { databasePath } from './server/config.js'; console.log(databasePath);";
+21 |   const defaultResult = run(code, '');
+22 |   assert.equal(defaultResult.status, 0);
+23 |   assert.equal(defaultResult.stdout.trim(), path.join(homedir(), 'AppData', 'Local', 'CoachLab', 'coachlab.sqlite'));
+24 |   const custom = path.join(tmpdir(), 'coachlab-custom.sqlite');
+25 |   assert.equal(run(code, custom).stdout.trim(), custom);
+26 |   for (const invalid of ['relative.sqlite', path.join(homedir(), 'OneDrive', 'bad.sqlite'), path.join(homedir(), 'OneDrive - Company', 'bad.sqlite')]) {
+27 |     assert.notEqual(run(code, invalid).status, 0);
+28 |   }
+29 | });
+30 |
+```
+
+- **Line 16:** Returns the result object containing exit status and captured output.
+- **Line 17:** Closes the helper function.
+- **Line 18:** Blank line separates related sections for readability; it performs no operation.
+- **Line 19:** Defines the configuration test and opens its arrow-function callback.
+- **Line 20:** Stores a short child program that imports and prints the selected database path, allowing assertions without opening a database.
+- **Line 21:** Runs it with an empty DATABASE_PATH to exercise the fallback.
+- **Line 22:** Asserts the fallback process exited successfully with status zero.
+- **Line 23:** Asserts the selected default is the user's AppData/Local/CoachLab/coachlab.sqlite path.
+- **Line 24:** Builds a harmless custom filename under the temporary directory; this configuration test does not create it.
+- **Line 25:** Asserts the custom path is returned unchanged by configuration.
+- **Line 26:** Loops over a relative path and two typical OneDrive folder paths, including a business OneDrive name. These are test inputs, not files to create.
+- **Line 27:** Asserts each rejected path causes a nonzero exit. notEqual means the two values must differ.
+- **Line 28:** Closes the invalid-path loop.
+- **Line 29:** Closes the configuration test callback and test registration.
+- **Line 30:** Blank line separates related sections for readability; it performs no operation.
+
+### Lines 31–45
+
+```text
+31 | test('versioned migration, constraints, and persistence across processes', () => {
+32 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-test-'));
+33 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+34 |   assert.ok(path.basename(directory).startsWith('coachlab-test-'));
+35 |   const filename = path.join(directory, 'nested', 'lessons.sqlite');
+36 |   let database;
+37 |   try {
+38 |     const migrationCode = "import './server/migrate.js';";
+39 |     assert.equal(run(migrationCode, filename).status, 0);
+40 |     database = new Database(filename);
+41 |     assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+42 |     const title = "Coach's jab; DROP TABLE lessons; --";
+43 |     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
+44 |     insert.run(title, 'Boxing', 45);
+45 |     for (const values of [[' ', 'Boxing', 45], ['Test', 'Unknown', 45], ['Test', 'Boxing', -1], ['Test', 'Boxing', 1.5]]) {
+```
+
+- **Line 31:** Defines the disk migration/persistence test and opens its callback.
+- **Line 32:** Creates a unique test directory using the system temporary directory and a coachlab-test- prefix.
+- **Line 33:** Verifies that the resolved directory's parent is exactly the intended temporary directory before any recursive cleanup can happen.
+- **Line 34:** Verifies the generated directory name has the expected test prefix, further bounding cleanup to this test's own directory.
+- **Line 35:** Builds a database filename inside a missing nested directory so the test also checks automatic parent-directory creation.
+- **Line 36:** Declares a mutable connection variable; let allows it to be reassigned when the test reopens the database.
+- **Line 37:** Starts a try block whose finally will clean up resources even if an assertion fails.
+- **Line 38:** Stores child code importing the real migration command module, which runs the migration.
+- **Line 39:** Runs the migration in a fresh Node process against the test file and asserts success.
+- **Line 40:** Opens that file for direct inspection through SQLite.
+- **Line 41:** Reads table metadata with PRAGMA table_info, maps each returned column to its name, and compares the complete ordered list to the ten required columns. deepEqual compares array contents, not just object identity.
+- **Line 42:** Creates a title containing an apostrophe and SQL-looking text to verify it is safely stored as data.
+- **Line 43:** Prepares a parameterized INSERT with three ? placeholders for title, discipline, and duration.
+- **Line 44:** Binds the title, Boxing, and 45 to those placeholders and inserts one lesson.
+- **Line 45:** Iterates invalid value arrays: blank title, unknown discipline, negative duration, and fractional duration.
+
+### Lines 46–60
+
+```text
+46 |       assert.throws(() => insert.run(...values));
+47 |     }
+48 |     assert.throws(() => database.prepare('INSERT INTO lessons (title, discipline, skill_level) VALUES (?, ?, ?)').run('Test', 'Boxing', 'Expert'));
+49 |     const saved = database.prepare('SELECT * FROM lessons').get();
+50 |     assert.equal(saved.skill_level, 'Beginner');
+51 |     assert.equal(saved.goal, '');
+52 |     assert.ok(Number.isFinite(Date.parse(saved.created_at)));
+53 |     database.close();
+54 |     assert.equal(run(migrationCode, filename).status, 0);
+55 |     const reader = run("import { openDatabase } from './server/database.js'; const db = openDatabase(); console.log(JSON.stringify(db.prepare('SELECT * FROM lessons').all())); db.close();", filename);
+56 |     assert.equal(reader.status, 0);
+57 |     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
+58 |     database = new Database(filename);
+59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }]);
+60 |     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+```
+
+- **Line 46:** Uses spread syntax to pass each array as query arguments and asserts that the database rejects it with an exception.
+- **Line 47:** Closes the invalid-data loop.
+- **Line 48:** Asserts that inserting Expert as a skill level throws, using a separate parameterized query.
+- **Line 49:** Reads the single valid lesson, including generated/default fields, into saved.
+- **Line 50:** Checks the omitted skill level defaulted to Beginner.
+- **Line 51:** Checks the omitted goal defaulted to empty text.
+- **Line 52:** Parses created_at and checks the result is a finite timestamp, so it is a usable date string.
+- **Line 53:** Closes the first connection before restarting the migration process.
+- **Line 54:** Runs migration again in another Node process and asserts success, exercising version skipping on an existing database.
+- **Line 55:** Runs a separate reader process that opens the same file, selects all rows, prints JSON, and closes it. No connection or in-memory JavaScript object is shared with that process.
+- **Line 56:** Asserts the reader process exited successfully.
+- **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
+- **Line 58:** Reopens the test database for tracking-table and integrity checks.
+- **Line 59:** Asserts exactly one version-1 row exists in the migration ledger; rerunning did not duplicate it.
+- **Line 60:** Runs SQLite's integrity check and requires the result ok.
+
+### Lines 61–75
+
+```text
+61 |   } finally {
+62 |     if (database?.open) database.close();
+63 |     rmSync(directory, { recursive: true, force: true });
+64 |   }
+65 | });
+66 |
+67 | test('migration failure rolls back the schema and version together', () => {
+68 |   const database = new Database(':memory:');
+69 |   try {
+70 |     database.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)');
+71 |     database.exec("CREATE TRIGGER reject_version BEFORE INSERT ON schema_migrations BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+72 |     assert.throws(() => migrate(database), /test failure/);
+73 |     assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name = 'lessons'").get(), undefined);
+74 |     assert.equal(database.prepare('SELECT count(*) AS count FROM schema_migrations').get().count, 0);
+75 |   } finally {
+```
+
+- **Line 61:** Closes try and begins cleanup with finally, which runs even when assertions fail.
+- **Line 62:** Uses optional chaining to check whether a connection exists and is still open, then closes it if needed.
+- **Line 63:** Removes only the test directory whose parent and prefix were verified above. recursive removes its nested files; force tolerates an already-missing directory.
+- **Line 64:** Closes the finally block.
+- **Line 65:** Closes the persistence test callback and registration.
+- **Line 66:** Blank line separates related sections for readability; it performs no operation.
+- **Line 67:** Defines the atomic rollback test and opens its callback.
+- **Line 68:** Creates an isolated in-memory SQLite database; :memory: does not create a disk file.
+- **Line 69:** Starts a try block so the test connection always gets closed.
+- **Line 70:** Creates a minimal existing migration ledger for fault injection in this test only.
+- **Line 71:** Creates a test-only trigger that runs before a version INSERT and raises an ABORT error. BEGIN/END enclose the trigger's SQL action, and the semicolons delimit its statements.
+- **Line 72:** Expects migrate to throw an error matching the /test failure/ regular expression when it tries to record the version.
+- **Line 73:** Queries SQLite's schema catalog and asserts the lessons table does not exist: its creation was rolled back with the failed version insert.
+- **Line 74:** Counts ledger rows using an SQL alias count and requires zero, confirming no version was falsely marked applied.
+- **Line 75:** Closes try and opens finally for unconditional cleanup.
+
+### Lines 76–78
+
+```text
+76 |     database.close();
+77 |   }
+78 | });
+```
+
+- **Line 76:** Closes the in-memory database.
+- **Line 77:** Closes finally.
+- **Line 78:** Closes the rollback test callback and registration.
+
 ## SQL migrations and excluded files
 
-No SQL migrations, schema, SQLite dependency, database connection, or lesson API implementation exists in this snapshot. There are no SQL lines to explain yet. Phase 3 is awaiting approval. When migration code is added, its full numbered source and every SQL statement must be documented here.
+Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express still serves only its health endpoint; no lesson API exists. Phase 4 requires separate approval.
 
 package-lock.json is generated dependency metadata and is excluded from individual line explanations as requested. node_modules and client/dist are generated and excluded. README.md, PROMPT_LOG.md, this walkthrough, and AGENTS.md are prose documentation rather than application source.
 
 ## Verification and maintenance
 
-This snapshot covers 10 source/configuration files and 163 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
+This snapshot covers 15 source/configuration files and 294 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.

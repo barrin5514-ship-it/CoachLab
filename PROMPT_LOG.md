@@ -796,3 +796,70 @@ Final review results: after removing the blank-listing separator spaces, `git di
 Recovered the full original development/Phase 1 prompt, the Phase 2 approval, their available assistant progress/final responses, and the current documentation prompt/responses. Preserved all earlier log entries. No earlier standalone planning prompt or Phase 3 approval is available. Explained all 163 current source/configuration lines across ten files in CODE_WALKTHROUGH.md; no current source lines remain unexplained. SQL migrations do not exist yet, and generated artifacts are intentionally excluded. AGENTS.md captures the continuing learning/documentation rules. Ready to begin Phase 3 only after explicit user approval; no Phase 3 work or push occurred.
 
 Commit reference: the documentation commit containing this entry, subject `Document CoachLab history and line-by-line code walkthrough`. Its hash is reported after commit creation and can be resolved with `git log -1 --format=%h -- PROMPT_LOG.md`; a commit cannot contain its own hash. Record the resolved hash in the next authorized log update.
+
+## 2026-10-14 — Phase 3 authorization and SQLite setup
+
+Prior documentation milestone: b060b76. The earlier “not received” approval statements above describe the historical record at that time and are preserved. The current user message explicitly authorizes Phase 3; no date or text for a separate earlier approval is invented.
+
+### Exact user prompt
+
+```text
+CoachLab Phase 3 has already been approved.
+
+The documentation milestone was completed in commit b060b76.
+
+Do not repeat Phase 2 or the documentation milestone.
+
+Proceed with Phase 3: SQLite database setup, following the Phase 3 instructions and AGENTS.md.
+
+Requirements:
+- Create the lessons table using a versioned migration.
+- Keep the database outside OneDrive.
+- Test migration, persistence, and database configuration.
+- Maintain PROMPT_LOG.md.
+- Update CODE_WALKTHROUGH.md with line-by-line explanations for all new code.
+- Review diffs and verify tests.
+- Commit verified changes.
+- Do not begin Phase 4 or push to GitHub.
+
+Stop after Phase 3 and provide the verification report.
+
+If you cannot find the complete Phase 3 instructions, ask me for them before making changes.
+```
+
+### Instructions located and work performed
+
+- Read AGENTS.md and recovered the original prompt's Phase 3 instructions plus its database requirements: add SQLite, create the ten-column lessons table through a versioned migration, verify migration and persistence, and stop before Phase 4. The current user authorization supersedes the stale Phase 3 approval status in AGENTS.md; updated that status without repeating prior work.
+- Queried npm metadata before installation: better-sqlite3 13.0.3 requires Node >=22, compatible with installed Node 24.19.0. Installed with --engine-strict and Windows system certificate trust; npm added 2 packages, audited 86, and reported 0 vulnerabilities. No TLS checks were disabled.
+- Added an explicit database opener, version ledger, atomic migration runner, migration command, and SQL schema. Prepared statements bind query values. The migration's SQL file is trusted project code, not user-supplied SQL.
+- The normal database is stored under the user's AppData/Local/CoachLab folder outside OneDrive; tests use separate temporary files. No database file is committed. No lesson API, browser lesson form, or Phase 4 work was added.
+- Created: server/database.js, server/migrations.js, server/migrate.js, server/migrations/001_create_lessons.sql, server/database.test.js.
+- Modified: package.json, package-lock.json, README.md, AGENTS.md, CODE_WALKTHROUGH.md, PROMPT_LOG.md.
+- Walkthrough expanded to 15 source/configuration/test files and 294 lines, including every SQL and test line. Existing source listings were retained and updated where applicable.
+
+### Tests actually run and results
+
+- `npm test`: 3 tests passed, 0 failed. Configuration checks exercised default/custom paths and rejection of relative, personal OneDrive, and business OneDrive paths.
+- The migration/persistence test checked all ten column names; parameterized insertion of an apostrophe/SQL-looking title; rejection of blank title, unknown discipline, negative/fractional duration, and invalid skill level; default skill/goal; and a parseable timestamp.
+- Closed the first connection, reran the migration in another Node process, and read the database in a fresh process. The complete saved row survived unchanged, the version ledger contained exactly one version-1 entry, and SQLite integrity_check returned ok.
+- The rollback test injected a test-only version-insert failure into an in-memory database and verified both the new lessons table and version record were absent afterward. This is a controlled failure test, not an intentionally introduced application bug.
+- `npm run db:migrate`: ran twice successfully against the normal external database. Missing optional .env messages were expected because the default path was used.
+- No browser persistence or lesson-API test was claimed: those features do not exist yet. Source/history documentation checks and final Git review are recorded below after execution.
+
+### Agent Mistakes and Corrections — Phase 3
+
+The temporary walkthrough updater initially contained a literal template-interpolation example inside a JavaScript template string without escaping it. Node reported `SyntaxError: Unexpected token '}'` before the script changed the walkthrough. Replaced the example with plain-language wording, reran the updater successfully, and generated all 294 source-line explanations. The application and passing database tests were unaffected. Final listing verification checks the resulting document against the source rather than trusting the generator.
+
+### Assistant responses (summary)
+
+Confirmed that the current message authorizes Phase 3, located the complete original instructions, explained the dependency and version-ledger approach, and reported the three passing tests plus two successful normal migration runs. Explained that a version transaction commits schema and ledger together, and that tests use a separate external temporary database. No additional user prompts or approvals were received during this step.
+
+Commit reference: the commit containing this entry, subject `Add versioned SQLite lesson storage and database tests`. Report its hash after creation and record it in the next authorized log update. No push is authorized or performed.
+
+### Final verification and outcome
+
+- Read-only inspection of the normal external database passed: file exists, version ledger is exactly version 1, integrity_check is ok, and the lessons table contains zero rows. Test lessons stayed in the temporary test database.
+- Walkthrough verifier passed: all 15 source/configuration/test paths, 294 numbered source lines and explanation entries match actual files. The original prompt and all prior log entries remain preserved. Reviewed the new explanations against the SQL and JavaScript.
+- Reviewed all staged diffs, including the package lockfile. `git diff --cached --check` passed. A staged-file check found exactly the 11 intended files, no database/private environment/generated files, and no common credential patterns. Lockfile dependency declarations match package.json.
+- `git check-ignore` confirmed private environment files, database files/journals, node_modules, and temporary helpers remain ignored. `npm ls --depth=0` confirmed better-sqlite3 13.0.3 alongside the unchanged prior dependencies.
+- Phase 3 is complete: the versioned schema creates lessons, reruns safely, and preserves records across processes. Use `npm run db:migrate` for setup and `npm test` for verification. No Phase 4 route implementation or GitHub push occurred. Stop for user review.
