@@ -1406,3 +1406,261 @@ Commit reference: the commit containing this entry, subject `Add validated lesso
 - Assistant response summary: reported the committed API and passed security review, then completed the authorized push and verified its remote identity. This final log-only follow-up records the actual implementation hash and confirmed result; source and its walkthrough are unchanged.
 - Phase 4 is complete with 26 passing tests, a passing production build, passing backend syntax checks, real startup/restart verification, and 480 documented source lines across 18 files. No unresolved implementation blocker was identified. The backend is ready for a separately approved Phase 5 interface; Phase 5 has not started.
 - Follow-up commit subject: `Record verified Phase 4 API upload`. Its hash and final synchronized remote state will be reported after the normal push. No application checks need rerunning for this log-only append.
+
+
+## 2026-10-14 — Phase 5 React lesson planner
+
+### Exact user prompt
+
+```text
+
+COACHLAB — PHASE 5: REACT LESSON PLANNER
+
+APPROVED: Begin Phase 5.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+OBJECTIVE:
+Build the React interface for creating and viewing lesson plans using the existing Express API and SQLite database.
+
+This must satisfy the Week 5 class requirement:
+Create + Read + Database Persistence.
+
+IMPORTANT:
+I am a beginner developer. Follow AGENTS.md and maintain our complete prompt log and line-by-line code explanations.
+
+1. INSPECT FIRST
+
+Before editing:
+- Read AGENTS.md.
+- Review the existing React application.
+- Review POST /api/lessons and GET /api/lessons.
+- Review API validation rules and response formats.
+- Review existing CSS and Vite configuration.
+- Check Git status.
+- Preserve existing functionality.
+
+2. BUILD THE DASHBOARD
+
+Create a professional, responsive CoachLab dashboard.
+
+Include:
+- CoachLab header
+- Brief description
+- New Lesson button
+- List of saved lesson plans
+- Empty state when no lessons exist
+- Loading indicator
+- Clear error messages
+
+Each lesson card should show:
+- Title
+- Discipline
+- Skill level
+- Duration
+- Training goal
+- Drills
+- Coaching notes
+- Creation date
+
+Use simple, reusable React components.
+
+3. CREATE LESSON FORM
+
+Provide these inputs:
+- Lesson title
+- Discipline selection
+- Skill level
+- Duration in minutes
+- Training goal
+- Drills/instructions
+- Coaching notes
+
+Disciplines:
+- Boxing
+- Wrestling
+- Muay Thai
+- Brazilian Jiu-Jitsu
+- MMA
+- Personal Training
+
+Use the existing backend validation rules.
+
+Required fields and defaults must match the actual API contract.
+
+Prevent duplicate submissions while saving.
+
+Show a confirmation only after the API confirms the lesson was saved.
+
+Display useful validation errors.
+
+4. CONNECT TO THE EXISTING API
+
+Use:
+POST /api/lessons
+GET /api/lessons
+
+On page load:
+- Request lessons from Express.
+- Display the returned database records.
+
+On successful save:
+- Update or refresh the lesson list using confirmed backend data.
+- Clear or reset the form appropriately.
+- Preserve unsaved input when an error occurs.
+
+Handle network failures gracefully.
+
+Do not use hardcoded lesson data or localStorage as the source of truth.
+
+5. REACT CONCEPTS
+
+Demonstrate:
+- Components
+- Props
+- State
+- Event handlers
+- useEffect
+- API requests
+
+Keep components understandable.
+
+Avoid unnecessary libraries or complicated architecture.
+
+6. DESIGN
+
+Use a clean athletic/coaching visual identity.
+
+Support desktop and mobile layouts.
+
+Prioritize readability, navigation, and ease of use.
+
+Do not spend excessive time on animations, illustrations, or advanced styling.
+
+7. TESTING
+
+Verify:
+
+- React application loads.
+- Existing backend health check works.
+- Empty database displays an empty state.
+- Valid lessons can be created.
+- Saved lessons appear on the dashboard.
+- Refresh preserves saved lessons.
+- Restarting the servers preserves saved lessons.
+- Invalid forms are rejected.
+- Server failures display useful messages.
+- Duplicate submissions are prevented.
+- All six disciplines can be selected.
+- Existing backend and migration tests pass.
+- Production frontend build succeeds.
+
+Use automated tests where practical.
+
+Perform a real browser interaction test if the environment supports it.
+
+Do not claim a browser test passed if only API or compilation tests ran.
+
+Use isolated test data and do not erase existing user lessons.
+
+8. DOCUMENTATION
+
+Update PROMPT_LOG.md with:
+- This exact prompt
+- Actual development actions
+- Test results
+- Errors and corrections
+- Git commits
+
+Update CODE_WALKTHROUGH.md.
+
+Explain EVERY added or changed source-code line, including:
+- React components
+- JSX
+- Props
+- State
+- Functions
+- Event handlers
+- API requests
+- CSS
+- Test code
+
+Include line numbers and beginner-friendly explanations.
+
+Update README.md with application startup and demo instructions.
+
+9. SECURITY AND GIT
+
+- Review every diff.
+- Run available tests.
+- Check .gitignore.
+- Never commit SQLite database files.
+- Never commit secrets.
+- Make small, meaningful commits.
+- Push verified work to GitHub main.
+- Verify local and remote hashes match.
+- Do not force-push.
+
+10. STRICT SCOPE
+
+DO NOT:
+- Add AI generation.
+- Implement athlete tracking.
+- Implement instructional video research.
+- Add authentication.
+- Add Update or Delete.
+- Change the database schema unnecessarily.
+- Modify unrelated projects.
+- Begin Phase 6 automatically.
+
+11. FINAL REPORT
+
+Report:
+1. Files created or modified.
+2. React components created.
+3. Create/Read features implemented.
+4. Persistence test results.
+5. Automated and browser tests performed.
+6. Documentation coverage.
+7. Git commit hashes.
+8. GitHub synchronization status.
+9. Any unresolved issues.
+10. Readiness for Phase 6.
+
+STOP AFTER PHASE 5.
+
+Wait for my approval before continuing.
+
+```
+
+### Assistant response and actual work (summary)
+
+Inspected AGENTS.md, React source, CSS, Vite proxy, API contract, Git status and existing documentation before implementation. Built the dashboard in client/src/App.jsx, added client/src/LessonForm.jsx and client/src/LessonCard.jsx, and replaced client/src/styles.css with responsive coaching-oriented styling. The app reads real API records and posts controlled form values; it uses no hardcoded lesson records or localStorage. Native required/range/length constraints and whitespace-title validation match backend rules. A synchronous ref lock plus disabled controls prevents overlapping submissions. Only a 201 response with an integer ID triggers success. Errors preserve drafts, with guidance about uncertain saves after network interruption. No backend, schema, dependency, or unrelated project changes.
+
+Updated AGENTS.md to reflect this approval, README.md with startup/demo instructions, and CODE_WALKTHROUGH.md with every current source line. The walkthrough now covers 20 source/configuration/test files and 612 lines, including blank lines and delimiters. The actual source listings, absolute paths, numbering, explanation counts and explanation meanings were checked against the files. All prior prompt-log content is preserved; this exact attachment is included above.
+
+### Actual checks and results
+
+- npm test: 26 passed, 0 failed; includes real HTTP validation, database failures, schema migration/rollback, configuration and persistence.
+- npm run build: passed; 18 modules transformed. No dependencies installed or changed.
+- Browser: real Codex in-app browser at http://127.0.0.1:5174, using an isolated SQLite file at the Windows TEMP directory named coachlab-phase5-browser.sqlite, outside OneDrive. Initial GET returned zero rows and the empty state rendered. Normal user database was not used.
+- Browser required-title validation: rejected empty title with native message. Whitespace title: rejected with application message. Duration 0: rejected with native minimum message. No rows created by those attempts.
+- Browser selected and read back all six discipline values. Saved a valid Personal Training lesson with duration 45, goal, multiline drills and notes. Card and confirmed notice displayed. Double-click Save produced exactly one actual API row.
+- GET /api/health returned status ok and service CoachLab API.
+- Stopped both test servers, restarted the frontend while backend was down: list displayed a useful error. Submitted a second draft while down: save error appeared, no success notice, title/discipline remained. Restarted backend with the same test database: saved retained draft successfully. Retry loading displayed both rows, including the first row persisted across both server restarts. Browser refresh displayed both again. Blank duration displayed Duration not set, blank optional fields displayed Not added, default skill displayed Beginner.
+- Responsive browser inspection: 390x844 viewport produced one card column without horizontal overflow; 1280x900 produced two columns without horizontal overflow. Viewport override reset after test. Screenshot retained only in ignored tmp/phase5-dashboard.png.
+- Documentation checker: PASS for all 20 files / 612 source lines, exact paths/listings, one explanation per line, prior log preservation and original planning attachment. No source line left undocumented.
+- Browser checks above are manual interactions performed through browser tooling; no automated UI suite was added. Loading/saving feedback is implemented and reviewed; the fast requests did not permit a separately timed visual assertion of those transient states.
+
+### Errors and corrections
+
+- Initial combined delete/add patch targeted App.jsx twice; the patch tool rejected it before changes. Rewrote the intended files with literal PowerShell text instead, then built successfully.
+- Frontend startup on 5173 failed because that port was already occupied. Left that existing process alone and started the test frontend on 5174; startup succeeded.
+- Browser getByLabel exact Discipline did not match the select; inspected the current accessibility state and used its combobox role and accessible name instead. All six selections then succeeded.
+- Connection-refused proxy messages during the deliberate outage were expected test results; restarting the isolated backend restored service.
+- Git reports LF/CRLF normalization notices on this Windows checkout; these are not test failures.
+
+### Commit and scope
+
+Prior synchronized baseline: 3320e9a1986ea68ef092ea784d0e1e465d8279cd (Record verified Phase 4 API upload). This step will be recorded by the containing commit subject Add React lesson planner with verified walkthrough. Its resolved hash and actual push verification will be recorded in the next log entry after they occur. Phase 5 only; Phase 6 has not started.

@@ -1,7 +1,7 @@
 # CoachLab
 
 A beginner-friendly React and Express project for coaching lesson plans.
-Phase 4 adds create/read lesson API routes backed by SQLite. The React lesson form is not implemented yet.
+Phase 5 adds a React dashboard and lesson form connected to the Express API and persistent SQLite database.
 
 ## Setup (Windows PowerShell)
 
@@ -22,9 +22,9 @@ npm run dev:server
 npm run dev:client
 ```
 
-Open http://127.0.0.1:5173. The screen should show "Backend connected."
+Open http://127.0.0.1:5173. The dashboard loads your saved lessons, or explains how to create the first one.
 Stop each server with Ctrl+C. Both servers bind only to this computer.
-Ports 3001 and 5173 must be available.
+Ports 3001 and 5173 must be available. If 5173 is occupied, use `npm run dev:client -- --port 5174` and open http://127.0.0.1:5174 instead.
 
 Run `npm run build` to check that the frontend compiles for production.
 
@@ -45,7 +45,7 @@ The OneDrive path check recognizes normal OneDrive folder names; do not override
 
 ## How this setup works
 
-- `client/src/App.jsx` is the React screen. State stores the connection message; an effect checks the backend when the screen loads.
+- `client/src/App.jsx` loads lessons in an effect and stores the list and feedback in state. `LessonForm.jsx` manages controlled inputs and saves through POST. `LessonCard.jsx` receives a saved row through props and displays its details.
 - Vite serves the frontend and forwards `/api` requests to Express on port 3001.
 - `server/index.js` opens one shared SQLite connection, runs the existing migrations, and starts the Express app defined in `server/app.js`. Startup stops with a safe terminal error if database initialization fails. Normal shutdown closes the connection.
 - `server/config.js` chooses the database path; `server/database.js` opens it. `server/migrate.js` remains the standalone migration command. Startup also applies missing migrations without deleting records, so a fresh database can start predictably.
@@ -93,4 +93,17 @@ Invoke-RestMethod -Uri "http://127.0.0.1:3001/api/lessons" -Method Get
 
 Run `npm test` for both database and real-HTTP API tests. They create isolated temporary SQLite databases, verify stored rows and reopened connections, and clean up afterward. They do not add lessons to your normal development database.
 
-Git history and PROMPT_LOG.md record the work. Repository: [CoachLab on GitHub](https://github.com/barrin5514-ship-it/CoachLab), branch `main`. Phase 4 implements only backend create/read functionality; Phase 5 requires separate approval.
+Git history and PROMPT_LOG.md record the work. Repository: [CoachLab on GitHub](https://github.com/barrin5514-ship-it/CoachLab), branch `main`. Phase 5 implements the React create/read planner. Phase 6 has not begun and requires separate approval.
+
+## Classroom demo
+
+1. Start both servers with the commands above. The backend applies any missing migrations automatically.
+2. Click **New Lesson**, enter a title and choose one of the six disciplines. Beginner is the default skill level. Duration and all three detail fields are optional.
+3. Try an empty title or duration 0: the form rejects invalid input. Enter a valid integer duration from 1 to 1440, or leave it blank.
+4. Click **Save lesson**. While saving, controls are disabled; only a confirmed server response produces a success notice and card.
+5. Refresh the page, then stop and restart both servers and refresh again. The saved lesson remains because SQLite stores it outside the project. Use the same DATABASE_PATH when restarting.
+6. To demonstrate an outage, stop the backend and try saving a new draft. The error retains the input. Restart the backend to recover. If the connection was interrupted during a save, check the saved list before retrying because a request can reach the server even when its response is lost.
+
+Demo submissions create real records in the selected database. For disposable demos, set DATABASE_PATH in the backend terminal to a new absolute path outside OneDrive, such as `$env:DATABASE_PATH = Join-Path $env:TEMP "coachlab-class-demo.sqlite"`, before starting it. Do not delete your regular database. No Update/Delete or authentication is included in this phase.
+
+Verification on 2026-10-14: 26 backend/migration tests passed and the production build passed. Real in-app browser checks used an isolated temporary database and frontend port 5174: empty state, validation, all six selections, successful save, double-click producing one row, outage/input retention/recovery, refresh and server restart persistence. Desktop 1280px and mobile 390px layouts were inspected with no horizontal overflow. These are recorded manual browser checks, not a committed automated browser test suite.

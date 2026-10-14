@@ -1,16 +1,16 @@
 # CoachLab code walkthrough
 
-Verified source snapshot: 2026-10-14, Phase 4 source in the commit containing this walkthrough. Prior application baseline: c56967a; prior documentation milestone: b060b76.
+Verified source snapshot: 2026-10-14, Phase 5 source in the commit containing this walkthrough. Prior application baseline: c56967a; prior documentation milestone: b060b76.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
 ## How the pieces connect
 
-Browser → Vite serves index.html → main.jsx renders App → App fetches /api/health → Vite forwards to Express → Express returns JSON → App updates its status text. CSS styles the HTML produced by React. Node reads optional .env configuration and validates the future SQLite path before Express listens. The React welcome screen still only checks health. Separately, POST /api/lessons parses and validates JSON, binds it to SQL, saves and rereads a row, then returns 201. GET /api/lessons reads ordered SQLite rows and returns JSON. The API is ready for a future lesson interface. Separately, npm run db:migrate runs migrate.js → database.js opens the external SQLite file → migrations.js applies the SQL and records its version → migrate.js closes the connection.
+Browser → Vite serves index.html → main.jsx renders App → App fetches /api/lessons → Vite forwards to Express → SQLite rows return as JSON → App renders LessonCard components. New Lesson mounts LessonForm; its controlled inputs update state, submission sends JSON to POST /api/lessons, and a confirmed 201 row returns through onSaved to App. Form errors preserve input; successful submission unmounts the form. CSS supplies desktop and mobile layouts. The backend opens the external SQLite file, applies versioned migrations and listens; the standalone npm run db:migrate command remains available. React never opens the database directly.
 
 ## Reading the syntax
 
-JavaScript executes application logic. JSX is HTML-like syntax inside JavaScript that Vite converts into React calls. A component is a function that returns UI; state remembers values between renders; an effect synchronizes with something outside rendering, such as a network request. Props are inputs passed to components, although App currently receives none. HTML attributes configure elements. JSON is a data format, not executable JavaScript. CSS controls appearance. Parentheses group expressions or pass function arguments; braces can delimit code blocks, objects, imports, or JSX expressions depending on context.
+JavaScript executes application logic. JSX is HTML-like syntax inside JavaScript that Vite converts into React calls. A component is a function that returns UI; state remembers values between renders; an effect synchronizes with something outside rendering, such as a network request. Props are inputs passed to components: App passes lesson data to LessonCard and callback functions to LessonForm. HTML attributes configure elements. JSON is a data format, not executable JavaScript. CSS controls appearance. Parentheses group expressions or pass function arguments; braces can delimit code blocks, objects, imports, or JSX expressions depending on context.
 
 ## client/index.html
 
@@ -76,137 +76,269 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-The React screen. It requests /api/health through Vite and stores the result in state; no lesson or database operation happens here.
+The dashboard owns the saved lesson list and loading state. It fetches real API records, passes callbacks to LessonForm, and passes one record to each LessonCard.
 
 ### Lines 1–15
 
 ```text
 1 | import React, { useEffect, useState } from 'react';
-2 |
-3 | export default function App() {
-4 |   const [status, setStatus] = useState('Checking backend connection…');
-5 |
-6 |   useEffect(() => {
-7 |     const controller = new AbortController();
-8 |     async function checkBackend() {
-9 |       try {
-10 |         const response = await fetch('/api/health', { signal: controller.signal });
-11 |         if (!response.ok) throw new Error('Backend health check failed');
-12 |         const data = await response.json();
-13 |         if (data.status !== 'ok') throw new Error('Unexpected backend response');
-14 |         setStatus('Backend connected.');
-15 |       } catch (error) {
+2 | import LessonForm from './LessonForm.jsx';
+3 | import LessonCard from './LessonCard.jsx';
+4 |
+5 | export default function App() {
+6 |   const [lessons, setLessons] = useState([]);
+7 |   const [loading, setLoading] = useState(true);
+8 |   const [error, setError] = useState('');
+9 |   const [notice, setNotice] = useState('');
+10 |   const [formOpen, setFormOpen] = useState(false);
+11 |   const [reload, setReload] = useState(0);
+12 |
+13 |   useEffect(() => {
+14 |     const controller = new AbortController();
+15 |     async function loadLessons() {
 ```
 
-- **Line 1:** Imports React plus the named useEffect and useState functions. Braces select named exports; quotes name the package.
-- **Line 2:** Blank line separates related sections for readability; it performs no operation.
-- **Line 3:** Declares and exports the default App function. React calls this component to obtain its screen; { opens the function body.
-- **Line 4:** Creates state with an initial loading message. Array destructuring puts the value in status and its update function in setStatus; const prevents reassignment of these bindings.
-- **Line 5:** Blank line separates related sections for readability; it performs no operation.
-- **Line 6:** Registers an effect callback with useEffect. The arrow () =&gt; defines a function without arguments; { opens its body. Effects run after rendering.
-- **Line 7:** Creates an AbortController with new; its signal lets us cancel an outstanding network request when the component is removed.
-- **Line 8:** Declares the asynchronous checkBackend function. async permits await inside; { opens the function body.
-- **Line 9:** Opens a try block so failures from the following operations can be handled by catch.
-- **Line 10:** Calls fetch with the relative API URL and an options object containing the cancellation signal. await waits for the response; const stores it. This sends a GET request by default.
-- **Line 11:** Checks response.ok. The ! means not; a non-success HTTP status throws a new Error and transfers control to catch. Parentheses enclose the condition and Error argument.
-- **Line 12:** Waits for response.json() to parse the response body as a JavaScript value and stores it in data.
-- **Line 13:** Uses !== (strict not equal) to reject any status other than the string ok. This also throws an Error if the check fails.
-- **Line 14:** Updates state to the success message; React rerenders the displayed status.
-- **Line 15:** Closes try and opens catch. Its error parameter receives the thrown exception or rejected asynchronous operation.
+- **Line 1:** Imports React for JSX plus effect and state hooks from the installed React package.
+- **Line 2:** Imports the neighboring form component as LessonForm.
+- **Line 3:** Imports the neighboring card component as LessonCard.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Exports the App component as this module's default; braces begin its function body.
+- **Line 6:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 7:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 8:** Stores the list error message; empty text means no error.
+- **Line 9:** Stores the server-confirmed success notice.
+- **Line 10:** Stores whether the form is mounted; false initially hides it.
+- **Line 11:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 12:** Blank line separates related sections for readability; it performs no operation.
+- **Line 13:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 14:** Creates a request cancellation controller scoped to this effect run.
+- **Line 15:** Declares an async helper, allowing await inside its braces.
 
 ### Lines 16–30
 
 ```text
-16 |         if (error.name !== 'AbortError') {
-17 |           setStatus('Cannot reach the backend. Start the Express server, then refresh.');
-18 |         }
-19 |       }
-20 |     }
-21 |     checkBackend();
-22 |     return () => controller.abort();
-23 |   }, []);
-24 |
-25 |   return (
-26 |     <main>
-27 |       <p className="eyebrow">YOUR COACHING WORKSPACE</p>
-28 |       <h1>CoachLab</h1>
-29 |       <p>A place to build and organize your lesson plans.</p>
-30 |       <section aria-labelledby="setup-heading">
+16 |       setLoading(true);
+17 |       setError('');
+18 |       try {
+19 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+20 |         if (!response.ok) throw new Error('Unable to load lessons.');
+21 |         const data = await response.json();
+22 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+23 |         setLessons(data);
+24 |       } catch (failure) {
+25 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+26 |       } finally {
+27 |         if (!controller.signal.aborted) setLoading(false);
+28 |       }
+29 |     }
+30 |     loadLessons();
 ```
 
-- **Line 16:** Checks that the failure was not cancellation. AbortError is expected when the effect cleans up, so we avoid displaying that as a connection problem.
-- **Line 17:** Updates state with actionable connection-failure text for the user.
-- **Line 18:** Closes the if block inside catch.
-- **Line 19:** Closes the catch block.
-- **Line 20:** Closes the checkBackend function definition.
-- **Line 21:** Calls checkBackend to start the asynchronous health request. Declaring a function alone would not run it.
-- **Line 22:** Returns a cleanup arrow function from the effect. React calls it on cleanup, and abort() cancels the request.
-- **Line 23:** Closes the effect callback and calls useEffect with an empty dependency array []. With this setup the effect runs when App mounts, rather than on every state change. The semicolon ends the call.
-- **Line 24:** Blank line separates related sections for readability; it performs no operation.
-- **Line 25:** Starts returning the component's JSX; parentheses let the expression span several lines.
-- **Line 26:** Opens the main semantic page-content element.
-- **Line 27:** Creates a paragraph with CSS class eyebrow and visible heading text. JSX uses className instead of HTML's class attribute; &lt;/p&gt; closes it.
-- **Line 28:** Creates the main h1 heading and closes it after CoachLab.
-- **Line 29:** Creates and closes a paragraph describing the workspace.
-- **Line 30:** Opens a section whose accessible label is the element with ID setup-heading; aria-labelledby connects the two elements.
+- **Line 16:** Marks the list request as running.
+- **Line 17:** Clears the previous list error before retrying.
+- **Line 18:** Starts a try block for request and JSON errors.
+- **Line 19:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 20:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 21:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 22:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 23:** Stores the backend records, triggering a render.
+- **Line 24:** Closes try and catches failures under the name failure.
+- **Line 25:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 26:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 27:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 28:** Closes finally.
+- **Line 29:** Closes the async helper.
+- **Line 30:** Starts the helper; its own try/catch handles its failures.
 
-### Lines 31–37
+### Lines 31–45
 
 ```text
-31 |         <h2 id="setup-heading">Getting started</h2>
-32 |         <p role="status">{status}</p>
-33 |         <p>Lesson planning will be added in a later project phase.</p>
-34 |       </section>
-35 |     </main>
-36 |   );
-37 | }
+31 |     return () => controller.abort();
+32 |   }, [reload]);
+33 |
+34 |   function handleSaved(lesson) {
+35 |     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
+36 |     setNotice(`Saved “${lesson.title}”.`);
+37 |     setFormOpen(false);
+38 |   }
+39 |
+40 |   return (
+41 |     <main>
+42 |       <header className="hero">
+43 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
+44 |         <button disabled={loading || formOpen} onClick={() => { setNotice(''); setFormOpen(true); }}>+ New Lesson</button>
+45 |       </header>
 ```
 
-- **Line 31:** Creates an h2 with the matching ID so it labels the section, then closes it.
-- **Line 32:** Creates a live status paragraph. Curly braces insert the JavaScript status value into JSX; role="status" helps assistive technology announce changes. &lt;/p&gt; closes it.
-- **Line 33:** Creates and closes a paragraph stating that lesson planning is a later feature.
-- **Line 34:** Closes the section opened above.
-- **Line 35:** Closes main.
-- **Line 36:** Closes the parenthesized JSX return expression and ends the return statement.
-- **Line 37:** Closes the App function.
+- **Line 31:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 32:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 33:** Blank line separates related sections for readability; it performs no operation.
+- **Line 34:** Declares the callback receiving the row confirmed by LessonForm's successful POST.
+- **Line 35:** Uses a functional state update: puts the confirmed lesson first, spreads remaining rows, and filters out any existing row with that same ID. Arrow functions take current state and each item.
+- **Line 36:** Sets the success message with a template string that inserts the returned title using dollar-sign/braces interpolation.
+- **Line 37:** Closes the form; unmounting it discards its input state after success.
+- **Line 38:** Closes handleSaved.
+- **Line 39:** Blank line separates related sections for readability; it performs no operation.
+- **Line 40:** Begins returning a parenthesized JSX tree.
+- **Line 41:** Opens the semantic main content element.
+- **Line 42:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 43:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
+- **Line 44:** Creates the New Lesson button. The OR condition disables it while loading or while a form is already open. Clicking clears the old notice and opens the form; arrow-function braces contain those two setter calls.
+- **Line 45:** Closes the header.
+
+### Lines 46–57
+
+```text
+46 |       {notice && <p className="success" role="status">{notice}</p>}
+47 |       {formOpen && <LessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+48 |       <section aria-labelledby="lessons-heading">
+49 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
+50 |         {loading && <p role="status">Loading lesson plans…</p>}
+51 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+52 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+53 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} />)}</div>
+54 |       </section>
+55 |     </main>
+56 |   );
+57 | }
+```
+
+- **Line 46:** Conditionally renders a success paragraph only when notice is nonempty; && means render the right side when the left side is truthy. role=status announces feedback politely.
+- **Line 47:** Conditionally mounts LessonForm, passing onSaved and onCancel function props. Cancel sets formOpen false; the self-closing tag ends this component instance.
+- **Line 48:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 49:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
+- **Line 50:** Conditionally shows loading text as a live status paragraph.
+- **Line 51:** Conditionally shows an alert with the error text and Retry button. Retry increments the dependency counter; loading or an open form disables it to prevent overlapping list/form operations.
+- **Line 52:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 53:** Maps the array to LessonCard instances inside the grid. key gives React each row's stable identity; the lesson prop passes the entire row, and the self-closing tag ends each card instance.
+- **Line 54:** Closes the lesson section.
+- **Line 55:** Closes main.
+- **Line 56:** Closes the parenthesized return statement with a semicolon.
+- **Line 57:** Closes the App function.
 
 ## client/src/styles.css
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\styles.css`
 
-Global presentation rules imported by main.jsx. Selectors choose HTML elements or classes; braces hold declarations, colons separate property/value, and semicolons separate declarations.
+Shared styling for App, LessonForm and LessonCard. Each selector targets HTML elements or className values in those components. Braces enclose declarations; colons separate property and value, semicolons separate declarations. px means CSS pixels, rem is relative to root font size, em is relative to current font size, and hex values specify colors.
 
-### Lines 1–13
+### Lines 1–15
 
 ```text
-1 | :root {
-2 |   font-family: system-ui, sans-serif;
-3 |   color: #172d3a;
-4 |   background: #f3f6f7;
-5 |   line-height: 1.6;
-6 | }
-7 | * { box-sizing: border-box; }
-8 | body { margin: 0; }
-9 | main { max-width: 900px; margin: 0 auto; padding: 64px 24px; }
-10 | h1 { font-size: clamp(2.5rem, 7vw, 4rem); margin: 0; line-height: 1.2; }
-11 | h2 { margin-top: 0; }
-12 | .eyebrow { color: #22665e; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; }
-13 | section { margin-top: 32px; padding: 24px; background: white; border: 1px solid #d7e0e4; border-radius: 12px; }
+1 | :root { font-family: system-ui, sans-serif; color: #172d3a; background: #f3f6f7; line-height: 1.6; }
+2 | * { box-sizing: border-box; }
+3 | body { margin: 0; }
+4 | main { max-width: 1140px; margin: 0 auto; padding: 48px 24px; }
+5 | .hero, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+6 | .hero { padding-bottom: 32px; border-bottom: 2px solid #c9d9d7; margin-bottom: 32px; }
+7 | h1 { font-size: clamp(2.5rem, 7vw, 4rem); margin: 0; line-height: 1.1; letter-spacing: -0.04em; }
+8 | h2, h3 { line-height: 1.3; margin-top: 0; }
+9 | h3 { margin-bottom: 12px; font-size: 1.3rem; overflow-wrap: anywhere; }
+10 | .eyebrow { color: #22665e; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; }
+11 | button { font: inherit; font-weight: 650; border: 1px solid transparent; border-radius: 8px; padding: 11px 20px; background: #176257; color: white; cursor: pointer; }
+12 | button:hover:not(:disabled) { background: #104b42; }
+13 | button:disabled { opacity: 0.6; cursor: not-allowed; }
+14 | button.secondary { background: white; color: #172d3a; border-color: #b8c9cc; }
+15 | button.secondary:hover:not(:disabled) { background: #edf3f3; }
 ```
 
-- **Line 1:** Targets :root, the document's root element, and opens its declaration block. These text settings are inherited by descendants unless overridden.
-- **Line 2:** Uses the operating system UI font, falling back to any sans-serif font.
-- **Line 3:** Sets inherited text color to the dark hexadecimal RGB color #172d3a.
-- **Line 4:** Sets the page background to the pale hexadecimal color #f3f6f7.
-- **Line 5:** Sets line height to 1.6 times each element's font size for readable text.
-- **Line 6:** Closes the :root rule.
-- **Line 7:** The universal selector * matches every element. box-sizing: border-box makes declared dimensions include padding and borders. Braces open and close this one-line rule.
-- **Line 8:** Targets body and removes its default outer spacing with margin: 0; braces enclose the rule.
-- **Line 9:** Limits main to 900 pixels, centers it with zero vertical and automatic horizontal margins, and adds inner padding of 64 pixels vertically and 24 horizontally. Braces enclose all three declarations.
-- **Line 10:** Sets h1 size with clamp: at least 2.5rem, preferably 7vw (7% of viewport width), at most 4rem. rem uses the root font size. Removes margins and sets line height to 1.2 times the heading size; braces close the rule.
-- **Line 11:** Removes the top outer margin on h2; the braces enclose its declaration.
-- **Line 12:** The dot selects class eyebrow. Sets teal color, size 0.8 times root font size, bold weight 700, and character spacing 0.12 times this element's font size (em). Braces enclose these declarations.
-- **Line 13:** Styles section with 32-pixel top margin, 24-pixel inner padding, white background, a 1-pixel solid pale border, and 12-pixel rounded corners. Braces close the rule.
+- **Line 1:** :root styles the document: font-family prefers the system font with sans-serif fallback; color sets dark text; background sets the pale canvas; line-height sets line spacing to 1.6 times the font size.
+- **Line 2:** The universal selector applies border-box sizing so declared widths include padding and borders.
+- **Line 3:** Removes the browser's default body margin.
+- **Line 4:** Caps main at 1140px, centers it with automatic horizontal margins, and adds 48px vertical/24px horizontal padding.
+- **Line 5:** Both named classes use flex layout, vertically center children, spread them to opposite ends, and separate them with a 24px gap.
+- **Line 6:** Adds bottom padding, a solid two-pixel divider, and bottom margin to the hero.
+- **Line 7:** Sets heading size responsively with clamp(minimum, viewport-based preference, maximum), removes margins, tightens line spacing, and reduces letter spacing slightly.
+- **Line 8:** Sets line spacing and removes top margins on both heading levels.
+- **Line 9:** Sets third-level heading bottom spacing and font size, and permits long unbroken titles to wrap anywhere.
+- **Line 10:** Styles eyebrow text with green color, small size, bold weight and expanded letter spacing.
+- **Line 11:** Buttons inherit text styling, use semibold weight, reserve a transparent border, round corners, add vertical/horizontal padding, use green background/white text and a pointer cursor.
+- **Line 12:** For hovered buttons that are not disabled, darkens the background; :not excludes disabled controls.
+- **Line 13:** Disabled buttons become partially transparent and use a not-allowed cursor.
+- **Line 14:** Buttons carrying the secondary class get a white background, dark text and visible muted border color.
+- **Line 15:** Hovered enabled secondary buttons get a pale background.
+
+### Lines 16–30
+
+```text
+16 | :focus-visible { outline: 3px solid #b36a12; outline-offset: 3px; }
+17 | .form-panel, .lesson-card, .empty { background: white; border: 1px solid #d7e0e4; border-radius: 12px; padding: 24px; }
+18 | .form-panel { margin-bottom: 32px; border-top: 4px solid #176257; }
+19 | fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+20 | label { display: block; font-weight: 600; margin-bottom: 20px; }
+21 | input, select, textarea { display: block; width: 100%; font: inherit; color: inherit; background: white; border: 1px solid #a6b9bd; border-radius: 6px; padding: 10px 12px; margin-top: 6px; }
+22 | textarea { resize: vertical; min-height: 96px; }
+23 | small { display: block; color: #52666e; font-weight: 400; }
+24 | .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+25 | .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+26 | .section-heading { margin-bottom: 20px; }
+27 | .section-heading h2 { margin: 0; }
+28 | .section-heading span, .metadata, .lesson-card footer { color: #52666e; font-size: 0.9rem; }
+29 | .lesson-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+30 | .discipline { display: inline-block; background: #e4f1ed; color: #17584f; border-radius: 5px; padding: 3px 9px; margin-bottom: 14px; font-size: 0.8rem; font-weight: 700; }
+```
+
+- **Line 16:** Keyboard-visible focus receives a three-pixel solid orange outline offset three pixels from the element.
+- **Line 17:** Form panels, cards and empty states share white backgrounds, a pale solid border, rounded corners and 24px padding.
+- **Line 18:** Adds space below the form and a four-pixel green top border.
+- **Line 19:** Removes the fieldset border, margin and padding; min-width zero lets it shrink inside narrow layouts.
+- **Line 20:** Labels are blocks with semibold weight and bottom spacing.
+- **Line 21:** Inputs, selects and textareas are full-width blocks inheriting font and text color, with white background, muted solid border, rounded corners, internal padding and top spacing.
+- **Line 22:** Textareas can resize vertically and have a minimum height of 96px.
+- **Line 23:** Small helper text displays on its own block, in muted color with normal weight.
+- **Line 24:** The form row is a grid of three equally flexible columns (1fr each) separated by 20px.
+- **Line 25:** The action row uses flex layout, a 12px gap, and wraps buttons if necessary.
+- **Line 26:** Adds bottom spacing to the lesson section heading row.
+- **Line 27:** Removes margins from its h2.
+- **Line 28:** The heading count, metadata and card footer use muted color and smaller text.
+- **Line 29:** The lesson grid has two equal columns, each allowed to shrink to zero with minmax, separated by 20px.
+- **Line 30:** The discipline badge is inline-block with pale green fill, dark green text, rounded corners, vertical/horizontal padding, bottom spacing, small text and bold weight.
+
+### Lines 31–45
+
+```text
+31 | dt { font-weight: 650; margin-top: 16px; }
+32 | dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+33 | .lesson-card footer { border-top: 1px solid #e1e8ea; padding-top: 16px; margin-top: 24px; }
+34 | .empty { text-align: center; padding: 48px 24px; border-style: dashed; }
+35 | .empty p { color: #52666e; }
+36 | .success, .error { padding: 16px; border-radius: 8px; overflow-wrap: anywhere; }
+37 | .success { background: #e4f1ed; color: #17584f; }
+38 | .error { background: #fff0ed; color: #852b1d; border: 1px solid #e6b6ae; }
+39 | .error p { margin-top: 0; }
+40 | .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+41 | @media (max-width: 700px) {
+42 |   main { padding: 24px 16px; }
+43 |   .hero { align-items: flex-start; flex-direction: column; gap: 12px; }
+44 |   .form-row, .lesson-grid { grid-template-columns: 1fr; }
+45 |   .section-heading { align-items: flex-start; gap: 12px; }
+```
+
+- **Line 31:** Definition terms have semibold weight and spacing above them.
+- **Line 32:** Definition descriptions have a four-pixel top margin and zero other margins; pre-wrap preserves newlines/spaces while allowing wrapping, and overflow-wrap breaks long words.
+- **Line 33:** Card footers have a light top divider, padding above the text and margin above the divider.
+- **Line 34:** The empty state centers text, uses generous vertical/horizontal padding, and changes its shared border style to dashed.
+- **Line 35:** Empty-state paragraph text is muted.
+- **Line 36:** Success and error panels share internal spacing, rounded corners and long-word wrapping.
+- **Line 37:** Success feedback uses a pale green background and dark green text.
+- **Line 38:** Errors use a pale red background, dark red text and a muted red solid border.
+- **Line 39:** Removes top margins from paragraphs inside error panels.
+- **Line 40:** The screen-reader-only class uses absolute positioning, one-pixel dimensions, zero padding, negative margin, hidden overflow and an inset clip to visually hide its content. nowrap prevents wrapping and border zero removes the border; the text remains accessible.
+- **Line 41:** Starts a media query applying the enclosed overrides when the viewport is at most 700 CSS pixels wide.
+- **Line 42:** Reduces main padding to 24px vertically and 16px horizontally on small screens.
+- **Line 43:** Stacks hero children vertically, aligns them to the start and reduces their gap.
+- **Line 44:** Changes both grids to one flexible column on small screens.
+- **Line 45:** Aligns section-heading children to their starts and reduces their gap.
+
+### Lines 46–47
+
+```text
+46 |   .form-panel, .lesson-card { padding: 20px; }
+47 | }
+```
+
+- **Line 46:** Reduces form-panel and card padding to 20px.
+- **Line 47:** Closes the media-query block.
 
 ## client/vite.config.js
 
@@ -1320,12 +1452,222 @@ Real HTTP tests using Node built-ins and the existing SQLite driver. Each top-le
 - **Line 119:** Requires the existing safe route-not-found JSON message.
 - **Line 120:** Closes the final test callback and registration.
 
+## client/src/LessonForm.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonForm.jsx`
+
+The form owns editable values and POST status. Native browser constraints match the API field limits; the backend remains authoritative. It calls App callbacks through props and never writes SQLite directly. A ref locks submission immediately, while state updates render disabled controls.
+
+### Lines 1–15
+
+```text
+1 | import React, { useRef, useState } from 'react';
+2 |
+3 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+4 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+5 | const textFields = [['goal', 'Training goal', 2000], ['drills', 'Drills / instructions', 10000], ['coaching_notes', 'Coaching notes', 10000]];
+6 |
+7 | export default function LessonForm({ onSaved, onCancel }) {
+8 |   const [values, setValues] = useState(initial);
+9 |   const [saving, setSaving] = useState(false);
+10 |   const [error, setError] = useState('');
+11 |   const submitting = useRef(false);
+12 |
+13 |   function change(event) {
+14 |     const { name, value } = event.target;
+15 |     setValues(current => ({ ...current, [name]: value }));
+```
+
+- **Line 1:** Imports React plus useRef for a persistent immediate lock and useState for renderable values.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
+- **Line 4:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
+- **Line 5:** Defines nested arrays containing each optional textarea's API field name, visible label, and maximum UTF-16 length.
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** Exports the component; parameter destructuring extracts onSaved and onCancel function props supplied by App.
+- **Line 8:** Initializes editable form state and its setter from the initial object.
+- **Line 9:** Initializes the saving flag to false.
+- **Line 10:** Initializes the form error message to empty text.
+- **Line 11:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
+- **Line 12:** Blank line separates related sections for readability; it performs no operation.
+- **Line 13:** Begins the shared input-change handler with the browser/React event parameter.
+- **Line 14:** Destructures the changed control's name and string value from event.target.
+- **Line 15:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
+
+### Lines 16–30
+
+```text
+16 |   }
+17 |
+18 |   async function submit(event) {
+19 |     event.preventDefault();
+20 |     if (submitting.current) return;
+21 |     setError('');
+22 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+23 |     submitting.current = true;
+24 |     setSaving(true);
+25 |     try {
+26 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
+27 |       const response = await fetch('/api/lessons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+28 |       const data = await response.json();
+29 |       if (response.status !== 201) throw new Error(data.error || 'The server could not save this lesson.');
+30 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
+```
+
+- **Line 16:** Closes the change handler.
+- **Line 17:** Blank line separates related sections for readability; it performs no operation.
+- **Line 18:** Declares the async form-submit handler.
+- **Line 19:** Prevents ordinary browser form navigation so React can perform the request.
+- **Line 20:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 21:** Clears any earlier error for this save attempt.
+- **Line 22:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 23:** Locks submission synchronously.
+- **Line 24:** Sets saving state so controls disable and progress feedback renders.
+- **Line 25:** Starts a try block around request/parsing/confirmation.
+- **Line 26:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
+- **Line 27:** Sends POST to the relative API URL with JSON content type; JSON.stringify converts the body object to a JSON string and await waits for HTTP response headers.
+- **Line 28:** Parses the response body as JSON, awaiting completion.
+- **Line 29:** Requires the API's exact success status 201; otherwise throws the returned error or a fallback. || chooses the fallback when data.error is absent/empty.
+- **Line 30:** Requires an integer returned ID before treating the lesson as confirmed.
+
+### Lines 31–45
+
+```text
+31 |       onSaved(data);
+32 |     } catch (failure) {
+33 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
+34 |     } finally {
+35 |       submitting.current = false;
+36 |       setSaving(false);
+37 |     }
+38 |   }
+39 |
+40 |   return (
+41 |     <section className="form-panel" aria-labelledby="new-heading">
+42 |       <h2 id="new-heading">New lesson plan</h2>
+43 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+44 |       <form onSubmit={submit}>
+45 |         <fieldset disabled={saving}>
+```
+
+- **Line 31:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
+- **Line 32:** Closes try and catches request or response failures.
+- **Line 33:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
+- **Line 34:** Begins finally, which always executes after the attempt.
+- **Line 35:** Releases the immediate lock.
+- **Line 36:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
+- **Line 37:** Closes finally.
+- **Line 38:** Closes submit.
+- **Line 39:** Blank line separates related sections for readability; it performs no operation.
+- **Line 40:** Begins returning the JSX form tree.
+- **Line 41:** Opens a styled section and connects its accessible name to new-heading.
+- **Line 42:** Adds the heading with the ID referenced above.
+- **Line 43:** Explains required fields in a paragraph.
+- **Line 44:** Opens a form and binds submit to its submit event; native constraints run before this handler.
+- **Line 45:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
+
+### Lines 46–60
+
+```text
+46 |           <legend className="sr-only">Lesson details</legend>
+47 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
+48 |           <div className="form-row">
+49 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+50 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+51 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+52 |           </div>
+53 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+54 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : 'Save lesson'}</button><button className="secondary" type="button" onClick={onCancel}>Cancel</button></div>
+55 |         </fieldset>
+56 |         {saving && <p role="status">Saving your lesson…</p>}
+57 |         {error && <p className="error" role="alert">{error}</p>}
+58 |       </form>
+59 |     </section>
+60 |   );
+```
+
+- **Line 46:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
+- **Line 47:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
+- **Line 48:** Opens the responsive row for the three compact controls.
+- **Line 49:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 50:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 51:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 52:** Closes the responsive row.
+- **Line 53:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 54:** Groups Save and Cancel buttons. Save submits and changes text while saving using a ternary; Cancel has type=button so it only calls onCancel. Closing tags end both buttons and their wrapper.
+- **Line 55:** Closes the fieldset.
+- **Line 56:** Conditionally displays an accessible saving status via &&.
+- **Line 57:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
+- **Line 58:** Closes the form.
+- **Line 59:** Closes the section.
+- **Line 60:** Closes the JSX return expression and statement.
+
+### Lines 61–61
+
+```text
+61 | }
+```
+
+- **Line 61:** Closes the component function.
+
+## client/src/LessonCard.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
+
+A reusable read-only card receives a saved API row through its lesson prop. It renders all requested details and uses the shared stylesheet; it owns no state and performs no requests.
+
+### Lines 1–15
+
+```text
+1 | import React from 'react';
+2 |
+3 | export default function LessonCard({ lesson }) {
+4 |   return (
+5 |     <article className="lesson-card">
+6 |       <span className="discipline">{lesson.discipline}</span>
+7 |       <h3>{lesson.title}</h3>
+8 |       <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}</p>
+9 |       <dl>
+10 |         <dt>Training goal</dt><dd>{lesson.goal || 'Not added'}</dd>
+11 |         <dt>Drills / instructions</dt><dd>{lesson.drills || 'Not added'}</dd>
+12 |         <dt>Coaching notes</dt><dd>{lesson.coaching_notes || 'Not added'}</dd>
+13 |       </dl>
+14 |       <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+15 |     </article>
+```
+
+- **Line 1:** Imports React for the JSX transformation.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Exports the component; object destructuring extracts lesson from its props.
+- **Line 4:** Begins returning a parenthesized JSX tree.
+- **Line 5:** Opens a semantic article and assigns its CSS class.
+- **Line 6:** Displays the discipline in a styled span; braces evaluate the row property and the closing tag ends the span.
+- **Line 7:** Displays the lesson title in a third-level heading.
+- **Line 8:** Displays skill and duration in a paragraph. Strict equality checks for null; the ternary chooses fallback text or a template string with the number and min suffix.
+- **Line 9:** Opens a definition list pairing detail labels with values.
+- **Line 10:** Adds a dt label and dd goal value; || displays Not added for an empty string. Both tags close on this line.
+- **Line 11:** Adds the drills term and description, with the same empty-value fallback.
+- **Line 12:** Adds coaching notes and their empty-value fallback.
+- **Line 13:** Closes the definition list.
+- **Line 14:** Adds a footer with a time element. dateTime preserves the machine-readable timestamp; new Date parses it and toLocaleString displays the reader's local date/time. Closing tags end time and footer.
+- **Line 15:** Closes the article.
+
+### Lines 16–17
+
+```text
+16 |   );
+17 | }
+```
+
+- **Line 16:** Closes the return expression and statement.
+- **Line 17:** Closes the LessonCard function.
+
 ## SQL migrations and excluded files
 
-Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express now serves health plus create/read lesson endpoints, using one connection and the unchanged version-1 schema. It applies pending migrations before listening. Phase 5 requires separate approval.
+Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express now serves health plus create/read lesson endpoints, using one connection and the unchanged version-1 schema. It applies pending migrations before listening. Phase 5 now provides the React create/read interface. Phase 6 requires separate approval.
 
 package-lock.json is generated dependency metadata and is excluded from individual line explanations as requested. node_modules and client/dist are generated and excluded. README.md, PROMPT_LOG.md, this walkthrough, and AGENTS.md are prose documentation rather than application source.
 
 ## Verification and maintenance
 
-This snapshot covers 18 source/configuration files and 480 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
+This snapshot covers 20 source/configuration files and 612 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
