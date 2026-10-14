@@ -1674,3 +1674,219 @@ Continuation of the exact Phase 5 request above; no new user prompt or phase app
 - Normal push to origin/main succeeded from 3320e9a to 116d08b. git ls-remote confirmed remote main exactly matched 116d08b21291c9a27a15b4c1d2ac5074f9ed995b. No force-push or history rewrite.
 - Closed the test browser tab and stopped both servers started for this task. Left the pre-existing port-5173 process alone. The isolated test database remains in Windows TEMP, outside OneDrive and outside Git, for reproducibility; no user lessons were erased.
 - This follow-up documentation-only commit records the actual upload result. Its subject is Record verified Phase 5 planner upload; its own hash will be reported after committing. No source changed after tests. Phase 5 is complete; Phase 6 awaits approval.
+
+
+## 2026-10-14 — Phase 6 final testing and verification
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 6: FINAL TESTING AND VERIFICATION
+
+APPROVED: Begin Phase 6.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+PROJECT GOAL:
+Thoroughly verify the existing CoachLab application against the official Next Chapter Week 5 requirements.
+
+Do not add new features or redesign the application.
+
+IMPORTANT:
+I am a beginner developer. Follow AGENTS.md and maintain our complete prompt log and line-by-line code explanations.
+
+1. PREPARATION
+
+- Read AGENTS.md.
+- Inspect the current source code.
+- Read the official Week 5 requirements in the project documentation.
+- Review PROMPT_LOG.md and CODE_WALKTHROUGH.md.
+- Check Git status.
+- Confirm the current GitHub synchronization status.
+- Preserve existing lesson data.
+
+2. VERIFY THE FULL APPLICATION
+
+Test the complete workflow:
+
+- Start Express.
+- Start React/Vite.
+- Open CoachLab in a real browser.
+- Create a new lesson.
+- Verify it appears on the dashboard.
+- Refresh the page.
+- Confirm the lesson persists.
+- Restart both servers.
+- Confirm the lesson still exists.
+- Verify all six disciplines work.
+- Test invalid form submissions.
+- Test backend connection failures and recovery.
+- Test desktop and mobile layouts.
+
+Use an isolated test database.
+
+Do not delete or overwrite real lesson data.
+
+3. VERIFY THE DATA FLOW
+
+Trace and document:
+
+React LessonForm
+  -> POST /api/lessons
+  -> Express
+  -> SQLite database
+
+SQLite database
+  -> GET /api/lessons
+  -> Express
+  -> React dashboard
+  -> LessonCard
+
+Verify the actual implementation follows this flow.
+
+Explain which code runs in the browser and which runs on the server.
+
+4. DATABASE AND SECURITY
+
+Verify:
+- Database migration works.
+- Migration is safe to rerun.
+- Data persists after restart.
+- Database remains outside OneDrive.
+- Invalid inputs are rejected.
+- SQL queries are parameterized.
+- Secrets are not exposed.
+- .gitignore is effective.
+- No database files or private .env files have been committed.
+- No sensitive information is exposed in API errors.
+
+5. AUTOMATED TESTING
+
+Run:
+- All backend tests
+- Database migration tests
+- Frontend production build
+- JavaScript syntax checks
+- Any other existing project verification scripts
+
+Report actual results.
+
+Do not claim tests passed unless they ran.
+
+If appropriate, add small automated frontend tests for critical Create/Read behavior, but do not introduce a large testing framework unnecessarily.
+
+6. FIX REAL PROBLEMS
+
+If problems are discovered:
+
+- Explain the issue.
+- Identify the affected files.
+- Make the smallest appropriate correction.
+- Run relevant tests again.
+- Review the diff.
+- Update documentation.
+- Commit verified fixes.
+
+Do not fabricate bugs to satisfy the class requirement.
+
+7. DOCUMENTATION
+
+Update PROMPT_LOG.md with:
+- This exact prompt
+- Testing performed
+- Results
+- Errors and corrections
+- Genuine AI mistakes
+- Git commit hashes
+
+Update CODE_WALKTHROUGH.md for every new or modified source-code line.
+
+Verify all explanations against the current files.
+
+8. WEEK 5 REQUIREMENT CHECKLIST
+
+Verify each requirement individually:
+
+[ ] Create works.
+[ ] Read works.
+[ ] SQLite persistence works.
+[ ] Browser refresh preserves records.
+[ ] Server restart preserves records.
+[ ] Application runs locally.
+[ ] Source code is on GitHub.
+[ ] No secrets committed.
+[ ] Agent prompts are logged.
+[ ] Diffs were reviewed.
+[ ] Small commits were made.
+[ ] At least one genuine agent mistake and correction is documented.
+[ ] Data flow can be explained.
+
+For each item, provide actual evidence.
+
+If any item cannot be verified, mark it as unresolved.
+
+9. GIT AND GITHUB
+
+- Review all diffs.
+- Commit only verified changes.
+- Push to the existing main branch.
+- Never force-push.
+- Verify local and remote commit hashes match.
+- Confirm the working tree is clean.
+
+10. STRICT SCOPE
+
+DO NOT:
+- Add AI coaching features.
+- Add instructional videos.
+- Add athlete tracking.
+- Add authentication.
+- Implement Update/Delete.
+- Redesign the dashboard.
+- Modify unrelated projects.
+- Begin Phase 7.
+
+11. FINAL REPORT
+
+Provide:
+
+1. Overall application status.
+2. Automated test results.
+3. Browser test results.
+4. Database persistence results.
+5. Security findings.
+6. Problems discovered and corrected.
+7. Documentation completeness.
+8. Week 5 requirement checklist.
+9. Git commits and GitHub status.
+10. Readiness for Phase 7.
+
+STOP AFTER PHASE 6.
+
+Wait for my approval before proceeding.
+```
+
+### Actual actions and response (summary)
+
+Read AGENTS.md, the original Week 5 assignment and Phase 6 instructions recorded above, current source, API/migration tests, README, walkthrough and prompt history. Initial working tree was clean; local and remote main both matched 81892bfde96050a3e57bb29116e725f3c628d838. Followed the current approval rather than the stale Phase 5 boundary in AGENTS.md.
+
+Ran all 26 automated backend/database tests successfully, frontend build successfully (18 modules), node --check on all 10 tracked .js files successfully, and the existing documentation/history/startup verification scripts successfully. JSX syntax was checked by the Vite production build, not node --check. Fresh GitHub clone at the same baseline: npm ci installed 85 packages, audited 86, reported zero vulnerabilities; migration, all 26 tests and production build passed, with a clean clone Git status. npm warned that better-sqlite3 install-script approval was not covered by allowScripts; the actual SQLite migration and tests still passed on this machine. No permissions or package policy were broadened and no dependency changes were made.
+
+Created a unique Windows TEMP directory coachlab-phase6-5e41139d2e67438d9f986da446b438e3 outside OneDrive. Browser test database: browser.sqlite; clean-clone database: clone.sqlite. Applied migration twice before browser use, then again after six lessons were present. Startup automatically reran migrations too. User databases were never opened for writes, erased or overwritten. Test servers used 3001 and 5174, and a separate in-app browser tab.
+
+Real browser tests: empty state; empty title and missing discipline rejected; whitespace title rejected; duration 0, 1.5 and 1441 rejected; all six disciplines saved and displayed; optional-field defaults; full details and multiline drills; double-click Save produced one Boxing record; visible Saving state and disabled controls; refresh retained six records. Compared all six browser-created rows directly in read-only SQLite to GET JSON: exact match, six disciplines, single Boxing row, version 1, integrity_check ok and health ok. Stopped both test servers, reran migration, restarted frontend while backend was down, verified load error and failed-save draft retention. Restarted backend with same database; all six complete rows/IDs exactly matched the pre-restart snapshot. Retained draft then saved successfully; Retry loaded all seven cards. Mobile 390x844 form/dashboard and desktop 1280x900 dashboard had no horizontal overflow; one versus two card columns, mobile form stacked, Cancel worked. Read actual DOM maxLength values matching API limits. Browser viewport restored.
+
+Security: reviewed parameterized INSERT, ID lookup and migration version queries; user text is bound as values. Existing tests verified SQL-looking input remains data, invalid payloads save no rows, and database/parser errors do not expose internals. Ignore probes covered environment files, SQLite files/journals, dependencies, build output, temporary artifacts and coverage. Only safe .env.example is tracked. Full-history common-credential/path audit passed at baseline (11 commits, 51 unique versions). This is scoped verification, not a claim to detect every possible secret or production security issue.
+
+### Genuine mistake and correction
+
+Found an earlier AI documentation error: README claimed ten lessons columns, but migration 001_create_lessons.sql and the database test list exactly nine. Corrected README to explicitly list all nine; checked against schema and tests. This was a prose mistake, not a database bug. Prior genuine generator mistakes and their verified corrections remain preserved in the historical Agent Mistakes and Corrections section. No bugs were fabricated. Expected connection-refused errors occurred only during the deliberate outage. No application source correction was needed.
+
+### Files, documentation and commits
+
+Updated AGENTS.md for Phase 6 scope, README.md for the column correction/current phase, and CODE_WALKTHROUGH.md for reverified status. Added PHASE_6_VERIFICATION.md with per-requirement evidence and actual browser/server/database data flow. Appended this exact prompt and outcomes to PROMPT_LOG.md. The 20 source/configuration/test files and 612 numbered lines/explanations remain unchanged and were rechecked against disk; existing explanation meanings were reviewed against the corresponding implementation. No new frontend framework or source tests were necessary for this verification-only step; real browser checks complement the automated API tests. Temporary diagnostic scripts/screenshots are ignored local artifacts, not application source or a committed automated browser suite.
+
+Containing commit subject: Verify Phase 6 workflows and correct schema documentation. Its resolved hash and actual push result will be recorded after they occur. Phase 7 has not begun.
+
+Cleanup: closed only the Phase 6 test tab and stopped both test server sessions. The user's existing browser tab was left alone. Isolated database and clean clone remain in the unique Windows TEMP directory; no recursive deletion or real-data modification was performed.

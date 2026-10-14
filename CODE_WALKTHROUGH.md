@@ -1,6 +1,6 @@
 # CoachLab code walkthrough
 
-Verified source snapshot: 2026-10-14, Phase 5 source in the commit containing this walkthrough. Prior application baseline: c56967a; prior documentation milestone: b060b76.
+Verified source snapshot: 2026-10-14, Phase 5 source reverified during Phase 6; no application source changed in Phase 6. Prior application baseline: c56967a; prior documentation milestone: b060b76.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
@@ -1664,7 +1664,7 @@ A reusable read-only card receives a saved API row through its lesson prop. It r
 
 ## SQL migrations and excluded files
 
-Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express now serves health plus create/read lesson endpoints, using one connection and the unchanged version-1 schema. It applies pending migrations before listening. Phase 5 now provides the React create/read interface. Phase 6 requires separate approval.
+Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express now serves health plus create/read lesson endpoints, using one connection and the unchanged version-1 schema. It applies pending migrations before listening. Phase 5 now provides the React create/read interface. Phase 6 verification is complete; Phase 7 requires separate approval.
 
 package-lock.json is generated dependency metadata and is excluded from individual line explanations as requested. node_modules and client/dist are generated and excluded. README.md, PROMPT_LOG.md, this walkthrough, and AGENTS.md are prose documentation rather than application source.
 
