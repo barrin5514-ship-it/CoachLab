@@ -977,3 +977,13 @@ Stop after completing the GitHub upload.
 Explained the history-preserving review and remote inspection, reported the empty remote and clean local tree, and reported passing database/build checks. No additional user prompt or approval was needed because the current request explicitly authorizes remote configuration and pushing existing work.
 
 Commit reference: the commit containing this entry, subject `Record authorized GitHub upload and pre-push checks`. Its resolved hash will be recorded with the push result. Phase 3 remains the current completed development phase; Phase 4 has not started.
+
+### Verified initial upload and documentation follow-up
+
+- Pre-push log commit: 1dbdc95 (`Record authorized GitHub upload and pre-push checks`). A second history scan including that commit passed: 5 commits and 29 unique file versions, with all four original commits preserved as ancestors.
+- `git push -u origin main` succeeded and created GitHub's main branch. No force option, reinitialization, squash, or history rewrite was used.
+- `git ls-remote origin refs/heads/main` returned `1dbdc95adad19de89a2175324316418c95efa863`. After `git fetch origin main`, both local HEAD and origin/main matched that exact commit.
+- Inspected the fetched remote tree: all 20 expected tracked files are present, including React/Express source, README.md, AGENTS.md, PROMPT_LOG.md, CODE_WALKTHROUGH.md, package files, safe .env.example, .gitignore, database helpers/tests, and server/migrations/001_create_lessons.sql. The tree has no private .env, actual SQLite database, node_modules, build output, or temporary helper files. Its matching commit identity means it contains the same file versions covered by the history audit.
+- Updated README.md to replace its obsolete “No GitHub push has been made” statement with the repository link and verified upload date. Appended this actual outcome to PROMPT_LOG.md. Application source and CODE_WALKTHROUGH.md remain unchanged.
+- Assistant response summary: reported the successful matching remote/local commit and the 20-file remote tree, then explained the final documentation follow-up. No new user instruction or development phase was introduced.
+- This follow-up is committed with subject `Record verified GitHub upload and repository link`; its hash and final push verification are reported to the user after execution. Current development phase: Phase 3 complete, Phase 4 not started.

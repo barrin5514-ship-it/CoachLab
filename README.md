@@ -51,4 +51,4 @@ The OneDrive path check recognizes normal OneDrive folder names; do not override
 - `server/config.js` chooses the database path; `server/database.js` opens it. `server/migrate.js` is the migration command, and `server/migrations.js` applies unapplied versions. React never accesses SQLite directly, and Express does not query it yet.
 - A single root package.json keeps installation simple. package-lock.json records exact dependency versions.
 
-Git history and PROMPT_LOG.md record the work. No GitHub push has been made.
+Git history and PROMPT_LOG.md record the work. The project is published on the `main` branch at [CoachLab on GitHub](https://github.com/barrin5514-ship-it/CoachLab). The initial upload was verified on 2026-10-14. Development remains complete through Phase 3; Phase 4 has not started.
