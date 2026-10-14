@@ -863,3 +863,117 @@ Commit reference: the commit containing this entry, subject `Add versioned SQLit
 - Reviewed all staged diffs, including the package lockfile. `git diff --cached --check` passed. A staged-file check found exactly the 11 intended files, no database/private environment/generated files, and no common credential patterns. Lockfile dependency declarations match package.json.
 - `git check-ignore` confirmed private environment files, database files/journals, node_modules, and temporary helpers remain ignored. `npm ls --depth=0` confirmed better-sqlite3 13.0.3 alongside the unchanged prior dependencies.
 - Phase 3 is complete: the versioned schema creates lessons, reruns safely, and preserves records across processes. Use `npm run db:migrate` for setup and `npm test` for verification. No Phase 4 route implementation or GitHub push occurred. Stop for user review.
+
+## 2026-10-14 — Connect GitHub and upload existing work
+
+Prior Phase 3 commit: 31f904b. This request authorizes a GitHub upload, not another development phase.
+
+### Exact user prompt
+
+```text
+COACHLAB — CONNECT GITHUB AND PUSH EXISTING WORK
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+Local project:
+C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+GOAL:
+Commit and push all completed CoachLab work to GitHub while preserving our existing Git history.
+
+INSTRUCTIONS:
+
+1. Open the existing CoachLab project folder.
+
+2. Read AGENTS.md and check Git status.
+
+3. Review all existing commits, including:
+   - Phase 1 and Phase 2 project foundation
+   - React and Express setup
+   - PROMPT_LOG.md
+   - CODE_WALKTHROUGH.md
+   - Any verified Phase 3 database work, if completed
+
+4. Identify any uncommitted changes.
+
+5. Verify .gitignore excludes:
+   - .env and private configuration
+   - SQLite database files
+   - node_modules
+   - Generated build output
+   - Temporary files and secrets
+
+6. Review all changes before staging.
+
+7. Run relevant verification checks.
+
+8. Update PROMPT_LOG.md with this GitHub connection and push request.
+
+9. Update CODE_WALKTHROUGH.md only if source code changes.
+
+10. Create a meaningful commit for any verified outstanding changes.
+
+11. Configure the GitHub remote:
+
+   origin =
+   https://github.com/barrin5514-ship-it/CoachLab.git
+
+   If origin already exists, inspect it before changing anything.
+
+12. Check whether the remote contains commits.
+
+13. Push the existing local branch and its complete history to the GitHub repository.
+
+   Preserve existing commits.
+   Do not squash, reinitialize Git, or force-push.
+
+   If the remote has unrelated history, stop and report the conflict rather than overwriting anything.
+
+14. Verify the push actually succeeded.
+
+15. Confirm the remote branch contains:
+   - Application source files
+   - README.md
+   - AGENTS.md
+   - PROMPT_LOG.md
+   - CODE_WALKTHROUGH.md
+   - Any completed, verified database migration files
+
+16. Confirm no secrets or SQLite database files were uploaded.
+
+IMPORTANT:
+Do not begin another development phase.
+Do not change unrelated projects.
+Do not force-push.
+Do not rewrite existing commit history.
+
+FINAL REPORT:
+- Files pushed
+- Existing commits preserved
+- New commits created
+- GitHub branch name
+- GitHub repository URL
+- Security verification
+- Push verification
+- Current development phase
+
+Stop after completing the GitHub upload.
+```
+
+### Pre-push work and actual checks
+
+- Read AGENTS.md and inspected the existing repository. Initial working tree was clean, branch main, and no remote was configured. No outstanding application changes needed committing.
+- Reviewed the four existing commits: 75c0dc3 (foundation), c56967a (React/Express setup), b060b76 (documentation milestone), and 31f904b (SQLite migration/tests). Phase 1 was inspection only and correctly has no separate implementation commit.
+- `git ls-remote https://github.com/barrin5514-ship-it/CoachLab.git` succeeded with no refs returned: no advertised remote branch/tag history to reconcile. Configured origin to the supplied URL, without reinitializing or rewriting local history.
+- `npm test` passed all 3 database tests, with 0 failures. `npm run build` passed (16 modules transformed). Documentation verification passed for 15 files and 294 source lines/explanations. No source changes were made; CODE_WALKTHROUGH.md is unchanged.
+- Ignore checks passed for .env, .env.local, SQLite/database files and journals, node_modules, client/dist, and temporary files/folders. The safe .env.example remains tracked.
+- Scanned all 4 commits and 28 unique historical file versions for private/generated file paths and common credential patterns: passed. Confirmed every original commit remains an ancestor of HEAD. The scan is combined with review of the known project files; ignore rules alone are not a secret detector.
+- Changed only PROMPT_LOG.md before the initial upload. Reviewed this append before staging. No private environment files, actual SQLite databases, dependencies, builds, or temporary helpers are to be pushed.
+- Push outcome is not yet claimed in this entry. It will be verified against GitHub's advertised main commit and fetched tree, then recorded in a follow-up documentation entry.
+
+### Assistant responses (summary)
+
+Explained the history-preserving review and remote inspection, reported the empty remote and clean local tree, and reported passing database/build checks. No additional user prompt or approval was needed because the current request explicitly authorizes remote configuration and pushing existing work.
+
+Commit reference: the commit containing this entry, subject `Record authorized GitHub upload and pre-push checks`. Its resolved hash will be recorded with the push result. Phase 3 remains the current completed development phase; Phase 4 has not started.
