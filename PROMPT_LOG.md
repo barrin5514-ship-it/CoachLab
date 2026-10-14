@@ -987,3 +987,113 @@ Commit reference: the commit containing this entry, subject `Record authorized G
 - Updated README.md to replace its obsolete “No GitHub push has been made” statement with the repository link and verified upload date. Appended this actual outcome to PROMPT_LOG.md. Application source and CODE_WALKTHROUGH.md remain unchanged.
 - Assistant response summary: reported the successful matching remote/local commit and the 20-file remote tree, then explained the final documentation follow-up. No new user instruction or development phase was introduced.
 - This follow-up is committed with subject `Record verified GitHub upload and repository link`; its hash and final push verification are reported to the user after execution. Current development phase: Phase 3 complete, Phase 4 not started.
+
+
+## 2026-10-14 — Repeated GitHub upload request
+
+The user repeated the same request after the verified upload. The exact text below matches the earlier request; this entry records a new occurrence, not a new development phase.
+
+### Exact user prompt
+
+```text
+COACHLAB — CONNECT GITHUB AND PUSH EXISTING WORK
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+Local project:
+C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+GOAL:
+Commit and push all completed CoachLab work to GitHub while preserving our existing Git history.
+
+INSTRUCTIONS:
+
+1. Open the existing CoachLab project folder.
+
+2. Read AGENTS.md and check Git status.
+
+3. Review all existing commits, including:
+   - Phase 1 and Phase 2 project foundation
+   - React and Express setup
+   - PROMPT_LOG.md
+   - CODE_WALKTHROUGH.md
+   - Any verified Phase 3 database work, if completed
+
+4. Identify any uncommitted changes.
+
+5. Verify .gitignore excludes:
+   - .env and private configuration
+   - SQLite database files
+   - node_modules
+   - Generated build output
+   - Temporary files and secrets
+
+6. Review all changes before staging.
+
+7. Run relevant verification checks.
+
+8. Update PROMPT_LOG.md with this GitHub connection and push request.
+
+9. Update CODE_WALKTHROUGH.md only if source code changes.
+
+10. Create a meaningful commit for any verified outstanding changes.
+
+11. Configure the GitHub remote:
+
+   origin =
+   https://github.com/barrin5514-ship-it/CoachLab.git
+
+   If origin already exists, inspect it before changing anything.
+
+12. Check whether the remote contains commits.
+
+13. Push the existing local branch and its complete history to the GitHub repository.
+
+   Preserve existing commits.
+   Do not squash, reinitialize Git, or force-push.
+
+   If the remote has unrelated history, stop and report the conflict rather than overwriting anything.
+
+14. Verify the push actually succeeded.
+
+15. Confirm the remote branch contains:
+   - Application source files
+   - README.md
+   - AGENTS.md
+   - PROMPT_LOG.md
+   - CODE_WALKTHROUGH.md
+   - Any completed, verified database migration files
+
+16. Confirm no secrets or SQLite database files were uploaded.
+
+IMPORTANT:
+Do not begin another development phase.
+Do not change unrelated projects.
+Do not force-push.
+Do not rewrite existing commit history.
+
+FINAL REPORT:
+- Files pushed
+- Existing commits preserved
+- New commits created
+- GitHub branch name
+- GitHub repository URL
+- Security verification
+- Push verification
+- Current development phase
+
+Stop after completing the GitHub upload.
+```
+
+### Checks and response
+
+- Read AGENTS.md and reviewed the six existing commits and clean working tree. origin already matched the requested repository, so it was left unchanged.
+- Fetched origin/main and checked GitHub directly: both remote main and local HEAD were a775d50cd019005c910f293f65cd93058aff4c0f. There were no new remote commits, unrelated history, or outstanding application changes.
+- Reran the full-history audit: 6 commits and 31 unique file versions passed private/generated-path and common-credential-pattern checks. All four original development/documentation commits remain ancestors.
+- Reran walkthrough verification: all 15 files and 294 source lines/explanations matched. Ignore checks passed for private environment files, database files/journals, dependencies, build output, and temporary files.
+- Application source is unchanged since the previous upload, whose database tests and frontend build passed. Those application tests were not repeated for this log-only change; current documentation/history/ignore checks were run as listed above.
+- Changed only PROMPT_LOG.md to preserve this actual repeated prompt and verification record. CODE_WALKTHROUGH.md and application files remain unchanged. No new development work, force-push, or history rewriting is authorized or performed.
+- Assistant response summary: explained that the previous upload succeeded and that this request would verify synchronization and add its own prompt-log entry. The new log commit will be pushed normally, and its remote identity, tree contents, and clean local status verified before the final report.
+- Prior upload commits preserved: 1dbdc95 and a775d50, in addition to 75c0dc3, c56967a, b060b76, and 31f904b.
+- Commit reference: the commit containing this entry, subject `Record repeated GitHub upload verification`. Final push results and its hash are reported after execution. Phase 3 remains complete; Phase 4 has not started.
