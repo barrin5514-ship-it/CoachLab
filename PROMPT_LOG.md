@@ -1097,3 +1097,304 @@ Stop after completing the GitHub upload.
 - Assistant response summary: explained that the previous upload succeeded and that this request would verify synchronization and add its own prompt-log entry. The new log commit will be pushed normally, and its remote identity, tree contents, and clean local status verified before the final report.
 - Prior upload commits preserved: 1dbdc95 and a775d50, in addition to 75c0dc3, c56967a, b060b76, and 31f904b.
 - Commit reference: the commit containing this entry, subject `Record repeated GitHub upload verification`. Final push results and its hash are reported after execution. Phase 3 remains complete; Phase 4 has not started.
+
+
+## 2026-10-14 — Phase 4 backend API authorization and implementation
+
+Baseline: 4a76519, the verified repeated-upload log commit. The current attachment authorizes Phase 4 and a normal push to main; the earlier Phase 3-only status is historical.
+
+### Exact user prompt (attachment)
+
+```text
+
+COACHLAB — PHASE 4: BACKEND API DEVELOPMENT
+
+STATUS:
+Phases 1, 2, and 3 are complete.
+GitHub repository is connected and synchronized.
+
+PROJECT:
+C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+GITHUB:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+OBJECTIVE:
+Build and verify the backend API that allows CoachLab to create and retrieve lesson plans using our existing SQLite database.
+
+IMPORTANT:
+I am a beginner developer. Explain every new or modified line of code in CODE_WALKTHROUGH.md.
+
+==================================================
+1. INITIAL INSPECTION
+==================================================
+
+Before modifying anything:
+
+- Read AGENTS.md.
+- Read PROMPT_LOG.md.
+- Read CODE_WALKTHROUGH.md.
+- Inspect the existing server code.
+- Inspect the Phase 3 SQLite implementation.
+- Inspect the database migration and schema.
+- Check Git status and current branch.
+
+Preserve all completed functionality.
+
+Do not modify unrelated projects.
+
+==================================================
+2. CREATE LESSON API
+==================================================
+
+Implement:
+
+POST /api/lessons
+
+This endpoint must:
+
+- Accept lesson data as JSON.
+- Validate required fields.
+- Reject invalid or missing titles.
+- Reject unsupported disciplines.
+- Validate skill levels and duration.
+- Reject excessively large text inputs.
+- Use parameterized SQL statements.
+- Save the lesson in SQLite.
+- Return the saved lesson with its database ID.
+- Respond with HTTP 201 on successful creation.
+- Return appropriate HTTP 400 responses for invalid input.
+- Return appropriate HTTP 500 responses for unexpected server errors without exposing sensitive details.
+
+Lesson fields:
+
+- title
+- discipline
+- skill_level
+- duration_minutes
+- goal
+- drills
+- coaching_notes
+
+Supported disciplines:
+
+- Boxing
+- Wrestling
+- Muay Thai
+- Brazilian Jiu-Jitsu
+- MMA
+- Personal Training
+
+Use the existing database schema.
+Do not change the schema unless a genuine incompatibility is discovered. If a schema change is necessary, explain it before proceeding.
+
+==================================================
+3. READ LESSONS API
+==================================================
+
+Implement:
+
+GET /api/lessons
+
+This endpoint must:
+
+- Read lesson plans from the actual SQLite database.
+- Return an array of saved lesson objects.
+- Return an empty array when no lessons exist.
+- Include database-generated IDs and creation dates.
+- Use a consistent ordering, preferably newest first.
+- Return useful HTTP status codes.
+- Handle database failures safely.
+
+Do not use hardcoded sample lessons.
+Do not use browser localStorage as the source of truth.
+
+==================================================
+4. DATABASE CONNECTION
+==================================================
+
+- Reuse the existing Phase 3 database configuration.
+- Keep the database outside OneDrive.
+- Use the existing migration system.
+- Do not create a second database implementation.
+- Avoid opening unnecessary database connections.
+- Use parameterized SQL for all user input.
+- Ensure predictable startup behavior if migrations have not been run.
+
+Do not silently erase or overwrite existing data.
+
+==================================================
+5. BACKEND SECURITY
+==================================================
+
+- Validate all incoming data.
+- Set a reasonable JSON request size limit.
+- Never expose internal stack traces to clients.
+- Do not log sensitive environment variables.
+- Do not commit .env files or database files.
+- Do not weaken existing security rules.
+- Handle malformed JSON gracefully.
+
+Keep the implementation simple and beginner-friendly.
+
+==================================================
+6. AUTOMATED TESTING
+==================================================
+
+Create automated backend tests using a compatible, lightweight approach.
+
+Prefer Node.js built-in testing tools when suitable.
+
+Use an isolated temporary SQLite database.
+
+Required tests:
+
+1. GET returns an empty array when no lessons exist.
+2. POST creates a valid lesson.
+3. POST returns HTTP 201 and a database ID.
+4. GET returns the saved lesson.
+5. Data persists after the database connection is reopened.
+6. Missing title is rejected.
+7. Unsupported discipline is rejected.
+8. Invalid duration is rejected.
+9. Excessively large input is rejected.
+10. Malformed JSON returns a safe error.
+11. Unexpected database errors are handled safely.
+12. Existing health endpoint continues to work.
+
+Verify the real database contains the inserted records during tests.
+
+Do not leave test lessons in the production/development database.
+
+==================================================
+7. DOCUMENTATION
+==================================================
+
+Update PROMPT_LOG.md with:
+
+- This exact prompt.
+- Actual implementation steps.
+- Files modified.
+- Tests performed and results.
+- Errors discovered.
+- Genuine AI mistakes and corrections.
+- Git commit hashes.
+
+Update CODE_WALKTHROUGH.md.
+
+Explain every line of new or modified code, including:
+
+- Imports
+- Variables
+- Functions
+- API routes
+- Request and response objects
+- Database queries
+- Error handling
+- Test code
+- New configuration
+
+Explain unfamiliar JavaScript syntax in beginner-friendly language.
+
+Verify source line numbers match the explanations.
+
+Update README.md with API instructions and example requests using fake lesson data only.
+
+==================================================
+8. VERIFICATION AND GIT
+==================================================
+
+Before committing:
+
+- Run all available tests.
+- Run production build checks.
+- Run relevant syntax checks.
+- Review all diffs.
+- Verify source documentation coverage.
+- Verify database files and secrets are not staged.
+- Confirm existing Phase 3 tests still pass.
+- Confirm unrelated projects were not modified.
+
+After successful verification:
+
+- Make small, meaningful Git commits.
+- Push verified commits to the existing main branch.
+- Do not force-push.
+- Do not rewrite history.
+- Confirm local and remote commit hashes match.
+
+If a push encounters an unexpected conflict, stop and report it.
+
+==================================================
+9. STRICT SCOPE
+==================================================
+
+DO NOT:
+
+- Implement React lesson forms.
+- Redesign the dashboard.
+- Add AI features.
+- Add authentication.
+- Add update/delete endpoints.
+- Add cloud hosting.
+- Modify unrelated applications.
+- Begin Phase 5.
+
+Only implement the CREATE and READ backend functionality.
+
+==================================================
+10. FINAL REPORT
+==================================================
+
+After completion, report:
+
+1. Files created or modified.
+2. API endpoints implemented.
+3. Database connection verification.
+4. Automated tests and actual results.
+5. Security verification.
+6. Documentation coverage.
+7. Git commit hashes.
+8. GitHub push confirmation.
+9. Any unresolved issues.
+10. Readiness for Phase 5.
+
+STOP after Phase 4.
+
+Do not start Phase 5 until I approve.
+
+```
+
+### Implementation and assistant responses (summary)
+
+- Inspected AGENTS.md, the prompt history, walkthrough, existing server/database implementation, version-1 SQL schema, README, branch, and clean Git state. Confirmed the existing schema supports all requested fields; no migration or schema change was needed.
+- Explained the app-factory separation, validation limits, shared connection, and startup migration behavior before implementation. Added server/validate-lesson.js and server/app.js; changed server/index.js to open one shared connection, apply existing migrations, start the API, and close the connection on normal termination.
+- POST /api/lessons validates and normalizes JSON, inserts with named SQL parameters, rereads the saved row inside the same transaction, and returns 201 with generated metadata. GET /api/lessons returns actual SQLite rows in descending created_at/id order, or an empty array. The health and 404 behavior are preserved.
+- Validation choices: title <=200 UTF-16 units, goal <=2000, drills/coaching_notes <=10000 each; trim text, reject missing/blank titles and wrong field types; exact supported disciplines/levels; duration omitted/null or integer 1–1440; reject unknown fields. JSON requests have a separate 32 KB byte limit. Invalid fields/malformed JSON return 400, excessive body bytes 413, unsupported encoding 415, unexpected errors a safe generic 500.
+- Added server/api.test.js with isolated temporary SQLite files and real loopback HTTP servers. Updated npm test to run both API and original Phase 3 database tests. No dependency was added.
+- Updated README with actual API rules and fake-data PowerShell examples (not executed against the normal database). Updated AGENTS.md to reflect Phase 4 authorization and the Phase 5 stop boundary. Expanded CODE_WALKTHROUGH.md to explain every new/modified line, including tests and SQL bindings.
+- Files created: server/app.js, server/validate-lesson.js, server/api.test.js. Files modified: server/index.js, package.json, AGENTS.md, README.md, PROMPT_LOG.md, CODE_WALKTHROUGH.md. Existing schema, configuration, database opener, migrations, frontend, and dependency lockfile are unchanged.
+
+### Tests actually run
+
+- Initial syntax checks of app.js, index.js, and validate-lesson.js passed.
+- npm test passed: 26 tests total, 0 failures (6 top-level API tests, 17 validation subtests, and 3 existing Phase 3 tests). Additional assertions cover each text limit, malformed/non-object JSON, wrong media type, request-size limits, generic 500 responses for both routes, actual SQLite row equality, generated ID/date, ordering, reopening, empty-list/health/404 responses, and a single applied schema version.
+- Reported these passing results to the user before the documentation/final review step. No failed application tests were hidden or skipped.
+- npm run build passed: 16 modules transformed. node --check passed for every server JavaScript file, including the test files.
+- A temporary startup smoke check ran the real server/index.js against a fresh external database, verified automatic migration and a POST/GET cycle, stopped the process, restarted it, and verified the saved lesson remained. A separate unusable-database-path check exited with status 1 and safe initialization guidance. Temporary test directories were bounded and removed; no requests wrote to the normal development database.
+- Walkthrough verification passed for 18 source/configuration/test files and 480 lines: paths, line numbers, code text, and explanation coverage match actual files. The original prompt and all earlier log entries are preserved. Explanations were reviewed for meaning as well as count.
+- Final history/security review and push outcome will be recorded after they occur. No React lesson form, update/delete API, authentication, AI feature, hosting, or Phase 5 work was performed.
+
+### Errors and genuine AI mistakes
+
+No new confirmed application or documentation-generation error was encountered during this implementation; the first automated test run passed. Prior genuine mistakes and corrections remain in the earlier log entries. No bug was intentionally introduced to satisfy the assignment. Database closure and startup failure were deliberate isolated verification scenarios, not production bugs.
+
+Commit reference: the commit containing this entry, subject `Add validated lesson create and read API with integration tests`. Its resolved hash is recorded after creation in the upload outcome.
+
+### Final pre-commit verification
+
+- Reviewed every source/documentation change and the new test file. `git diff --cached --check` passed, and the staged-path assertion found exactly the nine intended Phase 4 files. A common-credential-pattern scan of all staged contents passed; no .env, actual database, dependency folder, build output, or temporary helper is staged.
+- Confirmed the exact Phase 4 attachment text is present in the log. Rechecked walkthrough paths, line numbers, and all 480 source lines/explanation entries successfully.
+- A read-only query confirmed the normal development database still has zero lessons. Tests and startup checks used only separate external temporary files.
+- Confirmed no frontend, schema, migration, database-opener/configuration, or lockfile changes. All edited project files are inside CoachLab; no commands edited neighboring projects. No extra packages or schema changes were required.
+- Fetched GitHub main before committing: remote and local baseline both matched 4a765196bb072676344e6a5b3c7dbf29e9be8c38. No unexpected conflict was present. The upcoming push must remain a normal non-force push.
