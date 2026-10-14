@@ -1,0 +1,13 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #172d3a;
+  background: #f3f6f7;
+  line-height: 1.6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 900px; margin: 0 auto; padding: 64px 24px; }
+h1 { font-size: clamp(2.5rem, 7vw, 4rem); margin: 0; line-height: 1.2; }
+h2 { margin-top: 0; }
+.eyebrow { color: #22665e; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; }
+section { margin-top: 32px; padding: 24px; background: white; border: 1px solid #d7e0e4; border-radius: 12px; }
