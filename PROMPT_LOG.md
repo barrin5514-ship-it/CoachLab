@@ -2989,3 +2989,74 @@ Genuine agent mistake: extra parenthesis in the initial inline configuration-che
 Documentation-only changes: created PHASE_9B_NEON_VERIFICATION.md, updated README connection status, appended this exact request and actual outcomes. CODE_WALKTHROUGH unchanged because no source/configuration/test code changed. Containing commit subject: Document read-only Neon verification and dependency audit. Commit hash and actual upload results will be reported after completion; this entry does not claim a future push succeeded.
 
 Final documentation review: all three documentation diffs reviewed; walkthrough verification passed 32 files/1,077 lines, security/syntax/bundle scan passed 42 files, and a private comparison confirmed the changed documents contain none of the configured API keys, full database URLs or database passwords. git diff --check passed. No source, configuration, dependency or test file changed.
+
+## Phase 9B security remediation — 2026-10-15
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9B SECURITY REMEDIATION
+
+GOAL:
+Investigate and safely resolve the four high-severity dependency findings before migrating CoachLab to PostgreSQL.
+
+1. Read AGENTS.md and the Phase 9B Neon verification report.
+
+2. Inspect the npm audit report and identify:
+   - Each affected dependency
+   - Exact installed and vulnerable versions
+   - Available patched versions
+   - How the dependency is used
+   - Whether CoachLab is exposed to the vulnerability
+
+3. Investigate safe remediation options.
+
+4. Prefer compatible security patches that preserve Prisma functionality.
+
+5. Do not automatically upgrade major versions or use npm audit fix --force.
+
+6. Before changing dependencies, explain the recommended fixes and compatibility risks.
+
+7. Once a safe remediation approach is established, implement and verify it.
+
+8. Run:
+   - Complete automated test suite
+   - Prisma schema validation
+   - Prisma Client generation
+   - React production build
+   - JavaScript syntax checks
+   - npm security audit
+
+9. Confirm the existing SQLite backend and Gemini integration remain functional.
+
+10. Do not change Neon databases or run migrations.
+
+11. Update PROMPT_LOG.md and CODE_WALKTHROUGH.md where required.
+
+12. Review all diffs and commit verified changes.
+
+13. Push to GitHub and verify synchronization.
+
+STOP if remediation requires a risky major upgrade, has no compatible patch, or cannot be tested.
+
+REPORT:
+- Vulnerabilities identified
+- Actual exposure and severity
+- Fixes applied or proposed
+- Remaining vulnerabilities
+- Test results
+- Git commits
+- Readiness for PostgreSQL migration
+
+Do not begin Phase 9C.
+```
+
+### Actual work and assistant response summary
+
+Read AGENTS.md and PHASE_9B_NEON_VERIFICATION.md. Initial main was clean at e6349e6225bcc87f57d3f12d2d784ca52ccfaa22, resolving the preceding verification commit reference. Inspected installed dependencies, actual Prisma config-loader usage and authored source imports. Refreshed npm audit using trusted system CAs; queried official npm registry metadata and reviewed upstream security advisories/release notes.
+
+Findings: four high affected entries remain (prisma/config/deepmerge/mysql2). Latest stable Prisma/config is still 7.10.0 and pins deepmerge-ts 7.1.5 and mysql2 3.15.3. Latest Deepmerge 7.1.6 is still affected; patched versions start at major 8.0.0 (latest 8.0.2), which introduces documented breaking behavior. MySQL2 3.24.6 is a published same-major partial-fix candidate outside both advisory ranges, but would override Prisma's exact pin. Explained compatibility risks before making any dependency changes. User stop condition applies because no compatible complete patch was established; therefore no dependencies changed, including no partial override, force fix or major change. See PHASE_9B_SECURITY_REVIEW.md for exact ranges, sources, exposure analysis and proposed next options.
+
+Actual checks: npm test 30/30 passed; test:prisma 3/3 passed including Client generation/compilation; schema validation passed; React build passed with 20 modules; JavaScript syntax and credential/path/bundle checks passed; walkthrough verifier passed 32 files/1,077 lines. Refreshed security audit still reports 4 high findings. These are unchanged baseline results, not proof of remediation. Gemini tests used mocks; no live provider request. No Neon connection or migration. Existing SQLite fixture migration tests used temporary isolated data only.
+
+Created PHASE_9B_SECURITY_REVIEW.md and appended this log. No application/configuration/test code changed, so CODE_WALKTHROUGH.md did not need edits. No genuine new implementation mistake occurred. Containing commit subject: Document dependency remediation blocker and verified baseline. Its resolved hash/upload outcome will be reported after they occur. PostgreSQL migration remains blocked by unresolved security findings under the user's stated prerequisite; Phase 9C not begun.
