@@ -2101,3 +2101,12 @@ The checklist is prepared but intentionally unchecked: no live Friday demo was p
 Changes are limited to PRESENTATION_GUIDE.md, AGENTS.md and this appended PROMPT_LOG.md. Technical claims were checked against the source, including defaults, field requirements, status 201, real SQLite reads, migration rerun behavior, path/port configuration and nine schema columns. The guide distinguishes the user requiring diff review from evidence of the user personally having read a diff. Commit and push results will be recorded only after they occur. Intended containing commit: Prepare Friday demo guide and instructor questions. Stop after Phase 7.
 
 Verification results: speaking script is 223 words (timing estimate, not a timed rehearsal); exactly ten practice questions confirmed; every npm run command in the guide exists in package.json; current exact prompt inclusion and unchanged CODE_WALKTHROUGH.md confirmed. Existing source/documentation verifier passed for 20 files and 612 lines. Read back the full guide and appended outcome, reviewed phase-boundary diff, and git diff --check passed. No executable code changed, so application tests were not rerun.
+
+## 2026-10-14 — Phase 7 commit and upload result
+
+Continuation of the exact Phase 7 request above; no future-development approval received.
+
+- Commit e9607abffe664ef44411ecf15afff0af4d4a7783: Prepare Friday demo guide and instructor questions. Exactly AGENTS.md, PRESENTATION_GUIDE.md and PROMPT_LOG.md were staged. Diff whitespace and common credential-pattern checks passed; no source, database, secret configuration or generated files were staged.
+- The first push tool invocation did not execute because automatic permission approval review exceeded its deadline. The review explicitly allowed one retry; retried the same authorized normal push once. It succeeded from 79ac207 to e9607ab on origin/main. This was a tool-approval timeout, not an application bug or unsafe-action finding.
+- git ls-remote confirmed remote main e9607abffe664ef44411ecf15afff0af4d4a7783 matched the local commit; Git status was clean. No force-push or history rewrite.
+- This log-only follow-up records the observed result under the commit subject Record verified Phase 7 presentation upload. Its own hash and final synchronization will be reported after verification. Live demo/rehearsal remains pending for the presenter; no records were created during preparation. Stop after Phase 7.
