@@ -2453,3 +2453,14 @@ Final npm test: 30 passed, zero failed/skipped. Final npm run build: passed, 20 
 Security scan passed for 33 project files: common credential patterns, current configured key absence, blank example key, no private/generated paths, .gitignore probes for .env/.env.local/SQLite/sidecars/node_modules/dist/tmp, and absence of server provider/key identifiers from the production browser bundle. It printed no credential values. This verifies repository/bundle safety, not erasure of the earlier tool-output incident. Only a fake mock-test-value credential is present in automated tests. Diff review covers the feature source, tests, safe configuration and documentation. No dependencies or production database files changed.
 
 Historical audit also passed: 15 existing commits and 61 unique file versions scanned, no private/generated paths or common credential patterns; original foundation/documentation/database commits remain ancestors. git diff --check passed. The isolated browser test tab was closed after capturing evidence.
+
+## 2026-10-15 — Phase 8A verified commit and upload
+
+Continuation of the exact approved Phase 8A request above; no Phase 8B approval.
+
+- Feature/documentation commit: e1247f79549e251f679c646519e828ef85e41701, Add coach-reviewed single-lesson AI generation. Fifteen explicitly selected files staged; exact staged blobs scanned before commit, with no credentials/private database files found. Existing history preserved.
+- Normal push succeeded: origin/main advanced from 345b4be to e1247f7. git ls-remote confirmed remote main e1247f79549e251f679c646519e828ef85e41701 matched local HEAD, and the working tree was clean.
+- Test-only browser tab and servers were closed. The disposable browser database directory was removed only after checking its resolved parent was Windows TEMP and its basename had the generated coachlab-browser-ai- prefix. No real lesson records were removed.
+- Final verified results: 30/30 automated tests, production build, .js syntax checks, 25-file/943-line walkthrough matching, staged credential/path scan and successful real Gemini 3.5 Flash-Lite generation plus isolated API/save/read/reopen test. Browser editing/approval/save-error/refresh checks used an explicitly mocked provider.
+- Remaining limitations: coaching quality still requires qualified review; local rate limits reset on restart; unsaved drafts do not survive refresh; project-specific Google quota was not viewed. User confirmed replacement of the exposed key; revocation was not independently verified. NODE_USE_SYSTEM_CA=1 is required for the verified live network setup on this machine.
+- This log-only follow-up uses subject Record Phase 8A live verification and upload. Its own hash and final GitHub synchronization will be reported after the normal push completes. Stop after Phase 8A.
