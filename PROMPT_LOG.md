@@ -2914,3 +2914,78 @@ Final local verification: walkthrough checker passed for 32 files and 1,077 line
 Created commit 08893acede97e526768d4efbb4fae002a8767c70, `Prepare isolated Prisma PostgreSQL development setup`, containing the 15 reviewed setup and documentation files. Normal `git push origin main` succeeded, advancing GitHub from d452b95 to 08893ac. `git ls-remote origin refs/heads/main` returned the exact local commit hash, and the working tree was clean before this result entry. Existing history was preserved; no force-push occurred.
 
 This follow-up changes only PROMPT_LOG.md to record actual commit and upload evidence. Its containing commit is identified by subject: `Record Phase 9B setup upload verification`. Local setup is verified; remote Neon initialization and live PostgreSQL tests remain blocked pending credentials and independent development-target safety verification. Four dependency audit findings remain unresolved. No Phase 9C work was started.
+
+## Phase 9B Neon connection verification — 2026-10-15
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9B: NEON CONNECTION VERIFICATION
+
+The Neon development branch has been created.
+
+Both database URLs and the required development environment settings have been saved in the ignored .env file.
+
+TASK:
+
+1. Read AGENTS.md and the Phase 9A architecture report.
+2. Verify .env is ignored by Git.
+3. Load the Neon configuration securely.
+4. Never print passwords, credentials, API keys, or full connection strings.
+5. Verify the configured pooled and direct URLs target the same intended development database.
+6. Validate the expected hostname, database name, project ID, and branch ID.
+7. Independently verify the Neon development branch identity. If that cannot be verified, stop before any database changes.
+8. Establish a read-only PostgreSQL connection using Prisma's development configuration.
+9. Query PostgreSQL for:
+   - Server version
+   - Current database
+   - Current user
+   - Existing user tables
+10. Verify the target development database is empty of application tables and is not production.
+11. Do not create, modify, or delete any tables or records.
+12. Do not run migrations, db push, or database resets.
+13. Run the existing automated tests.
+14. Investigate the four unresolved high-severity dependency warnings without automatically upgrading packages.
+15. Update PROMPT_LOG.md and any necessary documentation.
+16. Review diffs and commit verified documentation changes only.
+17. Push safe commits to GitHub and verify synchronization.
+
+REPORT:
+- Connection successful or failed
+- Development branch identity verified or unresolved
+- Database identity
+- Existing application table count
+- Prisma connection status
+- Security findings
+- Dependency audit findings
+- Automated test results
+- Remaining blockers
+
+STOP after verification.
+
+Do not begin Phase 9C or execute remote migrations without my approval.
+```
+
+### Clarification exchange (verbatim)
+
+Assistant: The Neon Console tab is at its login page. Please sign in there and confirm when ready so I can independently compare the project, development branch, and endpoint with your local settings. Do not send passwords or connection URLs here.
+
+User: done
+
+### Actual work and response summary
+
+Read AGENTS and the architecture report and reviewed the existing development factory/configuration and documentation. Initial main was clean, and local/GitHub HEAD both matched 668f0eb1fcbaf52c914624207fe632ed0d810b49, resolving the prior log-only commit reference. Verified .env ignored and untracked. Parsed only the relevant settings privately; pooled/direct URLs match endpoint, database and role, expected host/database and TLS requirements. Project/branch syntax checks passed. No credentials or complete connection URLs printed.
+
+The user completed Neon Console sign-in. Independently inspected owned CoachLab project, Free plan, Development branch and its compute; compared observed project ID, branch ID and endpoint ID with local values, all matching. Development is distinct from default production and is its child; empty-table verification was performed rather than assumed from the branch name.
+
+Existing createDevelopmentClient successfully connected and completed metadata SELECTs in a Prisma transaction explicitly set READ ONLY. Reported PostgreSQL 18.6 (c021049), database neondb matching expectations, current_user matching the configured role (value withheld), transaction_read_only on, zero user tables and zero application tables. Connection disconnected afterward. This read-only check occurred while Console sign-in was pending; independent identity verification completed afterward before any database change. No database change was made. Direct URL matched the independent endpoint and pooled URL structurally but was not separately authenticated. No migration, db push, reset, lesson import, production connection, billing change or Phase 9C work.
+
+Tests actually run: npm test 30/30 passed; npm run test:prisma 3/3 passed including client generation/compilation; prisma:validate passed; React build passed (20 modules). Existing walkthrough verifier passed 32 files/1,077 lines; existing security/syntax/bundle checks passed 41 project files before documentation additions. SQLite regression migrations ran only against isolated temporary test fixtures, not Neon or real lessons. No live Gemini call.
+
+Refreshed npm audit still reports four high-severity affected package entries, traced with npm ls to prisma 7.10.0, @prisma/config 7.10.0, deepmerge-ts 7.1.5 and mysql2 3.15.3. Reviewed published advisories: recursive object-graph stack exhaustion in deepmerge; MySQL authentication downgrade and moderate decompression exhaustion. The four entries include parent dependents, not four independent vulnerabilities. Active SQLite and optional pg application paths do not use MySQL. No demonstrated application exploit path was found, but findings remain unresolved; no package changes/overrides/automatic fixes performed. Detailed sources and limitations are in PHASE_9B_NEON_VERIFICATION.md.
+
+Genuine agent mistake: extra parenthesis in the initial inline configuration-check command caused a SyntaxError before execution; corrected and reran successfully. First audit attempt failed certificate-chain validation; system CA retry succeeded without disabling TLS. Browser telemetry emitted unrelated network errors while Console identity pages remained readable. No application bug was invented or fixed.
+
+Documentation-only changes: created PHASE_9B_NEON_VERIFICATION.md, updated README connection status, appended this exact request and actual outcomes. CODE_WALKTHROUGH unchanged because no source/configuration/test code changed. Containing commit subject: Document read-only Neon verification and dependency audit. Commit hash and actual upload results will be reported after completion; this entry does not claim a future push succeeded.
+
+Final documentation review: all three documentation diffs reviewed; walkthrough verification passed 32 files/1,077 lines, security/syntax/bundle scan passed 42 files, and a private comparison confirmed the changed documents contain none of the configured API keys, full database URLs or database passwords. git diff --check passed. No source, configuration, dependency or test file changed.
