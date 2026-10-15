@@ -1,6 +1,6 @@
 # CoachLab code walkthrough
 
-Verified source snapshot: 2026-10-15, Phase 8A. Prior documentation milestone b060b76; prior Phase 7 HEAD 345b4be.
+Verified source snapshot: 2026-10-15, Phase 9B local Prisma setup; active application still uses SQLite. Remote Neon verification is blocked by missing credentials.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
@@ -9,6 +9,8 @@ Every line, including blank lines and closing delimiters, is listed below. Numbe
 Browser → Vite serves index.html → main.jsx renders App → App fetches /api/lessons → Vite forwards to Express → SQLite rows return as JSON → App renders LessonCard components. New Lesson mounts LessonForm; its controlled inputs update state, submission sends JSON to POST /api/lessons, and a confirmed 201 row returns through onSaved to App. Form errors preserve input; successful submission unmounts the form. CSS supplies desktop and mobile layouts. The backend opens the external SQLite file, applies versioned migrations and listens; the standalone npm run db:migrate command remains available. React never opens the database directly.
 
 AI path: App opens AiLessonForm → shared request validator → POST /api/ai/lesson-draft → Express limits and validates → server-only Gemini adapter → validated unsaved JSON → editable React state. Editing clears approval. Explicit coach approval → toLesson maps the draft into existing goal/drills/coaching_notes → POST /api/lessons → parameterized SQLite INSERT → App renders LessonCard. The shared lesson-draft.js is imported by both environments; ai-provider.js never enters the browser bundle. AI generation performs no database writes. No migration was needed.
+
+Phase 9B adds an unused PostgreSQL schema/client beside SQLite. prisma.config.js is offline-only without a datasource URL. prisma:generate emits ignored TypeScript and compiles it into ignored ESM JavaScript; only the separate offline test imports the optional development client. Existing Express startup, API routes, Gemini and React never import it. No database switch or fallback occurs.
 
 ## Reading the syntax
 
@@ -498,7 +500,7 @@ Executable server entry point. It uses the existing opener and migrations, then 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\package.json`
 
-Existing project file updated for Phase 8A; its connections remain described in the opening data-flow section and each line below.
+Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 
 ### Lines 1–15
 
@@ -516,8 +518,8 @@ Existing project file updated for Phase 8A; its connections remain described in 
 11 |     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
 12 |     "build": "vite build --config client/vite.config.js",
 13 |     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js"
-15 |   },
+14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js",
+15 |     "prisma:validate": "prisma validate",
 ```
 
 - **Line 1:** Opens the JSON manifest object.
@@ -527,48 +529,70 @@ Existing project file updated for Phase 8A; its connections remain described in 
 - **Line 5:** Enables JavaScript import/export modules for .js files in this package.
 - **Line 6:** Opens the engines object containing supported runtime versions.
 - **Line 7:** Requires Node at least 24.19.0 but below 25; --engine-strict enforces this during installation.
-- **Line 8:** Closes runtime dependencies.
+- **Line 8:** Closes the root JSON object.
 - **Line 9:** Opens scripts, the map of npm command names to shell commands.
 - **Line 10:** Runs Vite with client/vite.config.js to serve the frontend locally.
 - **Line 11:** Runs Express with an optional .env file and Node's source watch/restart mode.
 - **Line 12:** Builds the frontend using the same Vite configuration; this does not run the API or migrate SQLite.
 - **Line 13:** Defines npm run db:migrate: Node reads optional .env and executes server/migrate.js without watch mode.
 - **Line 14:** Runs existing database/API tests and the new mocked-provider tests with Node built-ins; default tests do not send paid or live provider requests.
-- **Line 15:** Closes runtime dependencies.
+- **Line 15:** Adds a local schema-validation command using the pinned CLI; no datasource URL is configured.
 
-### Lines 16–25
+### Lines 16–30
 
 ```text
-16 |   "dependencies": {
-17 |     "better-sqlite3": "13.0.3",
-18 |     "express": "5.3.0",
-19 |     "react": "19.3.0",
-20 |     "react-dom": "19.3.0"
-21 |   },
-22 |   "devDependencies": {
-23 |     "vite": "8.3.4"
-24 |   }
-25 | }
+16 |     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
+17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js"
+18 |   },
+19 |   "dependencies": {
+20 |     "@prisma/adapter-pg": "7.10.0",
+21 |     "@prisma/client": "7.10.0",
+22 |     "better-sqlite3": "13.0.3",
+23 |     "express": "5.3.0",
+24 |     "pg": "8.23.1",
+25 |     "react": "19.3.0",
+26 |     "react-dom": "19.3.0"
+27 |   },
+28 |   "devDependencies": {
+29 |     "prisma": "7.10.0",
+30 |     "typescript": "5.9.3",
 ```
 
-- **Line 16:** Opens runtime dependencies.
-- **Line 17:** Pins better-sqlite3 to 13.0.3, providing the SQLite connection and prepared-query API.
-- **Line 18:** Pins Express to 5.3.0.
-- **Line 19:** Pins React to 19.3.0.
-- **Line 20:** Pins React DOM to 19.3.0; no comma follows the object's last property.
-- **Line 21:** Closes runtime dependencies.
-- **Line 22:** Opens development dependencies.
-- **Line 23:** Pins Vite to 8.3.4 for serving and building the frontend.
-- **Line 24:** Closes development dependencies.
-- **Line 25:** Closes the root JSON object.
+- **Line 16:** Generates the Prisma client, then compiles it only if generation succeeds; && links these two required local steps.
+- **Line 17:** Builds the generated client before running the separate offline Prisma setup tests.
+- **Line 18:** Closes the root JSON object.
+- **Line 19:** Opens runtime dependencies.
+- **Line 20:** Pins @prisma/adapter-pg exactly to 7.10.0: PostgreSQL driver bridge for Prisma.
+- **Line 21:** Pins @prisma/client exactly to 7.10.0: Prisma client runtime matching the CLI version.
+- **Line 22:** Pins better-sqlite3 to 13.0.3, providing the SQLite connection and prepared-query API.
+- **Line 23:** Pins Express to 5.3.0.
+- **Line 24:** Pins pg exactly to 8.23.1: PostgreSQL Node driver used by the adapter.
+- **Line 25:** Pins React to 19.3.0.
+- **Line 26:** Pins React DOM to 19.3.0; no comma follows the object's last property.
+- **Line 27:** Closes the root JSON object.
+- **Line 28:** Opens development dependencies.
+- **Line 29:** Pins prisma exactly to 7.10.0: development CLI, without an automatic Prisma 8 upgrade.
+- **Line 30:** Pins typescript exactly to 5.9.3: compiler for generated client only.
+
+### Lines 31–33
+
+```text
+31 |     "vite": "8.3.4"
+32 |   }
+33 | }
+```
+
+- **Line 31:** Pins Vite to 8.3.4 for serving and building the frontend.
+- **Line 32:** Closes the root JSON object.
+- **Line 33:** Closes the root JSON object.
 
 ## .env.example
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\.env.example`
 
-Existing project file updated for Phase 8A; its connections remain described in the opening data-flow section and each line below.
+Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 
-### Lines 1–8
+### Lines 1–15
 
 ```text
 1 | # Optional absolute path outside OneDrive. Leave blank to use:
@@ -579,6 +603,13 @@ Existing project file updated for Phase 8A; its connections remain described in 
 6 | AI_PROVIDER=gemini
 7 | AI_MODEL=gemini-3.5-flash-lite
 8 | GEMINI_API_KEY=
+9 | # Phase 9B placeholders only. SQLite remains active; these are not loaded by Prisma CLI.
+10 | # Put real Neon values only in ignored .env. Never paste URLs into chat or logs.
+11 | COACHLAB_DEV_DATABASE_URL=
+12 | COACHLAB_DEV_DIRECT_URL=
+13 | COACHLAB_DB_ENV=
+14 | COACHLAB_DEV_EXPECTED_HOST=
+15 | COACHLAB_DEV_EXPECTED_DATABASE=
 ```
 
 - **Line 1:** A # starts a comment. This explains that the optional database override must be absolute and outside OneDrive.
@@ -589,12 +620,41 @@ Existing project file updated for Phase 8A; its connections remain described in 
 - **Line 6:** Selects the currently implemented Gemini adapter; unknown provider names fail safely rather than silently switching services.
 - **Line 7:** Specifies the verified default model ID; the server reads this setting when making requests.
 - **Line 8:** Leaves the credential blank in this safe example. Set the actual key only in ignored .env, never in this committed template.
+- **Line 9:** Configuration comment: Phase 9B placeholders only. SQLite remains active; these are not loaded by Prisma CLI. This line performs no operation.
+- **Line 10:** Configuration comment: Put real Neon values only in ignored .env. Never paste URLs into chat or logs. This line performs no operation.
+- **Line 11:** Leaves COACHLAB_DEV_DATABASE_URL blank in this committed template. Reserved for an isolated pooled application connection, never frontend configuration.
+- **Line 12:** Leaves COACHLAB_DEV_DIRECT_URL blank in this committed template. Reserved for a direct migration connection after target verification.
+- **Line 13:** Leaves COACHLAB_DB_ENV blank in this committed template. Requires an explicit development environment when using the optional client.
+- **Line 14:** Leaves COACHLAB_DEV_EXPECTED_HOST blank in this committed template. Sets the independently reviewed expected development target for the client guard.
+- **Line 15:** Leaves COACHLAB_DEV_EXPECTED_DATABASE blank in this committed template. Sets the independently reviewed expected development target for the client guard.
+
+### Lines 16–23
+
+```text
+16 | # Record non-secret Neon project/branch identity for review before any remote operation.
+17 | COACHLAB_DEV_PROJECT_ID=
+18 | COACHLAB_DEV_BRANCH_ID=
+19 | COACHLAB_TEST_DATABASE_URL=
+20 | COACHLAB_TEST_DIRECT_URL=
+21 | # Reserved for a future deployment secret store. Leave production unset locally.
+22 | COACHLAB_PROD_DATABASE_URL=
+23 | COACHLAB_PROD_DIRECT_URL=
+```
+
+- **Line 16:** Configuration comment: Record non-secret Neon project/branch identity for review before any remote operation. This line performs no operation.
+- **Line 17:** Leaves COACHLAB_DEV_PROJECT_ID blank in this committed template. Records the intended Neon identity for external review; a value alone is not ownership proof.
+- **Line 18:** Leaves COACHLAB_DEV_BRANCH_ID blank in this committed template. Records the intended Neon identity for external review; a value alone is not ownership proof.
+- **Line 19:** Leaves COACHLAB_TEST_DATABASE_URL blank in this committed template. Reserved for an isolated pooled application connection, never frontend configuration.
+- **Line 20:** Leaves COACHLAB_TEST_DIRECT_URL blank in this committed template. Reserved for a direct migration connection after target verification.
+- **Line 21:** Configuration comment: Reserved for a future deployment secret store. Leave production unset locally. This line performs no operation.
+- **Line 22:** Leaves COACHLAB_PROD_DATABASE_URL blank in this committed template. Reserved for future deployment secrets, not local use.
+- **Line 23:** Leaves COACHLAB_PROD_DIRECT_URL blank in this committed template. Reserved for future deployment secrets, not local use.
 
 ## .gitignore
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\.gitignore`
 
-Git reads these patterns to exclude untracked local/generated files. Ignore rules do not remove files already tracked. A trailing slash targets directories; * matches text; ! re-includes a matching path.
+Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 
 ### Lines 1–15
 
@@ -632,17 +692,21 @@ Git reads these patterns to exclude untracked local/generated files. Ignore rule
 - **Line 14:** Ignores temporary files ending in .temp.
 - **Line 15:** Ignores tmp directories used for temporary work.
 
-### Lines 16–18
+### Lines 16–20
 
 ```text
 16 | coverage/
 17 | .DS_Store
 18 | Thumbs.db
+19 | server/generated/
+20 | server/generated-runtime/
 ```
 
 - **Line 16:** Ignores generated coverage report directories.
 - **Line 17:** Ignores macOS Finder metadata files named .DS_Store.
 - **Line 18:** Ignores Windows thumbnail cache files named Thumbs.db.
+- **Line 19:** Ignores generated Prisma TypeScript; regenerate it from the committed schema.
+- **Line 20:** Ignores compiled Prisma JavaScript build output.
 
 ## server/database.js
 
@@ -2494,6 +2558,332 @@ Repeatable Node tests use only mocked AI responses and disposable SQLite files. 
 - **Line 111:** Checks that the saved AI lesson remains present after reopening.
 - **Line 112:** Closes the integrated test.
 
+## prisma/schema.prisma
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\schema.prisma`
+
+PostgreSQL design only. It generates a separate client and does not change the active SQLite application.
+
+### Lines 1–15
+
+```text
+1 | generator client {
+2 |   provider            = "prisma-client"
+3 |   output              = "../server/generated/prisma"
+4 |   moduleFormat        = "esm"
+5 |   importFileExtension = "js"
+6 | }
+7 |
+8 | datasource db {
+9 |   provider = "postgresql"
+10 | }
+11 |
+12 | model Lesson {
+13 |   id               Int      @id @default(autoincrement())
+14 |   title            String   @db.Text
+15 |   discipline       String   @db.Text
+```
+
+- **Line 1:** Opens the client-generation configuration block.
+- **Line 2:** Selects Prisma 7's modern TypeScript client generator.
+- **Line 3:** Writes generated source into the ignored server/generated/prisma folder, relative to this schema.
+- **Line 4:** Uses ECMAScript modules, matching CoachLab's type: module package setting.
+- **Line 5:** Emits .js import paths so the generated TypeScript can compile into executable Node ESM.
+- **Line 6:** Closes the generator block.
+- **Line 7:** Blank line separates related sections and performs no operation.
+- **Line 8:** Opens the database-provider block.
+- **Line 9:** Selects PostgreSQL; no credential or URL is stored here.
+- **Line 10:** Closes the datasource block.
+- **Line 11:** Blank line separates related sections and performs no operation.
+- **Line 12:** Opens the single Lesson model; no future entities are introduced.
+- **Line 13:** Defines a required integer primary key with automatically allocated IDs. SQLite ID ranges must be checked before any future import.
+- **Line 14:** Defines required unrestricted PostgreSQL text for the title.
+- **Line 15:** Defines required text for the discipline; allowed values are enforced by reviewed migration SQL and existing API validation.
+
+### Lines 16–24
+
+```text
+16 |   skill_level      String   @default("Beginner") @db.Text
+17 |   duration_minutes Int?
+18 |   goal             String   @default("") @db.Text
+19 |   drills           String   @default("") @db.Text
+20 |   coaching_notes   String   @default("") @db.Text
+21 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
+22 |
+23 |   @@map("lessons")
+24 | }
+```
+
+- **Line 16:** Defines required skill-level text with Beginner as the default.
+- **Line 17:** The question mark makes integer duration nullable, preserving an omitted manual duration.
+- **Line 18:** Defines required goal text with an empty-string default.
+- **Line 19:** Defines required drill text with an empty-string default.
+- **Line 20:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
+- **Line 21:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
+- **Line 22:** Blank line separates related sections and performs no operation.
+- **Line 23:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 24:** Closes the Lesson model.
+
+## prisma.config.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma.config.js`
+
+Offline Prisma CLI configuration. Deliberately has no datasource URL: remote CLI operations remain disabled pending verified Neon development selection.
+
+### Lines 1–6
+
+```text
+1 | import { defineConfig } from 'prisma/config';
+2 |
+3 | export default defineConfig({
+4 |   schema: 'prisma/schema.prisma',
+5 |   migrations: { path: 'prisma/migrations' },
+6 | });
+```
+
+- **Line 1:** Imports Prisma's configuration helper.
+- **Line 2:** Blank line separates related sections and performs no operation.
+- **Line 3:** Exports the CLI configuration object through defineConfig.
+- **Line 4:** Locates the PostgreSQL schema relative to the project configuration.
+- **Line 5:** Locates the versioned PostgreSQL SQL migration directory.
+- **Line 6:** Closes the configuration object and helper call.
+
+## tsconfig.prisma.json
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\tsconfig.prisma.json`
+
+Compiles only generated Prisma TypeScript into ignored JavaScript; authored React/Express remain JavaScript.
+
+### Lines 1–13
+
+```text
+1 | {
+2 |   "compilerOptions": {
+3 |     "target": "ES2023",
+4 |     "module": "NodeNext",
+5 |     "moduleResolution": "NodeNext",
+6 |     "rootDir": "server/generated/prisma",
+7 |     "outDir": "server/generated-runtime",
+8 |     "strict": true,
+9 |     "skipLibCheck": true,
+10 |     "noEmitOnError": true
+11 |   },
+12 |   "include": ["server/generated/prisma/**/*.ts"]
+13 | }
+```
+
+- **Line 1:** Opens the JSON configuration object.
+- **Line 2:** Opens TypeScript compiler settings.
+- **Line 3:** Targets modern ES2023 JavaScript supported by Node 24.
+- **Line 4:** Uses NodeNext module semantics for ESM package imports.
+- **Line 5:** Resolves modules using matching NodeNext rules.
+- **Line 6:** Restricts source root to the generated Prisma client directory.
+- **Line 7:** Writes compiled client files into the separate ignored runtime directory.
+- **Line 8:** Enables strict type checking.
+- **Line 9:** Skips checking dependency declaration files while retaining generated-source checking.
+- **Line 10:** Prevents JavaScript output when compilation reports errors.
+- **Line 11:** Closes compiler options; the comma separates the next property.
+- **Line 12:** Includes only TypeScript files under the generated client tree; ** spans subdirectories.
+- **Line 13:** Closes the JSON object.
+
+## prisma/migrations/migration_lock.toml
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\migration_lock.toml`
+
+Prisma migration metadata for the PostgreSQL history, separate from SQLite schema_migrations.
+
+### Lines 1–1
+
+```text
+1 | provider = "postgresql"
+```
+
+- **Line 1:** Records PostgreSQL as this migration history's provider; this is not a credential or a lock on the running SQLite database.
+
+## prisma/migrations/20261015000100_create_lessons/migration.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\20261015000100_create_lessons\migration.sql`
+
+Reviewed initial PostgreSQL SQL, written directly after the offline diff command produced no output. Not executed against PostgreSQL; static checks are not database execution proof.
+
+### Lines 1–15
+
+```text
+1 | BEGIN;
+2 | CREATE TABLE "lessons" (
+3 |   "id" SERIAL NOT NULL,
+4 |   "title" TEXT NOT NULL,
+5 |   "discipline" TEXT NOT NULL,
+6 |   "skill_level" TEXT NOT NULL DEFAULT 'Beginner',
+7 |   "duration_minutes" INTEGER,
+8 |   "goal" TEXT NOT NULL DEFAULT '',
+9 |   "drills" TEXT NOT NULL DEFAULT '',
+10 |   "coaching_notes" TEXT NOT NULL DEFAULT '',
+11 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+12 |   CONSTRAINT "lessons_pkey" PRIMARY KEY ("id"),
+13 |   CONSTRAINT "lessons_title_check" CHECK (length(trim("title")) > 0),
+14 |   CONSTRAINT "lessons_discipline_check" CHECK ("discipline" IN ('Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training')),
+15 |   CONSTRAINT "lessons_skill_level_check" CHECK ("skill_level" IN ('Beginner', 'Intermediate', 'Advanced')),
+```
+
+- **Line 1:** Starts a transaction so table creation and constraints commit together.
+- **Line 2:** Starts creating lessons; quoted identifiers retain their exact spelling.
+- **Line 3:** Defines an integer ID with a PostgreSQL sequence and disallows null IDs.
+- **Line 4:** Defines required title text without shortening existing content.
+- **Line 5:** Defines required discipline text.
+- **Line 6:** Defines required skill-level text with Beginner as the default.
+- **Line 7:** Defines a nullable integer duration, preserving null when omitted.
+- **Line 8:** Defines required goal text with an empty default.
+- **Line 9:** Defines required drills text with an empty default.
+- **Line 10:** Defines required coaching notes with an empty default.
+- **Line 11:** Defines UTC-compatible timestamp-with-time-zone storage at millisecond precision with a current-time default.
+- **Line 12:** Defines the named primary key constraint on id.
+- **Line 13:** Rejects titles containing only ordinary surrounding spaces, matching the SQLite trim-based rule.
+- **Line 14:** Restricts discipline to the existing six exact names.
+- **Line 15:** Restricts skill level to Beginner, Intermediate or Advanced.
+
+### Lines 16–18
+
+```text
+16 |   CONSTRAINT "lessons_duration_check" CHECK ("duration_minutes" > 0)
+17 | );
+18 | COMMIT;
+```
+
+- **Line 16:** Requires positive duration when present; PostgreSQL CHECK permits null here.
+- **Line 17:** Closes the table definition and SQL statement.
+- **Line 18:** Commits the transaction. Prisma's own migration bookkeeping is managed separately by its migration runner.
+
+## server/prisma-development.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\prisma-development.js`
+
+Optional development-only Prisma client factory, never imported by current server/index.js or routes. Constructing a client does not prove connectivity or project ownership; separate human/project and emptiness verification is required before querying.
+
+### Lines 1–15
+
+```text
+1 | import { PrismaClient } from './generated-runtime/client.js';
+2 | import { PrismaPg } from '@prisma/adapter-pg';
+3 |
+4 | export function createDevelopmentClient(env = process.env) {
+5 |   if (env.COACHLAB_DB_ENV !== 'development') throw new Error('Explicit development environment required.');
+6 |   let url;
+7 |   try { url = new URL(env.COACHLAB_DEV_DATABASE_URL); } catch { throw new Error('Development database configuration is missing or invalid.'); }
+8 |   if (url.protocol !== 'postgresql:' || !url.hostname.endsWith('.neon.tech') || !url.hostname.includes('-pooler.')) throw new Error('A pooled Neon PostgreSQL development connection is required.');
+9 |   if (url.hostname !== env.COACHLAB_DEV_EXPECTED_HOST || decodeURIComponent(url.pathname.slice(1)) !== env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Development database does not match the explicit expected target.');
+10 |   if (!url.username || !url.password || !['require', 'verify-full'].includes(url.searchParams.get('sslmode'))) throw new Error('Authenticated TLS connection required.');
+11 |   if ([...url.searchParams.keys()].some(key => !['sslmode', 'channel_binding'].includes(key))) throw new Error('Unsupported connection options.');
+12 |   url.search = '';
+13 |   const adapter = new PrismaPg({ connectionString: url.toString(), ssl: { rejectUnauthorized: true }, max: 5, connectionTimeoutMillis: 10000, idleTimeoutMillis: 10000, statement_timeout: 15000 });
+14 |   return new PrismaClient({ adapter });
+15 | }
+```
+
+- **Line 1:** Imports the compiled generated PrismaClient from its ignored build output.
+- **Line 2:** Imports the PostgreSQL driver adapter.
+- **Line 3:** Blank line separates related sections and performs no operation.
+- **Line 4:** Exports a factory accepting explicit environment settings, defaulting to server process variables.
+- **Line 5:** Refuses all environment labels except the literal development, including unset and production.
+- **Line 6:** Declares a variable for the parsed development connection.
+- **Line 7:** Parses the configured URL; errors are replaced with a generic message that never echoes credentials.
+- **Line 8:** Requires PostgreSQL, a Neon hostname and its pooled endpoint marker.
+- **Line 9:** Requires an exact match to separately configured expected hostname and decoded database name; this prevents accidental target mismatch but is not independent project verification.
+- **Line 10:** Requires a username, password and TLS-intending sslmode setting.
+- **Line 11:** Rejects unrecognized query options so arbitrary driver SSL options cannot override this module's policy.
+- **Line 12:** Removes URL query options before passing the connection string to pg; TLS is set explicitly below rather than being overwritten by URL options.
+- **Line 13:** Creates the adapter with strict certificate verification, maximum five connections, ten-second connect/idle timeouts and fifteen-second statement timeout. No URL is logged.
+- **Line 14:** Constructs and returns a PrismaClient without executing a query. Callers must disconnect when finished.
+- **Line 15:** Closes the development factory.
+
+## server/prisma-setup.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\prisma-setup.test.js`
+
+Offline setup tests only. The fictitious URL is never queried. These tests do not claim a remote migration, empty table or successful Neon connection.
+
+### Lines 1–15
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { readFileSync } from 'node:fs';
+4 | import { createDevelopmentClient } from './prisma-development.js';
+5 |
+6 | test('development client fails closed without explicit safe target configuration', () => {
+7 |   assert.throws(() => createDevelopmentClient({}), /Explicit development/);
+8 |   assert.throws(() => createDevelopmentClient({ COACHLAB_DB_ENV: 'production' }), /Explicit development/);
+9 |   assert.throws(() => createDevelopmentClient({ COACHLAB_DB_ENV: 'development' }), /missing or invalid/);
+10 | });
+11 |
+12 | test('generated ESM client constructs offline with strict target checks', async () => {
+13 |   const url = new URL('postgresql://test:test@ep-example-pooler.us-east-2.aws.neon.tech/coachlab_test?sslmode=require');
+14 |   const env = { COACHLAB_DB_ENV: 'development', COACHLAB_DEV_DATABASE_URL: url.href, COACHLAB_DEV_EXPECTED_HOST: url.hostname, COACHLAB_DEV_EXPECTED_DATABASE: 'coachlab_test' };
+15 |   const client = createDevelopmentClient(env);
+```
+
+- **Line 1:** Imports Node's built-in test runner.
+- **Line 2:** Imports strict assertions that fail on unexpected outcomes.
+- **Line 3:** Imports synchronous file reading for static migration checks.
+- **Line 4:** Imports the development-only factory under test.
+- **Line 5:** Blank line separates related sections and performs no operation.
+- **Line 6:** Starts a test for missing or unsafe environment selection.
+- **Line 7:** Requires missing environment selection to throw before any connection.
+- **Line 8:** Requires production selection to be rejected.
+- **Line 9:** Requires missing development connection settings to be rejected safely.
+- **Line 10:** Closes the first test.
+- **Line 11:** Blank line separates related sections and performs no operation.
+- **Line 12:** Starts the asynchronous generated-client construction test.
+- **Line 13:** Creates a fictitious Neon-shaped URL with deliberately fake test credentials; no database operation uses it.
+- **Line 14:** Builds explicit development settings with matching expected host and database for the fake target.
+- **Line 15:** Constructs the client without calling connect or a model query.
+
+### Lines 16–30
+
+```text
+16 |   assert.equal(typeof client.lesson.findMany, 'function');
+17 |   assert.equal(typeof client.lesson.create, 'function');
+18 |   await client.$disconnect();
+19 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_EXPECTED_DATABASE: 'another' }), /does not match/);
+20 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href.replace('sslmode=require', 'sslmode=disable') }), /TLS/);
+21 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href + '&sslcert=unexpected' }), /Unsupported/);
+22 | });
+23 |
+24 | test('initial migration preserves nine fields and SQLite checks without destructive SQL', () => {
+25 |   const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
+26 |   const columns = [...sql.matchAll(/^  "([a-z_]+)" /gm)].map(match => match[1]);
+27 |   assert.deepEqual(columns, ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+28 |   assert.equal((sql.match(/ CHECK /g) || []).length, 4);
+29 |   assert.match(sql, /TIMESTAMPTZ\(3\)/);
+30 |   assert.match(sql, /BEGIN;[\s\S]*COMMIT;/);
+```
+
+- **Line 16:** Confirms the generated Lesson read method exists without invoking it.
+- **Line 17:** Confirms the generated Lesson create method exists without invoking it.
+- **Line 18:** Disconnects the unconnected client to release any resources.
+- **Line 19:** Checks that a mismatched expected database is refused.
+- **Line 20:** Checks that disabling TLS in the supplied URL is refused.
+- **Line 21:** Checks that an unexpected SSL query option is refused.
+- **Line 22:** Closes the construction test.
+- **Line 23:** Blank line separates related sections and performs no operation.
+- **Line 24:** Starts static SQL integrity checks, not a PostgreSQL execution test.
+- **Line 25:** Reads the committed initial migration as UTF-8 text.
+- **Line 26:** Extracts the nine quoted column declarations using a regular expression and map.
+- **Line 27:** Compares exact column names/order with the existing lesson schema.
+- **Line 28:** Requires four database CHECK constraints.
+- **Line 29:** Requires millisecond timestamp-with-time-zone storage.
+- **Line 30:** Requires an explicit BEGIN/COMMIT transaction wrapper.
+
+### Lines 31–32
+
+```text
+31 |   assert.doesNotMatch(sql, /\b(DROP|DELETE|TRUNCATE|UPDATE|INSERT)\b/i);
+32 | });
+```
+
+- **Line 31:** Rejects destructive or data-changing statement keywords in this initial schema file.
+- **Line 32:** Closes the static migration test.
+
 ## SQL migrations and excluded files
 
 Version 1 SQL and the migration runner are now documented above. The migration command creates the external SQLite file, applies pending versions, and closes it. Express now serves health plus create/read lesson endpoints, using one connection and the unchanged version-1 schema. It applies pending migrations before listening. Phase 5 now provides the React create/read interface. Phase 6 verification is complete; Phase 7 requires separate approval.
@@ -2502,4 +2892,4 @@ package-lock.json is generated dependency metadata and is excluded from individu
 
 ## Verification and maintenance
 
-This snapshot covers 25 source/configuration files and 943 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
+This snapshot covers 32 source/configuration files and 1077 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.

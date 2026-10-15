@@ -16,3 +16,5 @@ tmp/
 coverage/
 .DS_Store
 Thumbs.db
+server/generated/
+server/generated-runtime/

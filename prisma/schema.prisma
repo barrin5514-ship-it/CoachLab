@@ -1,0 +1,24 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../server/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Lesson {
+  id               Int      @id @default(autoincrement())
+  title            String   @db.Text
+  discipline       String   @db.Text
+  skill_level      String   @default("Beginner") @db.Text
+  duration_minutes Int?
+  goal             String   @default("") @db.Text
+  drills           String   @default("") @db.Text
+  coaching_notes   String   @default("") @db.Text
+  created_at       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("lessons")
+}

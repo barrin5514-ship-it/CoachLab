@@ -11,15 +11,23 @@
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
     "build": "vite build --config client/vite.config.js",
     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js"
+    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
+    "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
     "better-sqlite3": "13.0.3",
     "express": "5.3.0",
+    "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "prisma": "7.10.0",
+    "typescript": "5.9.3",
     "vite": "8.3.4"
   }
 }

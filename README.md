@@ -134,3 +134,40 @@ The current adapter supports Gemini only; provider/model configuration and the s
 ### Phase 8A verification
 
 Run npm test for repeatable mocked-provider, API and migration tests; npm run build verifies the frontend. The default tests never contact Google. See PHASE_8A_VERIFICATION.md for actual browser checks, live-provider status, limitations and corrections.
+
+## Phase 9B — local Prisma preparation (SQLite stays active)
+
+Prisma is an ORM: a library that translates model operations into database queries. PostgreSQL is the database engine; Neon hosts PostgreSQL. A migration is a versioned SQL file that changes the database structure. Adding these files does **not** move any CoachLab lesson or switch the active database.
+
+Installed exact versions: prisma 7.10.0 (development CLI), @prisma/client 7.10.0, @prisma/adapter-pg 7.10.0, pg 8.23.1 and typescript 5.9.3 (generated-client compiler only). Existing React, Express, Gemini and SQLite versions/behavior are unchanged. Prisma 8 was not installed.
+
+Local checks, safe without Neon credentials:
+
+```powershell
+npm run prisma:validate
+npm run test:prisma
+npm test
+npm run build
+```
+
+`npm run prisma:generate` generates TypeScript under server/generated/prisma and compiles it into server/generated-runtime. Both directories are ignored; generated files must be rebuilt after a fresh install. Authored application code remains JavaScript. The normal dev:server still starts the unchanged SQLite backend. The optional createDevelopmentClient function is not imported by active routes or startup; constructing it is not a connection test.
+
+The single Lesson model maps to lessons and retains all nine field names. Duration remains nullable; text stays text; created_at uses timestamp with time zone at millisecond precision. An eventual API serializer must convert Date objects to the existing UTC string format. The initial versioned SQL retains the four SQLite CHECK rules. Int IDs are suitable for the new empty development table; actual SQLite ID ranges must be verified before any later data import.
+
+**Neon remote work is blocked:** no development credentials or verified project/database selection were supplied. No Neon database was created, queried or migrated. prisma.config.js deliberately has no datasource URL, so it is local-only for now. There is no migration-deploy script or automatic database fallback. Do not run migrate dev, deploy, reset or db push until the target review below is complete.
+
+To prepare credentials securely:
+
+1. In the Neon console, select/create only your intended free development project and a development branch/database. Do not enable paid billing. Record the project and branch IDs and verify the database is empty (or obtain explicit initialization approval). Do not select production or a branch containing production data.
+2. Put the pooled development connection in COACHLAB_DEV_DATABASE_URL and the direct/unpooled connection in COACHLAB_DEV_DIRECT_URL in the existing ignored **.env**, never **.env.example**. Do not paste URLs/passwords into chat or terminal output. Do not overwrite the existing Gemini/SQLite settings.
+3. Set COACHLAB_DB_ENV=development, COACHLAB_DEV_EXPECTED_HOST to the exact pooled hostname and COACHLAB_DEV_EXPECTED_DATABASE to the intended database name. Add COACHLAB_DEV_PROJECT_ID and COACHLAB_DEV_BRANCH_ID for review. These declarations are safeguards, not proof that the actual remote project is correct.
+4. Keep testing credentials separate in COACHLAB_TEST_DATABASE_URL and COACHLAB_TEST_DIRECT_URL for a disposable test database with no production access. Leave COACHLAB_PROD_DATABASE_URL and COACHLAB_PROD_DIRECT_URL unset locally; they are reserved for a future deployment secret store.
+5. Once configured, report only that configuration is ready and identify the intended development project/branch by non-secret labels. Before any remote SQL, verify console project/branch identity, endpoint ownership, current database/role, empty user-schema inventory and production exclusion. Only then configure a separate reviewed direct-connection migration command. That verification and remote execution remain unfinished in this phase.
+
+The optional client requires a matching explicit development target and a pooled Neon PostgreSQL URL. It strips URL SSL options and sets strict certificate verification explicitly, limits the pool to five connections, and bounds connection/idle/statement timeouts. Do not disable TLS checks. It does not prove remote project ownership, and the current tests make no network query.
+
+Actual verification: baseline and final SQLite/Gemini suites each passed 30/30; three offline Prisma setup tests passed; schema validation, client generation/compilation and React production build passed. Static SQL checks passed, but SQL has not been executed against PostgreSQL. Prisma's offline migrate-diff attempts exited without producing SQL, including an explicit output-file attempt; the migration was therefore written directly and reviewed. Do not treat a zero exit code alone as proof an artifact was created.
+
+Dependency audit: `npm audit --json` reported four high-severity package findings in the pinned Prisma tree, involving deepmerge-ts 7.1.5 and mysql2 3.15.3 (plus their Prisma/config dependents). No force-fix or unapproved version change was made. These remain unresolved dependency risks and require review before deployment; the unchanged SQLite/Gemini application tests passing does not resolve them. npm also warned that install scripts were not yet approved for better-sqlite3, prisma and @prisma/engines; current generation and baseline tests ran successfully without changing script-approval settings.
+
+Official references checked October 15, 2026: [Prisma 7 configuration](https://www.prisma.io/docs/orm/v7/reference/prisma-config-reference), [Neon integration](https://neon.com/docs/guides/prisma), [Prisma 7 requirements](https://www.prisma.io/docs/orm/v7/reference/system-requirements). Remote migration, connection and empty-table tests are pending. No Phase 9C work has begun.

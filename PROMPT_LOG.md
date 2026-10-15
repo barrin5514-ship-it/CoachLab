@@ -2704,3 +2704,207 @@ Genuine inspection mistake: attempted to read nonexistent server/database-config
 Intended documentation-only commit: Plan Prisma PostgreSQL Neon migration architecture. Its resolved hash will be reported after commit; no code/database changes or push. Stop for Phase 9B approval.
 
 Final documentation verification: exact attachment inclusion and preservation of all prior log entries passed; CODE_WALKTHROUGH.md unchanged; all nine existing lesson columns mapped; only AGENTS.md, PROMPT_LOG.md and the new architecture report changed. Security/source checks passed across 34 project files, including ignored private/generated paths, blank example key, JavaScript syntax and existing browser bundle separation. No connection string or key was printed. git diff --check passed. Reviewed report, instruction changes and appended log against the inspected code and cited sources.
+
+## 2026-10-15 — Phase 9B Prisma and Neon setup approval
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9B: PRISMA AND NEON SETUP
+
+APPROVED: Begin Phase 9B.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+GOAL:
+Add Prisma ORM and prepare a secure PostgreSQL development database on Neon, without changing CoachLab's active SQLite functionality.
+
+1. PREPARATION
+
+- Read AGENTS.md and PHASE_9A_ARCHITECTURE.md.
+- Inspect PROMPT_LOG.md and CODE_WALKTHROUGH.md.
+- Check Git status and current branch.
+- Verify the Phase 9A documentation commit d452b95.
+- Push that commit to GitHub if the remote is still behind, after reviewing the history and security checks.
+- Do not force-push or overwrite remote changes.
+- Run baseline tests before modifying code.
+
+2. PRISMA INSTALLATION
+
+- Verify package compatibility with Node.js 24.
+- Use the verified stable Prisma 7.10.0 version and matching Prisma Client.
+- Select the appropriate PostgreSQL driver adapter.
+- Install only necessary dependencies.
+- Do not upgrade to Prisma 8 automatically.
+- Record exact installed versions.
+
+3. PRISMA SCHEMA
+
+Create the Prisma configuration and schema.
+
+Create one Lesson model matching the existing SQLite schema:
+
+- id
+- title
+- discipline
+- skill_level
+- duration_minutes
+- goal
+- drills
+- coaching_notes
+- created_at
+
+Preserve existing API field names and types through explicit database mappings where needed.
+
+Configure versioned Prisma migrations.
+
+Do not create future athlete, coach, gym, or training program models yet.
+
+4. NEON CONFIGURATION
+
+Prepare separate database connection settings for:
+- Development
+- Testing
+- Future production
+
+Use server-only environment variables.
+
+Follow the official Prisma 7 and Neon recommendations for direct migration connections and pooled application connections.
+
+Never print database passwords or full connection URLs.
+
+Update .env.example using placeholders only.
+
+Before any remote migration, verify:
+- The Neon project exists.
+- The selected database is development-only.
+- The connection belongs to the intended project.
+- The database is empty or explicitly approved for initialization.
+- No production database is targeted.
+
+If I have not supplied the required Neon credentials, stop before remote operations and explain how I should configure them securely.
+
+Do not enable billing or purchase services.
+
+5. INITIAL POSTGRESQL MIGRATION
+
+Create the initial Prisma migration for the Lesson model.
+
+Review its SQL before execution.
+
+Only apply it to an explicitly verified development database.
+
+Do not apply migrations to production.
+
+Do not migrate actual SQLite lesson records yet.
+
+Do not reset or delete existing data.
+
+6. PRESERVE SQLITE
+
+SQLite remains CoachLab's active database.
+
+Do not change:
+- Existing POST /api/lessons behavior
+- Existing GET /api/lessons behavior
+- Existing lesson records
+- React lesson forms
+- Gemini integration
+- Existing SQLite migrations
+
+Do not introduce automatic fallback between databases.
+
+7. VERIFICATION
+
+Test:
+- Prisma schema validation
+- Prisma Client generation
+- PostgreSQL migration integrity
+- Database connectivity, if configured
+- Empty Lesson table functionality in isolated development
+- Existing SQLite API tests
+- Existing Gemini-related tests, if present
+- React production build
+- Relevant JavaScript syntax checks
+
+Clearly distinguish completed tests from tests blocked by missing Neon credentials.
+
+Never claim a remote migration succeeded unless verified.
+
+8. DOCUMENTATION
+
+Update:
+- PROMPT_LOG.md with the exact prompt and actual results
+- CODE_WALKTHROUGH.md with line-by-line explanations of all new and modified source/configuration code
+- README.md with Prisma and Neon setup instructions
+- AGENTS.md if development instructions change
+
+Explain Prisma, ORM, PostgreSQL, Neon, and migrations in beginner-friendly language.
+
+Document any genuine agent mistakes and corrections.
+
+9. GIT AND GITHUB
+
+- Review all diffs.
+- Verify no secrets or database files are staged.
+- Commit verified changes in small, meaningful commits.
+- Push to GitHub main.
+- Verify local and remote HEAD match.
+- Never force-push.
+
+10. STOP CONDITIONS
+
+Do not:
+- Switch the active application to PostgreSQL.
+- Import SQLite lesson records.
+- Delete or modify the SQLite database.
+- Add unrelated features.
+- Create production databases.
+- Enable paid billing.
+- Begin Phase 9C.
+
+If credentials, database selection, or migration safety cannot be verified, stop before that operation and report the blocker.
+
+11. FINAL REPORT
+
+Provide:
+- Installed Prisma versions
+- Files created or changed
+- Prisma schema details
+- Neon connection status
+- Migration status
+- Tests and results
+- Security findings
+- Documentation coverage
+- Git commit hashes
+- GitHub push verification
+- Any required actions from me
+
+STOP after Phase 9B.
+
+Wait for approval before proceeding.
+```
+
+### Actual work and response (summary)
+
+Read AGENTS, architecture plan, prompt history and walkthrough. Initial main was clean and one commit ahead. Verified d452b95e5aa644d639505edc7a600246606976fe contained only the three Phase 9A documents. Security scan and diff check passed. Remote main was d796259; normal push succeeded advancing it to d452b95 without rewriting history. Baseline npm test passed 30/30 before application/dependency changes.
+
+Verified published engine metadata for exact Prisma 7.10.0, Client 7.10.0 and adapter-pg 7.10.0 against Node 24.19.0. Installed matching pinned packages, pg 8.23.1 and TypeScript 5.9.3 (only to compile the generated client). No Prisma 8 or unrelated application upgrade. package-lock records resolved packages.
+
+Created prisma.config.js (offline-only; no datasource URL), prisma/schema.prisma (one Lesson model, nine existing field names, @@map lessons), versioned initial PostgreSQL SQL and provider lock, tsconfig.prisma.json, optional server/prisma-development.js factory and server/prisma-setup.test.js. Added three local package scripts, ignored generated source/runtime directories and blank development/test/future-production environment placeholders. No active server, route, React, Gemini, SQLite config or SQLite migration file changed. The development client is not imported by active startup/routes and does not query merely by construction.
+
+Neon credential presence check returned false for all checked database settings; no Neon credentials were supplied in conversation. No remote database connection, provisioning, migration or data import was attempted. Project existence, development identity, ownership, emptiness, connectivity and empty-table operations remain blocked/unverified. README explains secure configuration in ignored .env, separate target identities, direct migration versus pooled runtime connections and review gates. No production environment or billing was configured. Active SQLite was not opened by these new tools; regression tests used their existing isolated temporary files.
+
+### Actual tests, limitations and mistakes
+
+- Baseline npm test: 30/30 passed. Final npm test: 30/30 passed, including existing SQLite API, migration and mocked Gemini tests.
+- Prisma validate passed. Prisma generate produced client 7.10.0, and TypeScript compilation passed. npm run test:prisma passed 3/3 offline tests: explicit development/missing-config rejection, generated ESM client construction and target/TLS guards, static migration column/constraint/non-destructive-SQL checks. Fake test URL was not queried; no live connection claim.
+- React production build passed with 20 modules; existing browser bundle hash unchanged from the prior build.
+- Prisma migrate diff from-empty to-schema exited zero without SQL; explicit output-file attempt also produced no file, and a permission-escalated retry did not change that. Verified engine executable version and CLI help. Wrote and reviewed initial SQL directly instead of treating the exit status as success. Genuine agent diagnostic mistake: attempted Get-Content on the missing output artifact; added an explicit existence check. Static SQL review is complete, PostgreSQL execution/integrity remains unverified pending safe credentials.
+- npm audit --json reports four high-severity affected package entries: prisma/@prisma/config through deepmerge-ts 7.1.5 and mysql2 3.15.3. Audit suggests a major-version change; no force-fix, downgrade, major override or Prisma 8 installation performed. These unresolved findings are disclosed, not labeled a passing dependency audit. No MySQL connection is used by CoachLab. npm also warned about unapproved install scripts for better-sqlite3, prisma and @prisma/engines; no global script approval settings were changed. Existing tests and generation succeeded.
+- Prisma schema uses PostgreSQL integer IDs and timestamptz(3). There is no SQLite import; ID range and exact date reconciliation remain mandatory before future import. Future serialization must preserve the API numeric/string types. No future models or Phase 9C work.
+
+README, AGENTS, and this log updated; walkthrough refreshed for all new/modified source/config/test/SQL lines. Generated files and dependency lockfile remain excluded from individual line explanations as agreed. Intended feature commit: Prepare isolated Prisma PostgreSQL development setup. Its hash and final remote synchronization will be recorded after they occur.
+
+Final local verification: walkthrough checker passed for 32 files and 1,077 lines, with exact source listings, line numbers and prior history preserved. Credential/generated-path scan passed across 41 project files and JavaScript syntax checks passed. Existing SQLite/React/Gemini source files and dependency versions were compared with HEAD and are unchanged. Generated client/runtime directories are ignored. Reviewed all new source/SQL, configuration diffs, lockfile package changes and documentation; git diff --check passed. Remote PostgreSQL tests remain blocked and the four audit findings remain unresolved.
