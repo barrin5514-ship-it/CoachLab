@@ -2464,3 +2464,243 @@ Continuation of the exact approved Phase 8A request above; no Phase 8B approval.
 - Final verified results: 30/30 automated tests, production build, .js syntax checks, 25-file/943-line walkthrough matching, staged credential/path scan and successful real Gemini 3.5 Flash-Lite generation plus isolated API/save/read/reopen test. Browser editing/approval/save-error/refresh checks used an explicitly mocked provider.
 - Remaining limitations: coaching quality still requires qualified review; local rate limits reset on restart; unsaved drafts do not survive refresh; project-specific Google quota was not viewed. User confirmed replacement of the exposed key; revocation was not independently verified. NODE_USE_SYSTEM_CA=1 is required for the verified live network setup on this machine.
 - This log-only follow-up uses subject Record Phase 8A live verification and upload. Its own hash and final GitHub synchronization will be reported after the normal push completes. Stop after Phase 8A.
+
+
+## 2026-10-15 — Phase 9A architecture and migration planning
+
+Prior verified HEAD: d796259e1f306905a1620c51b44b2df5145a3e32. Current user approval permits architecture research and documentation only; Phase 9B requires approval.
+
+### Exact user attachment
+
+```text
+
+COACHLAB — PHASE 9A: PRISMA + POSTGRESQL + NEON ARCHITECTURE
+
+PROJECT:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+OBJECTIVE:
+Prepare CoachLab for long-term development using Prisma ORM, PostgreSQL, and Neon.
+
+This is an architecture and migration planning phase only.
+
+DO NOT modify application code or databases yet.
+
+==================================================
+1. PROJECT INSPECTION
+==================================================
+
+- Read AGENTS.md.
+- Read PROMPT_LOG.md.
+- Read CODE_WALKTHROUGH.md.
+- Inspect the current React frontend.
+- Inspect the Express backend.
+- Inspect the SQLite database implementation.
+- Inspect existing migrations and API endpoints.
+- Inspect the Gemini AI integration, if implemented.
+- Check Git status and current branch.
+
+Identify what can be reused without modification.
+
+==================================================
+2. TARGET ARCHITECTURE
+==================================================
+
+Frontend:
+React + Vite
+
+Backend:
+Node.js + Express
+
+Database access:
+Prisma ORM
+
+Primary database:
+PostgreSQL
+
+Cloud database provider:
+Neon
+
+AI provider:
+Google Gemini
+
+Desired data flow:
+
+React
+  ↓
+Express API
+  ↓
+Prisma ORM
+  ↓
+PostgreSQL on Neon
+
+Gemini is accessed securely through Express.
+
+Do not place database credentials or AI keys in frontend code.
+
+==================================================
+3. PRISMA INTEGRATION PLAN
+==================================================
+
+Research and verify compatibility with:
+- Node.js 24
+- The existing Express version
+- The latest stable Prisma version
+- PostgreSQL on Neon
+
+Recommend:
+- Prisma project structure
+- Prisma schema configuration
+- Prisma Client setup
+- Prisma Migrate workflow
+- Secure connection configuration
+- Appropriate Neon connection pooling
+
+Do not install dependencies yet.
+
+==================================================
+4. EXISTING SQLITE DATA
+==================================================
+
+Plan a safe migration from SQLite to PostgreSQL.
+
+Requirements:
+- Preserve every existing lesson.
+- Preserve IDs where possible.
+- Preserve creation dates.
+- Preserve lesson content.
+- Avoid duplicates.
+- Never delete the original SQLite database.
+- Create a backup before migrating.
+- Verify record counts and field values.
+- Provide a rollback plan.
+
+Do not migrate data yet.
+
+==================================================
+5. DATABASE DESIGN
+==================================================
+
+Begin with the existing lessons table.
+
+Map all existing lesson fields to Prisma models.
+
+Consider future support for:
+- Users and coaches
+- Athletes
+- Group classes
+- Lesson plans
+- Multiweek programs
+- Training sessions
+- Progress tracking
+- AI-generated drafts
+- Gym organizations
+
+Do not create these future models yet.
+
+Keep the initial schema minimal.
+
+==================================================
+6. DATABASE ENVIRONMENTS
+==================================================
+
+Plan separate configurations for:
+- Local development
+- Automated testing
+- Future production deployment
+
+Evaluate whether SQLite should remain a separate local fallback.
+
+Do not introduce automatic database switching.
+
+Ensure development or test actions cannot accidentally modify production data.
+
+==================================================
+7. SECURITY
+==================================================
+
+- Never print API keys or connection strings.
+- Never commit .env files.
+- Keep secrets in server-side configuration.
+- Use secure Neon connections.
+- Verify .gitignore.
+- Use environment variables appropriately.
+- Do not enable paid services without approval.
+- Do not assume free-tier quotas are unlimited.
+
+==================================================
+8. TESTING STRATEGY
+==================================================
+
+Plan tests for:
+- Prisma database connectivity
+- Database migrations
+- Create lesson
+- Read lessons
+- Data persistence
+- Existing API compatibility
+- Invalid inputs
+- Connection failures
+- Migration accuracy
+- Regression prevention
+- Security
+
+Use isolated test databases.
+
+==================================================
+9. DOCUMENTATION
+==================================================
+
+Prepare a clear architecture report covering:
+- Existing architecture
+- Proposed architecture
+- Prisma's role
+- Neon setup
+- Database migration steps
+- Risks and rollback options
+- Compatibility findings
+- Estimated complexity
+- Recommended implementation sequence
+
+Continue following AGENTS.md.
+
+Maintain:
+- PROMPT_LOG.md
+- CODE_WALKTHROUGH.md
+- Small verified commits
+
+Do not fabricate verification results.
+
+==================================================
+10. STRICT STOP CONDITION
+==================================================
+
+DO NOT:
+- Install Prisma.
+- Create a Neon database.
+- Modify SQLite.
+- Change Express API routes.
+- Modify React.
+- Run migrations.
+- Add future database models.
+- Push unapproved application changes.
+
+Report the complete implementation plan.
+
+STOP and wait for my approval before Phase 9B.
+
+```
+
+### Actual work and response (summary)
+
+Inspected AGENTS, existing prompt-history entries, walkthrough/source listings, React forms/dashboard/card, Express routes/startup/validation, SQLite configuration/opening/migration, test fixtures and server-only Gemini adapter. Initial main working tree was clean. Read actual Node/Express runtime metadata and public npm metadata without installing anything. Highest stable Prisma/client/adapter-pg version observed: 7.10.0; prisma latest points to 8.0.0-rc.22, so the report recommends explicit matching stable pins, not latest. Consulted official Prisma/Express/Neon documentation and pricing; account-specific Neon access and connectivity are unverified.
+
+Created PHASE_9A_ARCHITECTURE.md with existing/reusable components, proposed data flow, nine-field model mapping, generated-client ESM packaging plan, pooling/TLS/configuration, isolated environments, migration and backup/reconciliation/rollback runbook, risks, test matrix and phased implementation estimates. Updated AGENTS phase boundary. CODE_WALKTHROUGH.md intentionally unchanged because no application, configuration, test or migration source changed. No database was opened, no lesson records read, no backup created, no migrations or application tests run, no provider request made, no dependency installed and no Neon resource created. The prior 30/30 application result is historical evidence only. No push authorized by this planning task was performed.
+
+Actual verification: existing source/walkthrough verifier passed for 25 files and 943 lines. Checked installed Node v24.19.0 and Express 5.3.0 (engine >=18). Public npm engine requirements permit this Node version. This is compatibility research, not a tested Prisma installation. Actual record counts, ID/date ranges and target connectivity remain Phase 9B preflight work.
+
+Genuine inspection mistake: attempted to read nonexistent server/database-config.js. The actual import/file listing identified server/config.js; read that file and based the report on it. No source correction was needed. One older Prisma PostgreSQL documentation URL returned an error; found and cited the current official v7 connector URL instead. No test success was fabricated.
+
+Intended documentation-only commit: Plan Prisma PostgreSQL Neon migration architecture. Its resolved hash will be reported after commit; no code/database changes or push. Stop for Phase 9B approval.
+
+Final documentation verification: exact attachment inclusion and preservation of all prior log entries passed; CODE_WALKTHROUGH.md unchanged; all nine existing lesson columns mapped; only AGENTS.md, PROMPT_LOG.md and the new architecture report changed. Security/source checks passed across 34 project files, including ignored private/generated paths, blank example key, JavaScript syntax and existing browser bundle separation. No connection string or key was printed. git diff --check passed. Reviewed report, instruction changes and appended log against the inspected code and cited sources.

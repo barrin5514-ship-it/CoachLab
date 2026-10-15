@@ -1,6 +1,6 @@
 # CoachLab development and learning requirements
 
-Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 8A approval authorizes single-lesson AI draft generation, coach editing and explicit approval, reuse of existing Create/Read storage, verification, documentation, small commits, and a normal push to main. Preserve manual planning and existing data. Stop after Phase 8A; Phase 8B requires separate approval. Do not enable billing, expose keys, transmit personal athlete information, or implement future features. Keep provider requests server-side and clearly distinguish mocked tests from successful live requests.
+Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 9A attachment authorizes architecture research and documentation planning for Prisma, PostgreSQL and Neon only. Do not install dependencies, provision Neon, modify application code/databases, run migrations, or implement future models. Preserve React, Express, Gemini and SQLite functionality. Commit verified planning documentation locally; do not infer permission to push or cut over real data. Stop after Phase 9A; Phase 9B requires separate approval. Never print database URLs or API keys, enable paid services without approval, or introduce automatic database switching.
 
 After each verified development step:
 
