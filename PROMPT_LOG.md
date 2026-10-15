@@ -1901,3 +1901,203 @@ Continuation of the exact Phase 6 approval above; no new prompt or Phase 7 appro
 - Normal push succeeded from 81892bf to cbdfc39 on origin/main. git ls-remote confirmed cbdfc39ca63eb0b417e46f5a5875711d6593b995 exactly. Git status was clean after the push.
 - This final log-only commit, Record verified Phase 6 upload, records observed results rather than anticipated success. Its resolved hash and final local/remote comparison will be given in the final response. No further application tests are needed for this append-only prose record; source remains the verified baseline.
 - Phase 6 stops here. Phase 7 requires explicit approval.
+
+
+## 2026-10-14 — Phase 7 Friday demo preparation
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 7: FRIDAY DEMO PREPARATION
+
+APPROVED: Begin Phase 7.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+GOAL:
+Prepare CoachLab for the Next Chapter Week 5 class presentation.
+
+All required application features have been implemented and verified during Phase 6.
+
+Do not expand the application's features.
+
+1. INSPECT PROJECT
+
+- Read AGENTS.md.
+- Review PROMPT_LOG.md.
+- Review CODE_WALKTHROUGH.md.
+- Read PHASE_6_VERIFICATION.md.
+- Verify Git status.
+- Review the actual React, Express, and SQLite implementation.
+
+2. CREATE PRESENTATION GUIDE
+
+Create PRESENTATION_GUIDE.md.
+
+Prepare a natural 1–2 minute presentation using beginner-friendly language.
+
+Include:
+- What CoachLab is.
+- Why I created it.
+- Who it helps.
+- How I create lesson plans.
+- How saved lessons appear.
+- How refreshing demonstrates persistence.
+- Where data is stored.
+- How React, Express, and SQLite work together.
+- What I learned while building it.
+
+Keep the presentation conversational, not overly technical.
+
+3. LIVE DEMONSTRATION
+
+Prepare a clear demonstration:
+
+Step 1: Open CoachLab.
+Step 2: Create a Brazilian Jiu-Jitsu lesson.
+Step 3: Use "Kimura Trap Fundamentals" as the lesson title.
+Step 4: Save the lesson.
+Step 5: Show the saved lesson card.
+Step 6: Refresh the browser.
+Step 7: Confirm the lesson remains.
+Step 8: Explain where the saved information lives.
+
+Do not create real demo records during documentation preparation.
+
+4. TECHNICAL EXPLANATIONS
+
+Prepare beginner-friendly explanations for:
+
+- What React does.
+- What a component is.
+- What props are.
+- What state is.
+- What Express does.
+- What SQLite does.
+- What an API is.
+- What POST and GET mean.
+- What a database migration is.
+- What data persistence means.
+- What runs in the browser versus the server.
+- Why database files and secrets should not be committed.
+
+Use actual CoachLab files and functions as examples.
+
+5. DATA FLOW VISUAL
+
+Create a simple Markdown diagram:
+
+SAVE:
+React form
+  -> POST request
+  -> Express API
+  -> SQLite database
+
+LOAD:
+SQLite database
+  -> Express API
+  -> GET response
+  -> React dashboard
+
+Explain every step in plain English.
+
+6. AI COLLABORATION
+
+Document how I controlled Codex:
+
+- Gave specific instructions.
+- Broke the project into phases.
+- Required approval before proceeding.
+- Reviewed diffs.
+- Used small Git commits.
+- Kept a prompt history.
+- Required line-by-line code explanations.
+- Tested the application.
+- Identified and corrected a genuine mistake.
+
+Use the documented README database-column mistake as one concrete example, explaining why it was incorrect and how we verified the correction.
+
+Do not invent additional mistakes.
+
+7. PRACTICE QUESTIONS
+
+Create 10 realistic instructor questions with short answers.
+
+Focus on:
+- React
+- Components
+- Props
+- State
+- Backend
+- Database
+- API routes
+- Persistence
+- Migrations
+- AI control and safety
+
+8. FINAL DEMO CHECKLIST
+
+Create a checklist covering:
+- Starting Express
+- Starting Vite
+- Browser URL and fallback port
+- Verifying database connection
+- Creating the lesson
+- Refreshing
+- Showing GitHub
+- Explaining the data flow
+- Explaining the agent mistake
+- Showing the prompt log
+
+Include exact commands already supported by package.json.
+
+9. DOCUMENTATION
+
+Update PROMPT_LOG.md with this exact prompt and actual work performed.
+
+Update CODE_WALKTHROUGH.md only if source/configuration/test code changes.
+
+Preserve the existing history and documentation.
+
+10. VERIFY AND COMMIT
+
+- Review documentation for technical accuracy.
+- Verify claims against actual source code.
+- Run relevant checks if anything executable changes.
+- Review all diffs.
+- Confirm no secrets or database files are staged.
+- Commit verified documentation changes.
+- Push to GitHub main.
+- Confirm local and remote HEAD match.
+
+Do not force-push.
+
+11. FINAL REPORT
+
+Report:
+- Presentation guide created
+- Demo steps prepared
+- Technical concepts covered
+- Practice questions completed
+- Final checklist status
+- Git commit hashes
+- GitHub synchronization
+- Any remaining concerns
+
+STOP after Phase 7.
+
+Do not add new features, implement Update/Delete, or begin future development without approval.
+```
+
+### Actual work and response (summary)
+
+Inspected AGENTS.md, prompt history, walkthrough, PHASE_6_VERIFICATION.md, package scripts, actual App/LessonForm/LessonCard components, Express create/read routes, startup, database path/opener, migration runner/schema, validation and Vite proxy. Initial Git status was clean; local and GitHub main matched 79ac207af13b8639cceefdd9001319137e4d1b13. This current approval supersedes the older phase boundary in AGENTS.md; updated that paragraph while retaining the learning/safety requirements.
+
+Created PRESENTATION_GUIDE.md: conversational 1–2 minute speaking script; eight exact requested live-demo steps using Brazilian Jiu-Jitsu and Kimura Trap Fundamentals; beginner explanations with actual files/functions; SAVE/LOAD diagrams with every step explained; documented AI control practices and the already verified README nine-versus-ten-column correction; exactly ten instructor practice questions and short answers; demo-day checklist and supported PowerShell/npm startup, fallback, migration/test/build commands. Explained the real database GET check, optional separate classroom database, and source-on-GitHub versus locally stored lessons.
+
+The checklist is prepared but intentionally unchecked: no live Friday demo was performed during this documentation task. No servers were started, no database file was created or modified, no demo records were saved, and no application source/configuration/tests/dependencies changed. CODE_WALKTHROUGH.md remains byte-for-byte unchanged as requested. Phase 6 application test/build results are referenced as prior evidence only; they were not rerun or represented as new results. No new agent mistake was observed or invented. Historical mistakes and all earlier log entries remain preserved.
+
+Changes are limited to PRESENTATION_GUIDE.md, AGENTS.md and this appended PROMPT_LOG.md. Technical claims were checked against the source, including defaults, field requirements, status 201, real SQLite reads, migration rerun behavior, path/port configuration and nine schema columns. The guide distinguishes the user requiring diff review from evidence of the user personally having read a diff. Commit and push results will be recorded only after they occur. Intended containing commit: Prepare Friday demo guide and instructor questions. Stop after Phase 7.
+
+Verification results: speaking script is 223 words (timing estimate, not a timed rehearsal); exactly ten practice questions confirmed; every npm run command in the guide exists in package.json; current exact prompt inclusion and unchanged CODE_WALKTHROUGH.md confirmed. Existing source/documentation verifier passed for 20 files and 612 lines. Read back the full guide and appended outcome, reviewed phase-boundary diff, and git diff --check passed. No executable code changed, so application tests were not rerun.

@@ -1,6 +1,6 @@
 # CoachLab development and learning requirements
 
-Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 6 prompt authorizes final testing, minimal verified corrections, documentation, commits, and a normal push to main. Do not add features or redesign. Stop after Phase 6; Phase 7 requires separate approval. Do not push without the user's approval.
+Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 7 prompt authorizes presentation documentation, accuracy checks, commits, and a normal push to main. Do not create demo records during preparation or expand features. Stop after Phase 7; future development requires separate approval. Do not push without the user's approval.
 
 After each verified development step:
 
