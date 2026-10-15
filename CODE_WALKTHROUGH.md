@@ -500,7 +500,7 @@ Executable server entry point. It uses the existing opener and migrations, then 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\package.json`
 
-Phase 9B updates; SQLite scripts and application behavior remain unchanged.
+The scoped security overrides affect Prisma tooling dependencies. SQLite, React, Express and Gemini pins remain unchanged. npm run test:prisma now includes regression coverage for actual configuration loading and circular-object handling.
 
 ### Lines 1–15
 
@@ -529,7 +529,7 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 - **Line 5:** Enables JavaScript import/export modules for .js files in this package.
 - **Line 6:** Opens the engines object containing supported runtime versions.
 - **Line 7:** Requires Node at least 24.19.0 but below 25; --engine-strict enforces this during installation.
-- **Line 8:** Closes the root JSON object.
+- **Line 8:** Closes the engines object; the comma allows the next manifest property.
 - **Line 9:** Opens scripts, the map of npm command names to shell commands.
 - **Line 10:** Runs Vite with client/vite.config.js to serve the frontend locally.
 - **Line 11:** Runs Express with an optional .env file and Node's source watch/restart mode.
@@ -542,7 +542,7 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 
 ```text
 16 |     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
-17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js"
+17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js"
 18 |   },
 19 |   "dependencies": {
 20 |     "@prisma/adapter-pg": "7.10.0",
@@ -559,8 +559,8 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 ```
 
 - **Line 16:** Generates the Prisma client, then compiles it only if generation succeeds; && links these two required local steps.
-- **Line 17:** Builds the generated client before running the separate offline Prisma setup tests.
-- **Line 18:** Closes the root JSON object.
+- **Line 17:** Generates and compiles the client, then runs setup and compatibility regression tests; && runs tests only after generation succeeds.
+- **Line 18:** Closes the scripts object; the comma separates it from dependencies.
 - **Line 19:** Opens runtime dependencies.
 - **Line 20:** Pins @prisma/adapter-pg exactly to 7.10.0: PostgreSQL driver bridge for Prisma.
 - **Line 21:** Pins @prisma/client exactly to 7.10.0: Prisma client runtime matching the CLI version.
@@ -569,22 +569,38 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 - **Line 24:** Pins pg exactly to 8.23.1: PostgreSQL Node driver used by the adapter.
 - **Line 25:** Pins React to 19.3.0.
 - **Line 26:** Pins React DOM to 19.3.0; no comma follows the object's last property.
-- **Line 27:** Closes the root JSON object.
+- **Line 27:** Closes the runtime dependency object.
 - **Line 28:** Opens development dependencies.
 - **Line 29:** Pins prisma exactly to 7.10.0: development CLI, without an automatic Prisma 8 upgrade.
 - **Line 30:** Pins typescript exactly to 5.9.3: compiler for generated client only.
 
-### Lines 31–33
+### Lines 31–41
 
 ```text
 31 |     "vite": "8.3.4"
-32 |   }
-33 | }
+32 |   },
+33 |   "overrides": {
+34 |     "prisma@7.10.0": {
+35 |       "mysql2": "3.24.6"
+36 |     },
+37 |     "@prisma/config@7.10.0": {
+38 |       "deepmerge-ts": "8.0.2"
+39 |     }
+40 |   }
+41 | }
 ```
 
 - **Line 31:** Pins Vite to 8.3.4 for serving and building the frontend.
-- **Line 32:** Closes the root JSON object.
-- **Line 33:** Closes the root JSON object.
+- **Line 32:** Closes development dependencies; the comma permits the following overrides object.
+- **Line 33:** Opens npm overrides, which replace selected transitive dependency versions.
+- **Line 34:** Limits the following replacement to dependencies of Prisma 7.10.0.
+- **Line 35:** Pins that Prisma package’s mysql2 dependency to tested security release 3.24.6.
+- **Line 36:** Closes the Prisma-specific override; the comma separates the next rule.
+- **Line 37:** Limits the next replacement to @prisma/config version 7.10.0.
+- **Line 38:** Pins its deepmerge-ts dependency to tested security release 8.0.2; Prisma itself stays at 7.10.0.
+- **Line 39:** Closes the config-specific override.
+- **Line 40:** Closes the overrides object.
+- **Line 41:** Closes the complete package manifest.
 
 ## .env.example
 
@@ -2892,4 +2908,74 @@ package-lock.json is generated dependency metadata and is excluded from individu
 
 ## Verification and maintenance
 
-This snapshot covers 32 source/configuration files and 1077 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
+This snapshot covers 33 source/configuration files and 1111 lines. Numbered code was read directly from the files, and coverage checks compare each numbered line and its explanation entry to the actual file. Explanations were reviewed against those lines. After any source change, update both the code listing and its explanations before committing. Never treat these line numbers as valid for a later version without rechecking.
+
+## server/prisma-compatibility.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\prisma-compatibility.test.js`
+
+These tests run through npm run test:prisma. They do not connect to a database or execute migrations. They guard the real config-loader path and the security fix after the scoped dependency overrides.
+
+### Lines 1–15
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { resolve } from 'node:path';
+4 | import { loadConfigFromFile } from '@prisma/config';
+5 | import { deepmerge } from 'deepmerge-ts';
+6 |
+7 | test('Prisma loads the real CoachLab configuration with the security override', async () => {
+8 |   const result = await loadConfigFromFile({ configRoot: process.cwd() });
+9 |   assert.equal(result.error, undefined);
+10 |   assert.equal(result.config.schema, resolve('prisma/schema.prisma'));
+11 |   assert.deepEqual(result.config.migrations, { path: resolve('prisma/migrations') });
+12 | });
+13 |
+14 | test('configuration merging preserves nested settings and handles circular references', () => {
+15 |   const original = { migrations: { path: 'prisma/migrations' } };
+```
+
+- **Line 1:** Imports Node’s built-in test function; import names code supplied by another module.
+- **Line 2:** Imports strict assertions, which throw when a test expectation is false.
+- **Line 3:** Imports resolve to construct absolute paths using the host operating system’s path rules.
+- **Line 4:** Imports Prisma’s actual configuration loader, exercising the dependency path affected by the override.
+- **Line 5:** Imports the installed Deepmerge function used by Prisma’s configuration loader.
+- **Line 6:** Blank line separates imports from test definitions.
+- **Line 7:** Declares an asynchronous test; the arrow function contains its checks and async permits await.
+- **Line 8:** Loads the actual project config from the current working directory; await waits for loading to finish.
+- **Line 9:** Checks that the result has no loading error; undefined means no value was set.
+- **Line 10:** Checks the resolved Prisma schema path is the real CoachLab schema file.
+- **Line 11:** Compares the complete migrations settings object with the expected absolute directory.
+- **Line 12:** Closes the callback and test registration; the semicolon ends the statement.
+- **Line 13:** Blank line separates the two independent test cases.
+- **Line 14:** Declares a synchronous regression test for merge behavior and the previously vulnerable recursive case.
+- **Line 15:** Creates a nested configuration object whose original contents must survive merging unchanged.
+
+### Lines 16–26
+
+```text
+16 |   assert.deepEqual(deepmerge(original, { migrations: { seed: 'node seed.js' } }), {
+17 |     migrations: { path: 'prisma/migrations', seed: 'node seed.js' },
+18 |   });
+19 |   assert.deepEqual(original, { migrations: { path: 'prisma/migrations' } });
+20 |   const left = {};
+21 |   const right = {};
+22 |   left.self = left;
+23 |   right.self = right;
+24 |   const merged = deepmerge(left, right);
+25 |   assert.equal(merged.self, merged);
+26 | });
+```
+
+- **Line 16:** Merges a second migrations setting and begins an exact comparison against an expected object; seed is sample text, not an executed command.
+- **Line 17:** Defines the expected combined settings, retaining both path and seed.
+- **Line 18:** Closes the expected object and assertion call.
+- **Line 19:** Checks the first input was not changed by the merge.
+- **Line 20:** Creates the first empty object with const; its properties can still be assigned.
+- **Line 21:** Creates a second separate empty object.
+- **Line 22:** Makes the first object point to itself through self, deliberately creating a cycle.
+- **Line 23:** Makes the second object point to itself at the same property, reproducing the vulnerable shape.
+- **Line 24:** Merges the cyclic objects; an exception or stack exhaustion would fail this test.
+- **Line 25:** Checks the merged object preserves its own self-reference rather than breaking the cycle.
+- **Line 26:** Closes the test callback and registration.

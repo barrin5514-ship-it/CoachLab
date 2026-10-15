@@ -3060,3 +3060,86 @@ Findings: four high affected entries remain (prisma/config/deepmerge/mysql2). La
 Actual checks: npm test 30/30 passed; test:prisma 3/3 passed including Client generation/compilation; schema validation passed; React build passed with 20 modules; JavaScript syntax and credential/path/bundle checks passed; walkthrough verifier passed 32 files/1,077 lines. Refreshed security audit still reports 4 high findings. These are unchanged baseline results, not proof of remediation. Gemini tests used mocks; no live provider request. No Neon connection or migration. Existing SQLite fixture migration tests used temporary isolated data only.
 
 Created PHASE_9B_SECURITY_REVIEW.md and appended this log. No application/configuration/test code changed, so CODE_WALKTHROUGH.md did not need edits. No genuine new implementation mistake occurred. Containing commit subject: Document dependency remediation blocker and verified baseline. Its resolved hash/upload outcome will be reported after they occur. PostgreSQL migration remains blocked by unresolved security findings under the user's stated prerequisite; Phase 9C not begun.
+
+## Phase 9B controlled security repair — 2026-10-15
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9B: CONTROLLED SECURITY REPAIR
+
+GOAL:
+Resolve the remaining four high-severity dependency findings without breaking CoachLab or delaying PostgreSQL development unnecessarily.
+
+IMPORTANT:
+The previous investigation is complete.
+Do not repeat the same investigation without performing new compatibility tests.
+
+1. Read AGENTS.md and PHASE_9B_SECURITY_REVIEW.md.
+
+2. Verify Git status and establish the current passing test baseline.
+
+3. Create an isolated temporary test workspace or disposable Git worktree.
+
+4. Test a compatible mysql2 3.24.6 override without modifying the main working application.
+
+5. Investigate deepmerge-ts 8.x compatibility with Prisma 7.10.0.
+
+6. Do not assume a major-version override is safe.
+
+7. Test dependency installation, Prisma Client generation, schema validation, migration tooling, and database connectivity using isolated or read-only environments.
+
+8. Run all existing CoachLab tests, including SQLite, Gemini, and Prisma tests.
+
+9. Run npm audit and compare results with the original four high-severity findings.
+
+10. If a compatible fix is verified:
+    - Explain the evidence.
+    - Apply the minimal changes to the main project.
+    - Rerun all tests.
+    - Update documentation.
+    - Review diffs.
+    - Commit and push verified changes.
+
+11. If a fix remains incompatible:
+    - Revert temporary changes.
+    - Keep the working application unchanged.
+    - Document the exact blocker.
+    - Explain whether the affected code is used during production runtime, development tooling, or both.
+    - Recommend the safest supported alternative, including a patched Prisma release if available.
+    - Do not claim that a remaining vulnerability is resolved.
+
+12. Do not run database migrations or migrate existing lessons.
+
+13. Maintain PROMPT_LOG.md and line-by-line CODE_WALKTHROUGH.md updates.
+
+14. Do not force dependency updates, disable security checks, or alter production configurations.
+
+FINAL REPORT:
+- Original vulnerability count
+- Fixes tested
+- Compatibility test results
+- Remaining vulnerabilities
+- Runtime versus development exposure
+- Recommended safe next action
+- Git commit and synchronization status
+
+STOP after this security repair phase.
+Do not begin Phase 9C.
+```
+
+### Actual work and response summary
+
+Read required instructions/review; starting main clean at 8d62edb21e4ffee94dc75cf13a2be8b11baf1e3f (the preceding review commit). Baseline initially encountered sandbox localhost EACCES (6 pass/24 fail), then passed 30/30 with required permissions; original Prisma suite passed 3/3. This turn performed new compatibility experiments rather than repeating only advisory research.
+
+Genuine isolation mistake: sandbox TEMP directory was not visible in the elevated shell; failed Set-Location did not stop PowerShell and the candidate install ran in main. Immediately disclosed the mistake, restored both manifests from clean HEAD, reinstalled original dependencies (four high findings), verified no manifest diff, and moved the accidental audit file under ignored tmp. Recreated an isolated git-archive trial in shared ignored tmp/security-trial with its own node_modules and fail-fast shell commands. No credentials or real databases copied. Later main application of the same overrides was deliberate and followed successful trial checks.
+
+Trial mysql2 3.24.6 and deepmerge-ts 8.0.2 scoped overrides installed successfully with Prisma still 7.10.0. Trial audit: zero vulnerabilities. Actual config loader comparison matched the baseline schema and migration settings; plain nested merge matched old Deepmerge and cyclic merge passed. Windows ESM helper initially failed importing a path directly, corrected using pathToFileURL. Full trial tests: SQLite/API/Gemini 30 passed, Prisma 3 passed, generation/compilation/validation/build passed. Read-only connection initially returned P2028 with the short default transaction wait; bounded 15-second maxWait/20-second timeout retry passed and confirmed READ ONLY and expected database. No production configuration changed.
+
+Prisma migrate status was tested read-only using a temporary direct-connection config and redacted output: correctly found the initial unapplied migration, exit 1 expected for unmanaged/empty database, no connection error. Offline migrate diff again produced no SQL file, matching the known pre-override issue; not counted as success. No PostgreSQL migration was run. Existing SQLite fixture migrations ran only within requested automated regression tests.
+
+Explained evidence before deliberate main application. Added only exact scoped overrides, retained Prisma/Client/adapter 7.10.0, and added two meaningful config/cyclic-merge regression tests to test:prisma. Main results: 30/30 existing tests, 5/5 Prisma tests, generation/compilation, schema validation and React build all passed. Main read-only connection and migration-status checks passed as in trial. Main npm audit: zero vulnerabilities. No new live Gemini call; tests use mocks. Active SQLite/Gemini source and behavior unchanged.
+
+Created PHASE_9B_SECURITY_REPAIR.md with evidence, limits, exposure and genuine mistakes. Updated this log and package/test line explanations in CODE_WALKTHROUGH.md. Corrected four preexisting package closing-brace explanations discovered during review. Walkthrough verification now covers 33 files/1,111 source lines. The new tree resolves current advisory findings but does not prove all future Prisma configurations compatible; offline SQL-diff limitation remains. Phase 9C and actual migration execution still require approval. Containing commit subject: Repair Prisma tooling dependencies with verified scoped overrides. Commit/upload results reported after completion.
+
+Final review: source/lockfile/documentation diffs inspected; existing SQLite, Gemini, React and Prisma schema/migration files unchanged. Corrected a trailing blank line found by diff check. Final walkthrough verification passed 33 files/1,111 lines; security/syntax/bundle scan passed 45 files; private-value comparison found no configured keys, database URLs or passwords in tracked/candidate files. git diff --check passed.
