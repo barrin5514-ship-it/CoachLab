@@ -3296,3 +3296,77 @@ Baseline and post-migration tests each passed 30 SQLite/API/mocked Gemini and 5 
 Files: created PHASE_9C_1_MIGRATION_VERIFICATION.md; appended PROMPT_LOG.md, README.md, CODE_WALKTHROUGH.md and AGENTS.md. Temporary operational helpers are ignored, contain no embedded credentials and are not shipped application code. Existing walkthrough source listings remain unchanged. This phase's commit is identified by subject `Record verified Neon development migration and rollback checks`; its hash is reported after creation because a commit cannot contain its own hash.
 
 Final local checks: frontend production build passed (20 modules); npm audit returned zero vulnerabilities. JavaScript syntax/security helper passed across 46 project files, ignored-path probes and frontend bundle separation. Walkthrough checker passed 33 files / 1,111 exact numbered source lines and explanations, exact paths and preserved prompt history. Reviewed all documentation diffs and the new report; git diff --check passed. No tracked executable files changed.
+
+## 2026-10-15 — Phase 9C.2 approved SQLite-to-Neon migration
+
+### Exact user prompt
+
+```text
+COACHLAB — EXECUTE PHASE 9C.2 NOW
+
+I explicitly approve Phase 9C.2: SQLite-to-Neon Data Migration.
+
+Phase 9C.1 is COMPLETE.
+Verified commit: 1054cfd
+
+Do not repeat Phase 9C.1 or ask for approval again.
+
+Follow the complete Phase 9C.2 migration instructions already provided.
+
+Required actions:
+
+1. Read AGENTS.md and the Phase 9C.1 verification report.
+2. Verify the existing SQLite database and create a tested backup.
+3. Inspect all SQLite lesson records for compatibility.
+4. Independently verify Neon Development branch br-flat-fog-b5t1m0vy and database neondb.
+5. Confirm the destination lesson table is empty.
+6. Copy existing lessons to Neon using a transaction.
+7. Preserve all IDs, timestamps, and lesson content.
+8. Compare every source and destination record.
+9. Verify PostgreSQL's next generated ID cannot collide with imported IDs.
+10. Keep SQLite as CoachLab's active database.
+11. Run all regression tests and security checks.
+12. Update PROMPT_LOG.md and CODE_WALKTHROUGH.md.
+13. Review diffs, commit verified changes, and push to GitHub.
+
+STOP immediately if database identity, backup integrity, or record verification fails.
+
+DO NOT:
+- Switch the active application to PostgreSQL.
+- Delete SQLite data.
+- Modify Neon production.
+- Add unrelated features.
+- Begin Phase 9D.
+
+After completing the import, report:
+- Source lesson count
+- Backup verification
+- Imported lesson count
+- Field-by-field comparison
+- Timestamp and ID verification
+- Test results
+- GitHub commit hash
+- Any remaining issues
+
+Begin the actual Phase 9C.2 implementation now.
+
+Stop after completion and wait for approval.
+```
+
+### Assistant response and actual outcome
+
+Starting clean commit 1054cfd0b335ff0e9c0fdfd1578ed08846acc96e. Read project instructions, Phase 9C.1 report and architecture migration/backup runbook. Inspected actual SQLite configuration. The configured source C:\Users\barri\AppData\Local\CoachLab\coachlab.sqlite contains zero lessons and passes integrity_check. Reported this before proceeding, without requesting repeat approval.
+
+Fresh authenticated Console verification matched CoachLab/Development br-flat-fog-b5t1m0vy, project rapid-firefly-98778665 and endpoint ep-long-bird-b50l2nhb. Private pooled/direct settings matched; direct authentication verified database neondb and configured role. Production was not targeted. No credentials were printed.
+
+SQLite backup API produced an archive outside OneDrive/Git at C:\Users\barri\AppData\Local\CoachLab\backups\phase9c2-2026-10-15T18-41-31-297Z. Opened backup and separate restore-rehearsal copy read-only: integrity, schema, migration history, rows and backup/restore SHA-256 matched. Saved protected manifest and result there. Held a source read lock during reconciliation, checked its unchanged SHA-256 and rows, locked the destination Lesson table inside a PostgreSQL transaction, required it empty and committed the zero-row operation. Post-commit destination comparison passed. Counts: source 0, imported 0, destination 0. No record values or timestamps existed to compare; populated-data transfer is not claimed. Next PostgreSQL generated ID 7 was verified from sequence state/settings; no sequence change or synthetic insert occurred.
+
+Baseline and final checks each passed 30 SQLite/API/mocked Gemini tests and 5 Prisma tests. Client generation/compilation, schema validation and React build passed (20 modules). Final npm audit found zero vulnerabilities. Pooled Prisma read-only database/mode verification passed. No fresh live Gemini request was made. No source/configuration/test/migration lines changed, and SQLite remains active. No schema migration, production operation, data deletion or Phase 9D work occurred.
+
+Genuine mistakes and corrections: attempted to read nonexistent server/database-path.js, then inspected actual server/config.js. Launched an existing read-only helper from the wrong working directory, yielding ENOENT; reran from tmp/security-trial and passed. These were local inspection/helper errors, not identity, backup-integrity or data-comparison failures. Neither caused a database change.
+
+Created PHASE_9C_2_DATA_MIGRATION.md; updated README.md, AGENTS.md, CODE_WALKTHROUGH.md and this log. Preserved previous history. Temporary helpers are ignored and the empty-source transaction script deliberately refuses populated sources. No general importer was added for absent rows. Remaining limitation: this phase cannot demonstrate preservation of real lesson IDs/content/timestamps because there were none in the configured database. If lessons were expected, their source must be located and verified before another import. Future SQLite writes are not automatically synchronized.
+
+Containing commit subject: `Document verified empty-source SQLite to Neon reconciliation`. The commit hash is reported after creation; the previous completed phase hash is recorded above.
+
+Final verification: walkthrough checker passed 33 files / 1,111 exact numbered source lines and explanations, exact paths and preserved prior prompt history. Security/syntax/bundle checker passed 47 project files; configured-key/URL/password comparison passed without printing values. All five documentation diffs were reviewed, and git diff --check passed. Only Markdown documentation is staged; backups, data, operational helpers, .env and generated output remain outside Git.

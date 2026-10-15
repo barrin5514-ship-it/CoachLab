@@ -2983,3 +2983,7 @@ These tests run through npm run test:prisma. They do not connect to a database o
 ## Phase 9C.1 verification note (2026-10-15)
 
 No tracked source, configuration, test or migration lines changed during this phase. Existing line-by-line explanations remain applicable. The migration at prisma/migrations/20261015000100_create_lessons/migration.sql was applied to the verified Development branch, and server/prisma-development.js successfully created/read a temporary lesson in a rolled-back transaction. server/index.js still uses SQLite. Temporary operational probes under ignored tmp are not application source; their behavior, results and corrected PostgreSQL 18 constraint-count assumption are recorded in PHASE_9C_1_MIGRATION_VERIFICATION.md.
+
+## Phase 9C.2 verification note (2026-10-15)
+
+No tracked application, source, configuration, test or SQL lines changed. Existing line-by-line listings still describe the implementation. server/config.js selected the SQLite source, server/database.js and server/index.js remain the active persistence path, and server/prisma-development.js provided read-only pooled verification. The configured source was empty. Temporary operational helpers backed it up, restored a separate copy and reconciled empty record sets under locks; they are not a reusable populated-data importer. See PHASE_9C_2_DATA_MIGRATION.md for exact behavior, limitations and genuine helper mistakes.
