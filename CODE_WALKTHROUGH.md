@@ -2979,3 +2979,7 @@ These tests run through npm run test:prisma. They do not connect to a database o
 - **Line 24:** Merges the cyclic objects; an exception or stack exhaustion would fail this test.
 - **Line 25:** Checks the merged object preserves its own self-reference rather than breaking the cycle.
 - **Line 26:** Closes the test callback and registration.
+
+## Phase 9C.1 verification note (2026-10-15)
+
+No tracked source, configuration, test or migration lines changed during this phase. Existing line-by-line explanations remain applicable. The migration at prisma/migrations/20261015000100_create_lessons/migration.sql was applied to the verified Development branch, and server/prisma-development.js successfully created/read a temporary lesson in a rolled-back transaction. server/index.js still uses SQLite. Temporary operational probes under ignored tmp are not application source; their behavior, results and corrected PostgreSQL 18 constraint-count assumption are recorded in PHASE_9C_1_MIGRATION_VERIFICATION.md.

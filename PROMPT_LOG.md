@@ -3143,3 +3143,156 @@ Explained evidence before deliberate main application. Added only exact scoped o
 Created PHASE_9B_SECURITY_REPAIR.md with evidence, limits, exposure and genuine mistakes. Updated this log and package/test line explanations in CODE_WALKTHROUGH.md. Corrected four preexisting package closing-brace explanations discovered during review. Walkthrough verification now covers 33 files/1,111 source lines. The new tree resolves current advisory findings but does not prove all future Prisma configurations compatible; offline SQL-diff limitation remains. Phase 9C and actual migration execution still require approval. Containing commit subject: Repair Prisma tooling dependencies with verified scoped overrides. Commit/upload results reported after completion.
 
 Final review: source/lockfile/documentation diffs inspected; existing SQLite, Gemini, React and Prisma schema/migration files unchanged. Corrected a trailing blank line found by diff check. Final walkthrough verification passed 33 files/1,111 lines; security/syntax/bundle scan passed 45 files; private-value comparison found no configured keys, database URLs or passwords in tracked/candidate files. git diff --check passed.
+
+## 2026-10-15 — Phase 9C.1 PostgreSQL migration verification
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9C.1: POSTGRESQL MIGRATION VERIFICATION
+
+APPROVED: Begin Phase 9C.1 only.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+GOAL:
+Safely create and verify CoachLab's initial PostgreSQL Lesson table on the verified Neon development branch.
+
+Do not migrate existing SQLite lessons or switch the active application.
+
+1. PREPARATION
+
+Read:
+- AGENTS.md
+- PHASE_9A_ARCHITECTURE.md
+- PHASE_9B_NEON_VERIFICATION.md
+- PHASE_9B_SECURITY_REPAIR.md
+- PROMPT_LOG.md
+
+Verify:
+- Clean Git working tree
+- npm audit reports zero vulnerabilities
+- Existing automated tests pass
+- Development Neon credentials are configured securely
+
+2. VERIFY DATABASE TARGET
+
+Before running any write operation:
+
+- Independently verify the Neon project and branch.
+- Confirm the branch is development, not production.
+- Confirm pooled and direct connections target the intended database.
+- Authenticate the direct migration connection.
+- Verify database identity and existing tables.
+- Confirm the target schema has no existing application tables.
+- Never print credentials or complete connection URLs.
+
+If target identity or database state cannot be verified, STOP.
+
+3. REVIEW MIGRATION
+
+- Inspect the existing Prisma Lesson model.
+- Review the initial SQL migration.
+- Compare it against all nine existing SQLite fields.
+- Verify field types, constraints, defaults, and timestamp behavior.
+- Resolve migration-generation concerns before execution.
+- Do not assume a successful command means SQL was generated.
+
+4. EXECUTE DEVELOPMENT MIGRATION
+
+Only after all previous checks pass:
+
+- Apply the reviewed migration to the verified Neon development database.
+- Use the supported Prisma migration workflow.
+- Do not reset or drop databases.
+- Do not run db push.
+- Do not target production.
+
+5. VERIFY POSTGRESQL
+
+Confirm:
+- Lesson table exists.
+- All nine fields are correct.
+- Primary key and constraints work.
+- Prisma Client can create and read records.
+- Test records are isolated and safely removable.
+- Migration status is consistent.
+- Connection pooling works for application queries.
+
+Never modify the production branch.
+
+6. REGRESSION TESTING
+
+Run:
+- Existing SQLite/API/Gemini tests
+- Prisma tests
+- Prisma schema validation
+- Prisma Client generation
+- Frontend build
+- Syntax checks
+- npm audit
+
+Confirm SQLite remains CoachLab's active database.
+
+7. DOCUMENTATION
+
+Update:
+- PROMPT_LOG.md
+- CODE_WALKTHROUGH.md
+- README.md
+- Migration verification report
+
+Explain every new or changed source-code line.
+
+Record actual results and any genuine mistakes.
+
+8. GIT
+
+- Review every diff.
+- Verify no credentials or database files are staged.
+- Make small commits.
+- Push verified changes to GitHub main.
+- Confirm local and remote hashes match.
+- Never force-push.
+
+9. STOP CONDITIONS
+
+DO NOT:
+- Transfer SQLite lessons.
+- Switch the active Express backend to PostgreSQL.
+- Modify production.
+- Add new application features.
+- Enable paid services.
+- Begin Phase 9C.2.
+
+FINAL REPORT:
+- Target database identity
+- Migration execution results
+- Table structure verification
+- Prisma read/write results
+- Automated test results
+- npm audit results
+- Documentation coverage
+- Git commits
+- GitHub synchronization
+- Remaining risks
+
+STOP after Phase 9C.1.
+
+Wait for approval before migrating existing lessons.
+```
+
+### Assistant outcome and actual work
+
+Reviewed instructions, architecture, prior verification/security reports, source and migration. Starting clean main: baa7be1c58723ce6bdc7e3ad9e62db3c64da4880 (prior security repair). Independently verified the authenticated Neon Console project/Development branch/endpoint, matched private configuration, then authenticated the direct TLS connection in a read-only transaction: PostgreSQL 18.6, neondb, zero user tables. No credentials were printed.
+
+Resolved the SQL-generation prerequisite using a temporary explicit datasource config: migrate diff produced a real file, which was opened and compared with the existing migration and all nine SQLite fields. Executed Prisma migrate deploy only on Development; exit 0, initial migration applied. Pooled Prisma verification passed create/read/defaults/timestamp and six invalid-insert checks in a rolled-back transaction. Lesson counts: zero before, zero after. Migration ledger: one finished entry; migrate status exit 0/up to date. Details and limitations are in PHASE_9C_1_MIGRATION_VERIFICATION.md.
+
+Genuine mistake: the temporary verification counted all PostgreSQL 18 pg_constraint entries as primary-key/CHECK constraints, expecting 5 and observing 13 because NOT NULL entries are included. Filtered constraint types and separately checked column nullability; rerun passed. No migration/source correction was needed. Rolled-back inserts consumed sequence numbers; no rows remain and no sequence reset occurred.
+
+Baseline and post-migration tests each passed 30 SQLite/API/mocked Gemini and 5 Prisma tests. Prisma Client 7.10.0 generation/compilation and schema validation passed. No fresh live Gemini test is claimed. SQLite stays active and its real records were not touched. No dependency, source, configuration or migration changes were needed.
+
+Files: created PHASE_9C_1_MIGRATION_VERIFICATION.md; appended PROMPT_LOG.md, README.md, CODE_WALKTHROUGH.md and AGENTS.md. Temporary operational helpers are ignored, contain no embedded credentials and are not shipped application code. Existing walkthrough source listings remain unchanged. This phase's commit is identified by subject `Record verified Neon development migration and rollback checks`; its hash is reported after creation because a commit cannot contain its own hash.
+
+Final local checks: frontend production build passed (20 modules); npm audit returned zero vulnerabilities. JavaScript syntax/security helper passed across 46 project files, ignored-path probes and frontend bundle separation. Walkthrough checker passed 33 files / 1,111 exact numbered source lines and explanations, exact paths and preserved prompt history. Reviewed all documentation diffs and the new report; git diff --check passed. No tracked executable files changed.
