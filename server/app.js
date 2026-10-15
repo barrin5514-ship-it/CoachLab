@@ -1,7 +1,8 @@
 import express from 'express';
 import { validateLesson } from './validate-lesson.js';
+import { registerAiRoute } from './ai-route.js';
 
-export function createApp(database) {
+export function createApp(database, aiOptions) {
   const app = express();
   app.use(express.json({ limit: '32kb' }));
   const list = database.prepare('SELECT * FROM lessons ORDER BY created_at DESC, id DESC');
@@ -26,6 +27,7 @@ export function createApp(database) {
     if (result.error) return response.status(400).json({ error: result.error });
     response.status(201).json(save(result.lesson));
   });
+  registerAiRoute(app, aiOptions);
   app.use((request, response) => {
     response.status(404).json({ error: 'Route not found.' });
   });

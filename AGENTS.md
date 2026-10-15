@@ -1,6 +1,6 @@
 # CoachLab development and learning requirements
 
-Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 7 prompt authorizes presentation documentation, accuracy checks, commits, and a normal push to main. Do not create demo records during preparation or expand features. Stop after Phase 7; future development requires separate approval. Do not push without the user's approval.
+Work in small, reviewable steps. Explain the purpose of a change in beginner-friendly language before making it. Follow the phase boundaries in PROMPT_LOG.md. The user's Phase 8A approval authorizes single-lesson AI draft generation, coach editing and explicit approval, reuse of existing Create/Read storage, verification, documentation, small commits, and a normal push to main. Preserve manual planning and existing data. Stop after Phase 8A; Phase 8B requires separate approval. Do not enable billing, expose keys, transmit personal athlete information, or implement future features. Keep provider requests server-side and clearly distinguish mocked tests from successful live requests.
 
 After each verified development step:
 

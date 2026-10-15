@@ -2110,3 +2110,346 @@ Continuation of the exact Phase 7 request above; no future-development approval 
 - The first push tool invocation did not execute because automatic permission approval review exceeded its deadline. The review explicitly allowed one retry; retried the same authorized normal push once. It succeeded from 79ac207 to e9607ab on origin/main. This was a tool-approval timeout, not an application bug or unsafe-action finding.
 - git ls-remote confirmed remote main e9607abffe664ef44411ecf15afff0af4d4a7783 matched the local commit; Git status was clean. No force-push or history rewrite.
 - This log-only follow-up records the observed result under the commit subject Record verified Phase 7 presentation upload. Its own hash and final synchronization will be reported after verification. Live demo/rehearsal remains pending for the presenter; no records were created during preparation. Stop after Phase 7.
+
+## 2026-10-15 — Phase 8A approval and implementation
+
+Prior completed commit: 345b4be0867a182106fbb5a575aab37442de9f2c (Record verified Phase 7 presentation upload). Existing history preserved.
+
+The preceding Phase 8 request was planning-only and prohibited file changes. Summary of available prior exchange: user requested inspection and the smallest practical AI coaching implementation plan, including provider research, editable lessons, future multiweek programs and coach-approved saves. The planning response recommended single-lesson drafts first; it did not authorize implementation. The exact planning request is preserved below; the assistant response here is a summary. The earlier short user request "open coach lab" requested opening the local application, not feature development.
+
+### Exact Phase 8A user prompt
+
+```text
+COACHLAB — PHASE 8A IMPLEMENTATION APPROVAL
+
+I approve Phase 8A: Single-Lesson AI Generation.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+GOAL:
+Allow CoachLab to automatically generate structured coaching lessons that I can review, edit, approve, and save.
+
+Preserve all existing functionality.
+
+1. PREPARATION
+
+- Read AGENTS.md and existing source code.
+- Check Git status and current tests.
+- Verify current Gemini models, API availability, free-tier quotas, and official pricing.
+- Do not assume Gemini 3.8 Flash is an available model.
+- Select a currently supported model suitable for structured lesson generation.
+- Do not enable billing or purchase anything.
+- Do not expose API keys.
+
+If no suitable free-tier provider is available, stop and report alternatives before implementing provider-specific code.
+
+2. AI LESSON GENERATOR
+
+Build a lesson generation form with:
+
+- Discipline
+- Skill level
+- Class duration
+- Number of students
+- Training objective
+- Specific techniques
+- Available equipment
+
+Support:
+Boxing, Wrestling, Muay Thai, Brazilian Jiu-Jitsu, MMA, and Personal Training.
+
+3. GENERATED LESSON STRUCTURE
+
+Generate a complete lesson containing:
+
+- Lesson title
+- Training objectives
+- Timed warm-up
+- Techniques to teach
+- Step-by-step teaching instructions
+- Progressive drills
+- Partner exercises where appropriate
+- Common mistakes
+- Coaching corrections
+- Skill-level modifications
+- Cooldown
+- Safety considerations
+
+All lesson sections must fit the requested total class duration.
+
+Example:
+60-minute BJJ class focused on Kimura fundamentals.
+
+CoachLab should provide a complete teaching structure rather than just listing exercises.
+
+4. EDITING AND APPROVAL
+
+- Display the generated lesson as an editable draft.
+- Allow me to modify the instructions and drills.
+- Require explicit approval before saving.
+- Save approved lessons using the existing API and SQLite database.
+- Never overwrite existing lessons automatically.
+- Preserve drafts if saving fails.
+
+Label AI-generated lessons as drafts requiring coach review.
+
+5. BACKEND
+
+- Implement POST /api/ai/lesson-draft.
+- Keep AI API requests on the Express server.
+- Validate incoming parameters.
+- Validate AI response structure and duration.
+- Use configurable provider/model settings.
+- Protect against timeouts, excessive requests, and oversized responses.
+- Return safe errors.
+- Keep manual lesson creation working during AI outages.
+
+6. SECURITY
+
+- No API keys in React or Vite public variables.
+- Store secrets only in ignored server-side configuration.
+- Never log API keys.
+- Never commit credentials or actual database files.
+- Do not transmit personal athlete information to free AI providers.
+
+7. TESTING
+
+Verify:
+
+- AI lesson generation with a configured provider.
+- Complete lesson structure.
+- Requested duration matches section totals.
+- All six disciplines are supported.
+- Generated drafts can be edited.
+- Nothing saves before approval.
+- Approved lessons persist in SQLite.
+- Invalid inputs are rejected.
+- Provider failures are handled.
+- Manual Create/Read still works.
+- Existing automated tests pass.
+
+Use mocked provider responses for repeatable automated tests. Clearly distinguish those from actual provider integration tests.
+
+Do not claim live AI generation works unless a real provider request succeeds.
+
+8. DOCUMENTATION
+
+Continue maintaining:
+
+- PROMPT_LOG.md with exact prompts
+- CODE_WALKTHROUGH.md explaining every new or modified source-code line
+- AGENTS.md project instructions
+- README.md setup and usage instructions
+
+Record genuine agent mistakes and corrections.
+
+9. GIT AND GITHUB
+
+- Review all diffs.
+- Run relevant tests.
+- Make small commits after verified changes.
+- Push completed work to GitHub main.
+- Confirm local and remote hashes match.
+- Never force-push.
+
+10. SCOPE
+
+Do not implement:
+- Multiweek program generation
+- Video research
+- Athlete profiles
+- Fight camps
+- Update/Delete features
+- Unrelated dashboard redesigns
+
+These will come in later phases.
+
+11. FINAL REPORT
+
+Provide:
+- AI provider and verified model
+- Files created or modified
+- Generation features implemented
+- Testing results
+- Actual live AI test status
+- Security verification
+- Documentation coverage
+- Git commits
+- GitHub synchronization
+- Remaining issues
+
+STOP after Phase 8A.
+
+Do not begin Phase 8B without approval.
+```
+
+### Actual clarification prompts and replies
+
+1. Assistant: "For the live Gemini test, do you already have a Gemini API key for a project with billing disabled? Please do not paste the key here; it must go in CoachLab’s ignored .env file."
+   User: "I can configure a free-tier key locally"
+2. Assistant: "When ready, confirm that GEMINI_API_KEY is in CoachLab’s ignored .env file and the Gemini project has billing disabled. May I then send a generic 60-minute BJJ Kimura lesson request for the live test?"
+   User: "Configured with billing disabled; run the generic live test"
+3. Assistant: "The key check found no CoachLab .env file. Please confirm once it is saved at C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\.env (not .env.txt), with GEMINI_API_KEY set. Do not share the key here."
+   User: "The .env file is now at that exact path"
+4. Assistant: "Please revoke the key that was accidentally entered in .env.example, then put its replacement only in CoachLab’s ignored .env file. Confirm when the replacement is ready; I will not use or display the exposed key."
+   User: "Replacement key is now saved in .env; run the approved live test"
+
+### Actual work and assistant response (summary)
+
+Read project instructions, source, existing walkthrough/history and package scripts; Git initially clean. Remote main matched 345b4be. Baseline npm test passed 26 tests. Reviewed current official Gemini model, pricing, quota, structured-output and generateContent documentation. Free-tier access exists; numeric quota is account-specific in AI Studio and was not guessed. User confirmed billing disabled; no purchase or billing change performed.
+
+Added client/src/lesson-draft.js (shared contract and mapping), client/src/AiLessonForm.jsx (request/edit/approval UI), server/ai-provider.js (server-only Gemini REST adapter), server/ai-route.js (validated unsaved draft endpoint), server/ai.test.js (mocked provider tests). Modified client/src/App.jsx and styles.css, server/app.js, package.json test command, safe .env.example. Updated AGENTS.md, README.md and CODE_WALKTHROUGH.md; created PHASE_8A_VERIFICATION.md. No dependency installation or database migration; existing manual lesson source and SQL schema unchanged.
+
+Generated drafts include five timed sections and all requested guidance fields. The shared validator checks required content, lengths, ordered sections and exact total time. The UI lets the coach edit every draft field, clears approval after edits, and uses existing POST /api/lessons only on explicit approved submission. Failed saves preserve the in-memory draft. The provider cannot write to SQLite. New records retain AI-assisted review provenance in coaching_notes. No Update/Delete or future-phase features were implemented.
+
+### Actual checks, errors and corrections
+
+- Automated suite: initial new suite run had 29 passes and one failure. Genuine agent test mistake: expected the twenty-per-day limit after only nineteen accepted attempts. Changed the additional-attempt loop from ten to eleven, then all 30 tests passed. No production limit was weakened to make the test pass.
+- Frontend production build succeeded. All six disciplines, input validation, malformed/mistimed output, provider HTTP/quota/timeout/oversized/truncated responses, concurrency/minute/day limits, safe errors, manual fallback and SQLite persistence are covered by real local code with mocked AI responses.
+- Browser used a separate mocked provider on ports 3002/5174 and an external temporary database: generated draft left zero saved rows; title and all sections displayed; editing teaching instructions reset approval; 61/60 total blocked saving; simulated save failure retained edits; recovery saved one approved lesson; refresh preserved that card and edited text. Exact-text locator missed a label because JSX produced whitespace; inspected current state and used a whitespace-tolerant label locator. No product bug was implied by that automation mismatch.
+- Genuine agent security mistake: the user entered a key into tracked .env.example while documentation work was running; a checker assertion printed the unexpected source line, including the key, into tool output. No key value is repeated here. Removed it from the example, placed configuration only in ignored .env, changed diagnostic assertions to avoid printing unmatched source lines, informed the user and requested revocation/replacement. User confirmed replacement. No credential had been staged, committed or pushed. Revocation is user-confirmed, not independently verified through the provider console.
+- First live check found no .env and stopped with 503 before any provider call. After replacement configuration, a call failed with generic transport feedback. Using NODE_USE_SYSTEM_CA=1 (Windows trusted certificates, TLS validation still enabled) reached Google. A diagnostic returned HTTP 503 / UNAVAILABLE for gemini-3.8-flash. Model-list API returned HTTP 200 and included both 3.8 Flash and 3.5 Flash-Lite with generateContent support. No raw provider body or key was printed by these diagnostics.
+- Verified official free pricing for gemini-3.5-flash-lite and tried the same generic request: real generation succeeded, title Beginner Kimura Fundamentals Lesson Draft, all required fields validated, timed sections 10+15+15+15+5=60. Selected gemini-3.5-flash-lite as the default rather than leaving the unavailable model as default.
+- A second real test exercised POST /api/ai/lesson-draft through Express: HTTP 200, structure valid, total 60, zero rows before explicit test save. Explicit test-only POST returned 201; GET returned one row; reopening its disposable SQLite file retained one row. That isolated database was removed after verification. Real lesson data was not touched.
+
+The current implementation remains a draft assistant: structure and timing checks cannot certify technique quality or coach suitability. Privacy confirmation cannot automatically detect all personal information. Drafts survive failed requests but not tab refresh/close; this is documented. Rate limits are local in-memory guards, not provider quotas or billing caps. No automatic provider fallback or retries. Phase 8B has not begun.
+
+Intended verified feature commit: Add coach-reviewed single-lesson AI generation. This commit cannot contain its own hash; resolved commit and upload results will be appended after they occur. Further verification results are recorded below only after running them.
+
+### Exact preceding Phase 8 planning request (recovered from conversation)
+
+```text
+COACHLAB — PHASE 8: AI ASSISTANT COACH
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+GOAL:
+Expand CoachLab from a manual lesson planner into an AI-powered coaching assistant.
+
+IMPORTANT:
+Preserve all existing functionality and completed Week 5 requirements.
+
+Before making changes:
+- Read AGENTS.md.
+- Review the existing application and database.
+- Review PROMPT_LOG.md.
+- Review CODE_WALKTHROUGH.md.
+- Check Git status.
+- Inspect available AI integration options.
+
+FEATURES TO PLAN:
+
+1. AI LESSON GENERATION
+
+The coach provides:
+- Discipline: Boxing, BJJ, Wrestling, Muay Thai, MMA, or Personal Training
+- Student skill level
+- Class duration
+- Class size
+- Training objective
+- Techniques to cover
+- Available equipment
+
+CoachLab generates:
+- Class objectives
+- Timed warm-up
+- Technique explanations
+- Step-by-step coaching instructions
+- Progressive drills
+- Partner exercises when appropriate
+- Common mistakes and coaching corrections
+- Cooldown
+- Safety considerations
+
+2. MULTIWEEK PROGRAMS
+
+Allow coaches to request structured programs.
+
+Example:
+Create a four-week Kimura Trap series with three classes per week.
+
+Generate a progression where each class builds on previously taught skills.
+
+3. EDITABLE AI PLANS
+
+All AI-generated lessons must remain editable.
+
+The coach has final approval.
+
+Never automatically overwrite existing lessons.
+
+4. LESSON LIBRARY
+
+Save approved AI-generated lessons using the existing application database.
+
+Reuse the existing Create/Read functionality where possible.
+
+5. FUTURE EXPANSION
+
+Design for later support of:
+- Instructional video recommendations
+- Fighter training camps
+- Individual athlete profiles
+- Group class management
+- Progress tracking
+- Personalized program adjustments
+
+Do not implement these features yet.
+
+6. AI PROVIDER RESEARCH
+
+Investigate reliable AI model options.
+
+Prioritize:
+- Good instruction quality
+- Free or low-cost access
+- Secure API integration
+- Ability to switch providers later
+
+Do not purchase anything or require a paid subscription without approval.
+
+Never expose API keys in frontend code.
+
+7. SAFETY AND QUALITY
+
+Generated lessons are drafts for review by a qualified coach.
+
+Include appropriate safety guidance, progression, and modifications based on skill level.
+
+Avoid making unsupported claims about techniques, athlete readiness, or injury prevention.
+
+8. DOCUMENTATION
+
+Continue maintaining:
+- Complete PROMPT_LOG.md
+- Line-by-line CODE_WALKTHROUGH.md
+- Small, verified Git commits
+- Security checks
+- Automated tests
+
+9. FIRST STEP ONLY
+
+Inspect the existing CoachLab code and propose the smallest practical implementation plan.
+
+Explain:
+- What can be reused
+- What needs to be added
+- Recommended AI provider
+- How generated lessons will be saved
+- Expected complexity and costs
+- Proposed implementation phases
+
+DO NOT MODIFY FILES YET.
+
+STOP and wait for my approval before implementation.
+```
+
+### Final pre-commit verification
+
+Final npm test: 30 passed, zero failed/skipped. Final npm run build: passed, 20 modules compiled. Node --check passed for every project .js file; JSX verified by the build. Walkthrough verifier passed: 25 source/configuration/test files, 943 lines, exact listings/line numbers, explanations present, absolute paths, original attachment and all prior prompt-log entries preserved. Meaning review checked new descriptions against actual source. A repeated data-flow paragraph introduced by rerunning the local documentation helper was removed during readback.
+
+Security scan passed for 33 project files: common credential patterns, current configured key absence, blank example key, no private/generated paths, .gitignore probes for .env/.env.local/SQLite/sidecars/node_modules/dist/tmp, and absence of server provider/key identifiers from the production browser bundle. It printed no credential values. This verifies repository/bundle safety, not erasure of the earlier tool-output incident. Only a fake mock-test-value credential is present in automated tests. Diff review covers the feature source, tests, safe configuration and documentation. No dependencies or production database files changed.
+
+Historical audit also passed: 15 existing commits and 61 unique file versions scanned, no private/generated paths or common credential patterns; original foundation/documentation/database commits remain ancestors. git diff --check passed. The isolated browser test tab was closed after capturing evidence.

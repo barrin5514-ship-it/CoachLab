@@ -107,3 +107,30 @@ Git history and PROMPT_LOG.md record the work. Repository: [CoachLab on GitHub](
 Demo submissions create real records in the selected database. For disposable demos, set DATABASE_PATH in the backend terminal to a new absolute path outside OneDrive, such as `$env:DATABASE_PATH = Join-Path $env:TEMP "coachlab-class-demo.sqlite"`, before starting it. Do not delete your regular database. No Update/Delete or authentication is included in this phase.
 
 Verification on 2026-10-14: 26 backend/migration tests passed and the production build passed. Real in-app browser checks used an isolated temporary database and frontend port 5174: empty state, validation, all six selections, successful save, double-click producing one row, outage/input retention/recovery, refresh and server restart persistence. Desktop 1280px and mobile 390px layouts were inspected with no horizontal overflow. These are recorded manual browser checks, not a committed automated browser test suite.
+
+## Phase 8A: single-lesson AI drafts
+
+Click **AI lesson draft** and enter discipline, skill level, 15–180 whole minutes, 1–100 students, a training objective, techniques and equipment. All six existing disciplines are supported. Use generic class details only; no names, health information or other personal athlete information. Google's free tier may use requests/responses to improve products. The privacy checkbox is an affirmation, not an automatic personal-information filter.
+
+The server requests five timed sections: warm-up, technique teaching, progressive drills, partner exercises and cooldown. It requires objectives, technique content, mistakes, corrections, skill modifications and safety text. The model is instructed to provide step-by-step coaching; structural checks cannot certify its technical accuracy. A qualified coach must review every draft. All section minutes must sum exactly to the requested duration; only partner work may use zero with a solo alternative.
+
+Edit any draft text or section time, then check the approval box and click **Approve and save lesson**. Any edit clears previous approval. Generation itself writes nothing to SQLite. Approved drafts become new lessons through the existing POST /api/lessons route, with structured content formatted into goal, drills and coaching_notes. They display through the existing lesson cards. Existing lessons are never overwritten. No migration or new dependency was required.
+
+Drafts survive failed saves while this page stays open. They are not autosaved and will be lost on refresh, closing the tab or explicit discard. If a save response is interrupted, check the saved list in another tab before retrying: the server may have saved it even if the reply was lost. Approval is a local UI workflow, not authentication or a server-side identity audit. Saved lessons have no Update/Delete UI.
+
+### Safe Gemini setup
+
+1. In Google AI Studio, use an eligible project with **billing disabled**. No paid plan is required by CoachLab. Verify availability and your actual project limits there.
+2. Copy the blank .env.example to a new .env file only if .env does not already exist. Do not put the key in .env.example, which is tracked by Git. On Windows ensure the private file is named .env, not .env.txt.
+3. Set GEMINI_API_KEY only in ignored .env. Optional server settings are AI_PROVIDER=gemini and AI_MODEL=gemini-3.5-flash-lite. Never use a VITE_ key variable. Restart Express after configuration changes. Keep DATABASE_PATH outside OneDrive. On this machine, set `$env:NODE_USE_SYSTEM_CA = '1'` in the backend terminal before starting Express so Node uses Windows trusted certificates; this does not disable TLS verification.
+4. Start the app with the existing commands: npm run dev:server and npm run dev:client. If AI is unconfigured or unavailable, manual New Lesson still works.
+
+Provider research on 2026-10-15: Google's [model catalog](https://ai.google.dev/gemini-api/docs/models) lists gemini-3.5-flash-lite as stable. Its [pricing page](https://ai.google.dev/gemini-api/docs/pricing) lists free input/output and paid rates of $0.30/$2.50 per million input/output tokens; rates can change. A real generic sixty-minute BJJ request succeeded with this model and passed structural/duration validation. gemini-3.8-flash was also documented and returned by this key's model-list API, but its generation endpoint returned 503 UNAVAILABLE, so it was not selected as the default. Paid billing was not enabled. [Rate-limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits) directs users to AI Studio for account-specific RPM/TPM/RPD limits; no numeric Google quota is assumed here. [Data terms](https://ai.google.dev/gemini-api/terms) describe free-tier data use.
+
+The server uses Google's [generateContent REST endpoint](https://ai.google.dev/api/generate-content), structured JSON, a 45-second timeout, 8192 maximum output tokens and a 64KiB downloaded-response limit. Express already limits JSON bodies to 32KiB; drafts are also checked against saved-field lengths and a 32000-byte save budget. The app permits one generation at a time, three accepted attempts per rolling minute and twenty per rolling 24 hours, including failed attempts. These in-memory limits reset when Express restarts and are not a billing cap or Google's quota. There are no automatic retries.
+
+The current adapter supports Gemini only; provider/model configuration and the separate adapter boundary allow later providers without changing the UI contract. An unknown provider fails safely. AI errors contain safe messages rather than provider bodies or keys. The local server stays loopback-only; deployment/security for public hosting is outside this phase.
+
+### Phase 8A verification
+
+Run npm test for repeatable mocked-provider, API and migration tests; npm run build verifies the frontend. The default tests never contact Google. See PHASE_8A_VERIFICATION.md for actual browser checks, live-provider status, limitations and corrections.
