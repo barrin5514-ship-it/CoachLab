@@ -181,3 +181,19 @@ SQLite remains the active application database. Start Express with `npm run dev:
 ## Phase 9C.2 outcome (2026-10-15)
 
 The configured SQLite database had zero lessons. A verified backup and separate restore rehearsal were completed outside OneDrive, then an empty-source reconciliation transaction confirmed zero Neon lessons and a noncolliding next ID of 7. See [the data migration report](PHASE_9C_2_DATA_MIGRATION.md). No populated lesson records were transferred or tested. SQLite remains active; future SQLite writes are not automatically copied to Neon. A populated import and any active-database switch require separate approval and fresh checks.
+
+## Phase 9C.3 isolated migration validation
+
+See [the verification report and proposed Phase 9D plan](PHASE_9C_3_VERIFICATION.md). The nine historical browser lessons are not approved for application import. Disposable copies were tested separately in a random transaction-scoped PostgreSQL schema; rollback removed the schema and application data stayed unchanged. SQLite remains active.
+
+The new test is deliberately opt-in. Before running it, independently verify the Console project, Development branch and endpoint against the ignored server configuration. Existing .env supplies the verified development URLs; never paste them into commands. Then, from CoachLab's root in PowerShell:
+
+```powershell
+$env:NODE_USE_SYSTEM_CA = '1'
+$env:COACHLAB_RUN_MIGRATION_TESTS = 'verified-development'
+$env:COACHLAB_MIGRATION_SOURCES = '["C:/Users/barri/AppData/Local/Temp/coachlab-phase5-browser.sqlite","C:/Users/barri/AppData/Local/Temp/coachlab-phase6-5e41139d2e67438d9f986da446b438e3/browser.sqlite"]'
+node --env-file=.env --test server/migration-validation.test.js
+Remove-Item Env:COACHLAB_RUN_MIGRATION_TESTS, Env:COACHLAB_MIGRATION_SOURCES
+```
+
+This fixture-specific test requires exactly two and seven source rows, an empty real application table, and the verified development target. It backs up sources outside OneDrive, never writes originals, and never commits test data. Missing opt-in produces a skip, not a pass. Copies remain in the OS temporary directory under coachlab-migration-validation-*; treat them as private local data. Ordinary regression commands remain npm test, npm run test:prisma, npm run prisma:validate and npm run build. Update/Delete remain absent from the application; SQL capability tests do not add these features. Phase 9D still requires approval.

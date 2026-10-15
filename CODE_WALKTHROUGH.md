@@ -2987,3 +2987,453 @@ No tracked source, configuration, test or migration lines changed during this ph
 ## Phase 9C.2 verification note (2026-10-15)
 
 No tracked application, source, configuration, test or SQL lines changed. Existing line-by-line listings still describe the implementation. server/config.js selected the SQLite source, server/database.js and server/index.js remain the active persistence path, and server/prisma-development.js provided read-only pooled verification. The configured source was empty. Temporary operational helpers backed it up, restored a separate copy and reconciled empty record sets under locks; they are not a reusable populated-data importer. See PHASE_9C_2_DATA_MIGRATION.md for exact behavior, limitations and genuine helper mistakes.
+
+## server/migration-validation.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migration-validation.test.js`
+
+This opt-in integration test uses existing pg and SQLite dependencies. It does not change Express startup or add an importer to the application. The isolated schema and all records exist only inside a transaction, then roll back. Operator Console verification is still required before setting the opt-in flag. Disposable copies stay outside OneDrive/Git; historical lesson contents are never embedded in this file.
+
+### Lines 1–15
+
+```javascript
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import Database from 'better-sqlite3';
+4 | import pg from 'pg';
+5 | import { readFileSync, mkdtempSync } from 'node:fs';
+6 | import { tmpdir } from 'node:os';
+7 | import path from 'node:path';
+8 | import { createHash, randomUUID } from 'node:crypto';
+9 |
+10 | const parseUrl = value => { try { return new URL(value); } catch { throw new Error('Invalid connection configuration.'); } };
+11 | const fields = ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at'];
+12 | const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+13 | const fileHash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+14 | const canonical = rows => rows.map(row => fields.map(key => key === 'created_at' ? new Date(row[key]).toISOString() : row[key]));
+15 | const equalRows = (actual, expected) => {
+```
+
+- **Line 1:** Imports Node's built-in test runner; no additional test framework is installed.
+- **Line 2:** Imports strict assertions, which fail a test when an expected condition is false.
+- **Line 3:** Imports the SQLite library used to open originals read-only and make safe backup copies.
+- **Line 4:** Imports the PostgreSQL driver for the isolated test connection.
+- **Line 5:** Imports file reading and creation of uniquely named temporary directories.
+- **Line 6:** Imports the operating system's temporary-directory locator.
+- **Line 7:** Imports portable path construction and absolute-path checking.
+- **Line 8:** Imports SHA-256 fingerprints and random UUIDs for schema names.
+- **Line 9:** Blank line separates related parts of the test for readability.
+- **Line 10:** Parses a private URL inside try/catch; replaces parsing errors with a generic message so a malformed credential URL cannot appear in test output.
+- **Line 11:** Defines the exact nine-column comparison and insertion order.
+- **Line 12:** An arrow function converts a value to JSON and fingerprints it, keeping lesson text out of comparison errors.
+- **Line 13:** Fingerprints file bytes so the test can detect any change to an original SQLite file.
+- **Line 14:** Nested map calls turn each row into nine ordered values; the conditional converts dates to UTC ISO strings while preserving other values exactly.
+- **Line 15:** Begins the helper that compares every field without printing its contents.
+
+### Lines 16–30
+
+```javascript
+16 |   assert.equal(actual.length, expected.length);
+17 |   const left = canonical(actual), right = canonical(expected);
+18 |   for (let row = 0; row < right.length; row++) {
+19 |     for (let field = 0; field < fields.length; field++) {
+20 |       assert.ok(left[row][field] === right[row][field], `Mismatch in row ${row}, field ${fields[field]}`);
+21 |     }
+22 |   }
+23 | };
+24 |
+25 | test('isolated PostgreSQL migration validation', { skip: process.env.COACHLAB_RUN_MIGRATION_TESTS !== 'verified-development', timeout: 120000 }, async t => {
+26 |   const env = process.env;
+27 |   assert.equal(env.COACHLAB_DB_ENV, 'development');
+28 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
+29 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
+30 |   const direct = parseUrl(env.COACHLAB_DEV_DIRECT_URL);
+```
+
+- **Line 16:** Requires identical record counts before comparing values.
+- **Line 17:** Builds normalized value arrays for actual and expected rows; the comma declares both constants.
+- **Line 18:** Loops over every record index; row++ advances to the next record.
+- **Line 19:** Loops over every field index in each record.
+- **Line 20:** Strict equality checks each value including null versus empty text; failure identifies only row number and field name.
+- **Line 21:** Closes the current loop, condition or protected block.
+- **Line 22:** Closes the current loop, condition or protected block.
+- **Line 23:** Closes the helper function body and ends its assignment with a semicolon.
+- **Line 24:** Blank line separates related parts of the test for readability.
+- **Line 25:** Registers an opt-in live test with a two-minute timeout; missing explicit approval flag skips it without connecting.
+- **Line 26:** Creates a short reference to server-side process environment settings.
+- **Line 27:** Requires explicit development configuration.
+- **Line 28:** Requires the reviewed CoachLab project identifier; this local assertion cannot replace independent Console verification.
+- **Line 29:** Requires the reviewed Development branch identifier, not production.
+- **Line 30:** Parses the private unpooled connection URL in memory.
+
+### Lines 31–45
+
+```javascript
+31 |   const pooled = parseUrl(env.COACHLAB_DEV_DATABASE_URL);
+32 |   assert.equal(pooled.hostname, env.COACHLAB_DEV_EXPECTED_HOST);
+33 |   assert.ok(pooled.hostname.startsWith('ep-long-bird-b50l2nhb-pooler.') && pooled.hostname.endsWith('.neon.tech'));
+34 |   assert.equal(direct.hostname, pooled.hostname.replace('-pooler.', '.'));
+35 |   assert.equal(direct.pathname, '/neondb');
+36 |   assert.equal(pooled.pathname, direct.pathname);
+37 |   assert.equal(env.COACHLAB_DEV_EXPECTED_DATABASE, 'neondb');
+38 |   assert.equal(direct.username, pooled.username);
+39 |   for (const url of [direct, pooled]) {
+40 |     assert.ok(url.protocol === 'postgresql:' && url.username && url.password);
+41 |     assert.ok(['require', 'verify-full'].includes(url.searchParams.get('sslmode')));
+42 |     assert.ok([...url.searchParams.keys()].every(key => ['sslmode', 'channel_binding'].includes(key)));
+43 |   }
+44 |   const sources = JSON.parse(env.COACHLAB_MIGRATION_SOURCES);
+45 |   assert.ok(Array.isArray(sources) && sources.length === 2);
+```
+
+- **Line 31:** Parses the private pooled connection URL in memory.
+- **Line 32:** Checks the pooled host matches the operator's expected host.
+- **Line 33:** Requires the independently reviewed endpoint prefix and Neon hostname suffix.
+- **Line 34:** Removes the pooler marker and checks both URLs point to the same endpoint.
+- **Line 35:** Requires the approved neondb database path.
+- **Line 36:** Requires the same database in the pooled URL.
+- **Line 37:** Checks the explicitly expected database name too.
+- **Line 38:** Requires the same role in both URLs; passwords are never printed.
+- **Line 39:** Checks both parsed connection URLs before opening a connection.
+- **Line 40:** Requires PostgreSQL syntax plus a username and password.
+- **Line 41:** Requires an SSL mode that demands encryption.
+- **Line 42:** Spreads parameter names into an array and rejects options other than the supported TLS options.
+- **Line 43:** Closes the current loop, condition or protected block.
+- **Line 44:** Parses the JSON array of two explicitly selected source paths from the environment.
+- **Line 45:** Rejects missing or differently shaped source lists.
+
+### Lines 46–60
+
+```javascript
+46 |   const archive = mkdtempSync(path.join(tmpdir(), 'coachlab-migration-validation-'));
+47 |   assert.ok(!/onedrive/i.test(archive));
+48 |   const hashes = sources.map(fileHash);
+49 |   const datasets = [];
+50 |   for (const [index, filename] of sources.entries()) {
+51 |     assert.ok(path.isAbsolute(filename));
+52 |     const original = new Database(filename, { readonly: true, fileMustExist: true });
+53 |     const copy = path.join(archive, `source-${index}.sqlite`);
+54 |     try { await original.backup(copy); } finally { original.close(); }
+55 |     const database = new Database(copy, { readonly: true, fileMustExist: true });
+56 |     try {
+57 |       assert.equal(database.pragma('integrity_check', { simple: true }), 'ok');
+58 |       const rows = database.prepare('SELECT * FROM lessons ORDER BY id').safeIntegers().all();
+59 |       for (const row of rows) {
+60 |         assert.ok(row.id >= -2147483648n && row.id < 2147483647n);
+```
+
+- **Line 46:** Creates a unique disposable-copy directory in the operating system's temporary location.
+- **Line 47:** Rejects a temporary-copy directory whose path includes OneDrive, case-insensitively.
+- **Line 48:** Records both original files' SHA-256 fingerprints before backup.
+- **Line 49:** Starts an empty array to hold lesson rows read from the disposable copies.
+- **Line 50:** Destructures each indexed item so the loop can use its position and its value.
+- **Line 51:** Requires explicit absolute source paths.
+- **Line 52:** Opens an existing source read-only and refuses to create a missing file.
+- **Line 53:** Builds a distinct copy filename from the source index; no lesson content is embedded in code.
+- **Line 54:** Uses SQLite's backup mechanism for consistency and always closes the original handle afterward.
+- **Line 55:** Opens only the disposable copy for lesson inspection, still read-only.
+- **Line 56:** Starts a protected operation whose following catch or finally handles errors or cleanup.
+- **Line 57:** Runs SQLite integrity_check on the copy and requires its result to be ok.
+- **Line 58:** Reads every lesson ordered by ID, using BigInt for SQLite integers to avoid rounding.
+- **Line 59:** Iterates over every row to validate or insert it, depending on the surrounding helper.
+- **Line 60:** Rejects IDs outside PostgreSQL Int range or the top value that leaves no room for a generated successor; n suffixes denote BigInt literals.
+
+### Lines 61–75
+
+```javascript
+61 |         row.id = Number(row.id);
+62 |         if (row.duration_minutes !== null) {
+63 |           assert.ok(row.duration_minutes > 0n && row.duration_minutes <= 2147483647n);
+64 |           row.duration_minutes = Number(row.duration_minutes);
+65 |         }
+66 |         assert.equal(new Date(row.created_at).toISOString(), row.created_at);
+67 |       }
+68 |       datasets.push(rows);
+69 |     } finally { database.close(); }
+70 |   }
+71 |   assert.deepEqual(datasets.map(rows => rows.length), [2, 7]);
+72 |   direct.search = '';
+73 |   const client = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
+74 |   const schema = 'coachlab_validation_' + randomUUID().replaceAll('-', '');
+75 |   const read = async () => (await client.query('SELECT * FROM lessons ORDER BY id')).rows;
+```
+
+- **Line 61:** Converts a verified in-range BigInt ID into a JavaScript number.
+- **Line 62:** Preserves null duration; only supplied numeric durations enter this block.
+- **Line 63:** Checks duration is positive and within PostgreSQL's signed integer range before conversion.
+- **Line 64:** Converts the safely bounded duration to a JavaScript number.
+- **Line 65:** Closes the current loop, condition or protected block.
+- **Line 66:** Requires each original timestamp to be canonical UTC ISO text with millisecond precision.
+- **Line 67:** Closes the current loop, condition or protected block.
+- **Line 68:** Adds this copied source's rows as a separate dataset; overlapping source IDs are not merged.
+- **Line 69:** Always closes the disposable SQLite copy after inspection.
+- **Line 70:** Closes the current loop, condition or protected block.
+- **Line 71:** Requires the expected two and seven historical records; changed sources need review.
+- **Line 72:** Removes URL options so the explicit TLS settings on the driver control certificate verification.
+- **Line 73:** Constructs a direct PostgreSQL client with certificate verification and bounded connection/statement timeouts.
+- **Line 74:** Combines a fixed test prefix with UUID hex characters to produce a collision-resistant SQL-safe schema name.
+- **Line 75:** Defines an async read helper; search_path is later restricted to the isolated schema.
+
+### Lines 76–90
+
+```javascript
+76 |   const insert = async row => client.query(`INSERT INTO lessons (${fields.join(',')}) VALUES (${fields.map((_, i) => '$' + (i + 1)).join(',')})`, fields.map(key => row[key]));
+77 |   const importRows = async rows => {
+78 |     await client.query('SAVEPOINT import_batch');
+79 |     try {
+80 |       for (const row of rows) {
+81 |         assert.ok(Number.isInteger(row.id) && row.id >= -2147483648 && row.id < 2147483647);
+82 |         assert.ok(Number.isFinite(Date.parse(row.created_at)));
+83 |         await insert(row);
+84 |       }
+85 |       const maximum = (await client.query('SELECT MAX(id) AS maximum FROM lessons')).rows[0].maximum;
+86 |       const next = Math.max(1, (maximum ?? 0) + 1);
+87 |       assert.ok(Number.isSafeInteger(next) && next <= 2147483647);
+88 |       await client.query(`ALTER SEQUENCE lessons_id_seq RESTART WITH ${next}`);
+89 |       await client.query('RELEASE SAVEPOINT import_batch');
+90 |     } catch (error) {
+```
+
+- **Line 76:** Builds column names from the fixed field list and numbered placeholders; row values are passed separately as bound parameters.
+- **Line 77:** Begins the test-only batch importer; it requires an already open outer transaction.
+- **Line 78:** Creates a rollback point before the first batch insert.
+- **Line 79:** Starts a protected operation whose following catch or finally handles errors or cleanup.
+- **Line 80:** Iterates over every row to validate or insert it, depending on the surrounding helper.
+- **Line 81:** Requires an integer ID in the permitted range at insertion time as well as during source inspection.
+- **Line 82:** Rejects timestamps that JavaScript cannot parse; source precision was checked earlier.
+- **Line 83:** Awaits a bound insert for one record so failures can roll back the complete batch.
+- **Line 84:** Closes the current loop, condition or protected block.
+- **Line 85:** Reads the largest ID currently in the isolated table, including previously imported rows.
+- **Line 86:** Computes a generated ID above the maximum, starting at one for empty or nonpositive IDs; ?? handles null.
+- **Line 87:** Rejects an unsafe or out-of-range sequence restart value.
+- **Line 88:** Restarts only the isolated sequence at a validated integer; ALTER RESTART participates in transaction rollback.
+- **Line 89:** Removes the batch savepoint after success or completed rollback; the outer transaction is still uncommitted.
+- **Line 90:** Handles failure from the preceding protected operation.
+
+### Lines 91–105
+
+```javascript
+91 |       await client.query('ROLLBACK TO SAVEPOINT import_batch');
+92 |       await client.query('RELEASE SAVEPOINT import_batch');
+93 |       throw new Error(/^[0-9A-Z]{5}$/.test(error.code || '') ? error.code : 'Import rejected');
+94 |     }
+95 |   };
+96 |   let publicBefore;
+97 |   let stage = 'connection';
+98 |   try {
+99 |     await client.connect();
+100 |     stage = 'identity';
+101 |     const identity = (await client.query('SELECT current_database() AS name, current_user AS role')).rows[0];
+102 |     assert.ok(identity.name === 'neondb' && identity.role === decodeURIComponent(direct.username));
+103 |     publicBefore = digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows);
+104 |     const sequenceBefore = digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows);
+105 |     assert.equal((await client.query('SELECT count(*)::integer AS n FROM public.lessons')).rows[0].n, 0);
+```
+
+- **Line 91:** Undoes every row inserted by the failed batch, preventing partial imports.
+- **Line 92:** Removes the batch savepoint after success or completed rollback; the outer transaction is still uncommitted.
+- **Line 93:** Returns only a five-character SQLSTATE or a generic rejection, suppressing database error details and lesson content.
+- **Line 94:** Closes the current loop, condition or protected block.
+- **Line 95:** Closes the helper function body and ends its assignment with a semicolon.
+- **Line 96:** Declares storage for the application table's pre-test fingerprint.
+- **Line 97:** Starts a non-sensitive diagnostic label so an outer error identifies which operation failed.
+- **Line 98:** Starts a protected operation whose following catch or finally handles errors or cleanup.
+- **Line 99:** Authenticates the direct TLS connection before any schema operation.
+- **Line 100:** Updates the safe diagnostic stage label without including connection information.
+- **Line 101:** Queries the actual database and role from PostgreSQL rather than trusting URL text alone.
+- **Line 102:** Checks authenticated database and role match the approved local configuration without printing the role.
+- **Line 103:** Fingerprints the application's public.lessons rows read-only for later preservation verification.
+- **Line 104:** Fingerprints the application's sequence state read-only to detect accidental changes.
+- **Line 105:** Requires the real application Lesson table to remain empty before starting tests.
+
+### Lines 106–120
+
+```javascript
+106 |     stage = 'isolated schema';
+107 |     await client.query('BEGIN');
+108 |     await client.query(`CREATE SCHEMA "${schema}"`);
+109 |     await client.query(`SET LOCAL search_path TO "${schema}"`);
+110 |     assert.equal((await client.query('SELECT current_schema() AS name')).rows[0].name, schema);
+111 |     const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
+112 |     await client.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+113 |     const relation = (await client.query("SELECT 'lessons'::regclass::oid = to_regclass($1)::oid AS isolated", [schema + '.lessons'])).rows[0];
+114 |     assert.equal(relation.isolated, true);
+115 |     stage = 'scenarios';
+116 |     const scenario = async (name, run) => t.test(name, async () => {
+117 |       await client.query('SAVEPOINT scenario');
+118 |       try { await run(); } finally { await client.query('ROLLBACK TO SAVEPOINT scenario'); await client.query('RELEASE SAVEPOINT scenario'); }
+119 |     });
+120 |     for (const [index, rows] of datasets.entries()) {
+```
+
+- **Line 106:** Updates the safe diagnostic stage label without including connection information.
+- **Line 107:** Starts the outer PostgreSQL transaction that contains the disposable schema and all test changes.
+- **Line 108:** Creates only the newly generated isolated schema inside that transaction.
+- **Line 109:** Restricts unqualified table and sequence names to the isolated schema for this transaction.
+- **Line 110:** Verifies the effective schema before creating a table or inserting records.
+- **Line 111:** Reads the existing reviewed migration from a path relative to this test module.
+- **Line 112:** Removes only the migration's outer BEGIN/COMMIT wrappers so its table and constraints remain inside the test transaction.
+- **Line 113:** Compares PostgreSQL relation IDs to prove unqualified lessons resolves to the isolated table.
+- **Line 114:** Requires positive table-isolation verification before record scenarios run.
+- **Line 115:** Updates the safe diagnostic stage label without including connection information.
+- **Line 116:** Defines a sequential named subtest wrapper with its own rollback boundary.
+- **Line 117:** Creates a boundary that isolates each scenario from the following scenario.
+- **Line 118:** Awaits the scenario, then always rolls back and releases its savepoint in finally, even if the scenario fails.
+- **Line 119:** Closes the async callback and its test or scenario registration.
+- **Line 120:** Destructures each indexed item so the loop can use its position and its value.
+
+### Lines 121–135
+
+```javascript
+121 |       await scenario(`source ${index + 1}: all nine fields and millisecond timestamps`, async () => {
+122 |         await importRows(rows);
+123 |         equalRows(await read(), rows);
+124 |         await client.query("SET LOCAL TIME ZONE 'America/New_York'");
+125 |         equalRows(await read(), rows);
+126 |         t.diagnostic(`${rows.length} records, ${rows.length * fields.length} field values matched`);
+127 |       });
+128 |     }
+129 |     await scenario('repeated imports and overlapping ID ranges reject without overwriting', async () => {
+130 |       await importRows(datasets[0]);
+131 |       await assert.rejects(importRows(datasets[0]), /23505/);
+132 |       await assert.rejects(importRows(datasets[1]), /23505/);
+133 |       equalRows(await read(), datasets[0]);
+134 |     });
+135 |     await scenario('mid-batch failure rolls back every inserted row and recovery succeeds', async () => {
+```
+
+- **Line 121:** Registers a preservation scenario separately for each source dataset.
+- **Line 122:** Imports that scenario's supplied rows with original IDs and timestamps.
+- **Line 123:** Checks every returned field against that scenario's expected source values.
+- **Line 124:** Changes the database session timezone to New York so the next comparison verifies equivalent UTC instants.
+- **Line 125:** Checks every returned field against that scenario's expected source values.
+- **Line 126:** Reports only record and field counts, without titles or lesson content.
+- **Line 127:** Closes the async callback and its test or scenario registration.
+- **Line 128:** Closes the current loop, condition or protected block.
+- **Line 129:** Starts the duplicate and cross-source ID conflict scenario.
+- **Line 130:** Imports the two-row source into this isolated scenario.
+- **Line 131:** Requires a repeated import to fail with duplicate-key SQLSTATE 23505.
+- **Line 132:** Requires overlapping IDs from the other dataset to fail rather than overwrite or renumber records.
+- **Line 133:** Verifies the existing two records retain every field after rejected operations.
+- **Line 134:** Closes the async callback and its test or scenario registration.
+- **Line 135:** Starts the partial-import prevention and recovery scenario.
+
+### Lines 136–150
+
+```javascript
+136 |       const rows = datasets[1].map(row => ({ ...row }));
+137 |       rows[1].title = '';
+138 |       await assert.rejects(importRows(rows), /23514/);
+139 |       assert.equal((await read()).length, 0);
+140 |       await importRows(datasets[1]);
+141 |       equalRows(await read(), datasets[1]);
+142 |     });
+143 |     await scenario('constraint failures remain recoverable', async () => {
+144 |       for (const invalid of [{ title: '' }, { discipline: '' }, { skill_level: '' }, { duration_minutes: 0 }, { title: null }]) {
+145 |         await assert.rejects(importRows([{ ...datasets[0][0], ...invalid }]), /23514|23502/);
+146 |         assert.equal((await read()).length, 0);
+147 |       }
+148 |     });
+149 |     await scenario('sequence advances above imported IDs and returns API-compatible creation fields', async () => {
+150 |       await importRows(datasets[1]);
+```
+
+- **Line 136:** Uses object spread to clone rows in memory so the disposable source dataset is unchanged.
+- **Line 137:** Deliberately invalidates the second in-memory record to fail after the first insert has succeeded.
+- **Line 138:** Requires the deliberate invalid title to trigger CHECK SQLSTATE 23514.
+- **Line 139:** Requires zero remaining rows, proving a failed batch did not leave a partial import.
+- **Line 140:** Imports the seven valid records into the current isolated scenario.
+- **Line 141:** Verifies all seven records and all fields after import or recovery.
+- **Line 142:** Closes the async callback and its test or scenario registration.
+- **Line 143:** Starts tests for the four CHECK rules and a NOT NULL rule.
+- **Line 144:** Defines only invalid field overrides, without embedding any historical lesson data.
+- **Line 145:** Spreads a source copy plus an invalid field and requires a constraint or nullability rejection.
+- **Line 146:** Requires zero remaining rows, proving a failed batch did not leave a partial import.
+- **Line 147:** Closes the current loop, condition or protected block.
+- **Line 148:** Closes the async callback and its test or scenario registration.
+- **Line 149:** Tests generated IDs, default fields and JSON timestamp compatibility after explicit-ID import.
+- **Line 150:** Imports the seven valid records into the current isolated scenario.
+
+### Lines 151–165
+
+```javascript
+151 |       const row = datasets[1][0];
+152 |       const created = (await client.query('INSERT INTO lessons(title,discipline) VALUES ($1,$2) RETURNING *', [row.title, row.discipline])).rows[0];
+153 |       assert.equal(created.id, Math.max(...datasets[1].map(item => item.id)) + 1);
+154 |       assert.equal(created.skill_level, 'Beginner');
+155 |       assert.equal(created.duration_minutes, null);
+156 |       assert.equal(typeof JSON.parse(JSON.stringify(created)).created_at, 'string');
+157 |       assert.ok(Math.abs(Date.now() - created.created_at.getTime()) < 120000);
+158 |     });
+159 |     await scenario('empty and nonpositive ID imports start sequence at one', async () => {
+160 |       await importRows([]);
+161 |       await importRows([{ ...datasets[0][0], id: -1 }]);
+162 |       assert.equal((await client.query("SELECT nextval('lessons_id_seq') AS id")).rows[0].id, '1');
+163 |     });
+164 |     await scenario('PostgreSQL update and delete primitives work only in isolated schema', async () => {
+165 |       await importRows(datasets[0]);
+```
+
+- **Line 151:** Selects an in-memory copy of one source row for the generated-ID test.
+- **Line 152:** Creates a test lesson with bound title/discipline, letting PostgreSQL supply the ID and defaults.
+- **Line 153:** Requires the generated ID to be exactly one above the imported maximum.
+- **Line 154:** Checks the database supplies the existing Beginner default.
+- **Line 155:** Checks omitted duration remains null rather than zero or an empty string.
+- **Line 156:** Verifies JSON serialization turns the returned Date into a timestamp string compatible with the API field type.
+- **Line 157:** Checks the generated timestamp is within the bounded test window; getTime converts Date to milliseconds.
+- **Line 158:** Closes the async callback and its test or scenario registration.
+- **Line 159:** Tests sequence handling for empty and nonpositive-ID inputs.
+- **Line 160:** Runs the empty batch through the same sequence adjustment code.
+- **Line 161:** Imports a copied record with a test-only negative ID; no original ID is edited.
+- **Line 162:** Consumes the isolated sequence's next value and requires one, demonstrating the nonpositive-ID rule.
+- **Line 163:** Closes the async callback and its test or scenario registration.
+- **Line 164:** Evaluates database UPDATE/DELETE primitives without implementing those application features.
+- **Line 165:** Imports the two-row source into this isolated scenario.
+
+### Lines 166–180
+
+```javascript
+166 |       const row = datasets[0][0];
+167 |       const updated = await client.query('UPDATE lessons SET goal=$1 WHERE id=$2 RETURNING goal', [row.drills, row.id]);
+168 |       assert.equal(digest(updated.rows[0].goal), digest(row.drills));
+169 |       assert.equal((await client.query('DELETE FROM lessons WHERE id=$1', [row.id])).rowCount, 1);
+170 |     });
+171 |     await client.query('ROLLBACK');
+172 |     assert.equal((await client.query('SELECT to_regnamespace($1) AS schema', [schema])).rows[0].schema, null);
+173 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows), publicBefore);
+174 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows), sequenceBefore);
+175 |     t.diagnostic('Isolated schema removed by rollback; public lessons and sequence unchanged.');
+176 |   } catch (error) {
+177 |     throw new Error('Migration validation failed at ' + stage + ': ' + (/^[0-9A-Z_]+$/.test(error.code || '') ? error.code : error.name));
+178 |   } finally {
+179 |     await client.query('ROLLBACK').catch(() => {});
+180 |     await client.end();
+```
+
+- **Line 166:** Selects an in-memory source copy to identify a disposable test row.
+- **Line 167:** Binds a replacement goal and ID to UPDATE and retrieves the changed goal from the isolated table.
+- **Line 168:** Checks updated content by fingerprint so failures do not display lesson text.
+- **Line 169:** Deletes only the bound ID in the isolated table and requires exactly one affected row.
+- **Line 170:** Closes the async callback and its test or scenario registration.
+- **Line 171:** Rolls back the outer transaction, removing the test schema, its records and its sequence.
+- **Line 172:** Confirms the random schema no longer exists after rollback.
+- **Line 173:** Checks the real application table's fingerprint is unchanged.
+- **Line 174:** Checks the real application's sequence fingerprint is unchanged.
+- **Line 175:** Reports successful isolation cleanup without printing data or credentials.
+- **Line 176:** Handles failure from the preceding protected operation.
+- **Line 177:** Reports only the safe stage and error code/name; raw connection errors are suppressed.
+- **Line 178:** Begins unconditional cleanup for the outer PostgreSQL operation.
+- **Line 179:** Attempts rollback during cleanup; the empty catch tolerates a connection that never opened.
+- **Line 180:** Closes the PostgreSQL connection; disconnecting also rolls back an unfinished transaction.
+
+### Lines 181–183
+
+```javascript
+181 |     assert.deepEqual(sources.map(fileHash), hashes, 'Original SQLite file hashes unchanged');
+182 |   }
+183 | });
+```
+
+- **Line 181:** Recomputes original-file hashes and requires them to match the pre-test fingerprints.
+- **Line 182:** Closes the current loop, condition or protected block.
+- **Line 183:** Closes the async callback and its test or scenario registration.

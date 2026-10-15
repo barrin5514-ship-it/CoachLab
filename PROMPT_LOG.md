@@ -3372,3 +3372,331 @@ Containing commit subject: `Document verified empty-source SQLite to Neon reconc
 Final verification: walkthrough checker passed 33 files / 1,111 exact numbered source lines and explanations, exact paths and preserved prior prompt history. Security/syntax/bundle checker passed 47 project files; configured-key/URL/password comparison passed without printing values. All five documentation diffs were reviewed, and git diff --check passed. Only Markdown documentation is staged; backups, data, operational helpers, .env and generated output remain outside Git.
 
 Commit created: 853d139 (`Document verified empty-source SQLite to Neon reconciliation`). Additional genuine orchestration mistake: the commit shell returned a running session, but I started the push before waiting for it to finish. The push reported everything up to date while the subsequent hash comparison correctly detected that the new local commit was not yet remote. Waited for successful commit completion and confirmed a clean tree. Recording this in a separate follow-up commit, then pushing only after that commit has completed; no history rewrite or force-push is used.
+
+## 2026-10-15 — Phase 9C.3 discovery and inspection history
+
+The following exact prompts were supplied after b656bfa and before the final validation attachment. No commits were made during their read-only discovery/inspection turns.
+
+```text
+COACHLAB — PHASE 9C.3: LESSON DATA VERIFICATION
+
+GOAL:
+Verify whether CoachLab has existing lesson records in another local SQLite database and validate migration behavior using real test records.
+
+1. Read AGENTS.md and PHASE_9C_2_DATA_MIGRATION.md.
+
+2. Inspect CoachLab's database configuration and documented temporary test database paths.
+
+3. Search only CoachLab-related database locations for other SQLite files.
+
+4. Report database paths and record counts without exposing lesson content.
+
+5. Do not change, delete, or overwrite any discovered database.
+
+6. If another database contains lessons, STOP and ask me whether those lessons should be imported.
+
+7. Independently test preservation of IDs, timestamps, and lesson content using a disposable SQLite database and isolated PostgreSQL test environment.
+
+8. Never mix test records into Neon Development's real lesson table.
+
+9. Verify duplicate prevention, transaction rollback, and identity sequence behavior.
+
+10. Run relevant automated tests and security checks.
+
+11. Maintain PROMPT_LOG.md and CODE_WALKTHROUGH.md.
+
+12. Review diffs and commit verified documentation or test changes.
+
+13. Push safe commits to GitHub.
+
+DO NOT:
+- Switch CoachLab to PostgreSQL.
+- Modify the original SQLite database.
+- Import newly discovered lessons without approval.
+- Modify Neon production.
+- Begin Phase 9D.
+
+REPORT:
+- Discovered CoachLab database files and record counts
+- Whether any existing lessons need importing
+- Test-record migration results
+- Verification of IDs, timestamps, and content
+- Remaining risks
+- GitHub commit hashes
+
+STOP and wait for approval.
+```
+
+Assistant outcome summary: found six CoachLab SQLite files in scoped project/local/CoachLab-prefixed temporary locations. Main, backup, restored copy and clone were empty; Phase 5 had two and Phase 6 browser database had seven lessons. All file hashes stayed unchanged. Stopped as explicitly required before testing/import and asked which sets to consider. Initial shell LOCALAPPDATA resolved to a sandbox-specific location; corrected to the documented user-local paths. No record contents were printed during discovery.
+
+```text
+COACHLAB — INSPECT SAVED TEST LESSONS
+
+Read the two previously discovered CoachLab test databases:
+
+1. coachlab-phase5-browser.sqlite (2 lessons)
+2. Phase 6 browser.sqlite (7 lessons)
+
+TASK:
+- List each lesson's ID, title, discipline, and creation date.
+- Identify possible duplicates.
+- Do not display unnecessary personal information.
+- Do not modify or delete any records.
+- Do not import anything into Neon.
+- Keep the existing SQLite database unchanged.
+- Do not create commits or change application code.
+
+Present the results in a simple table.
+
+STOP and wait for me to decide which lessons, if any, should be kept.
+```
+
+Assistant outcome summary: displayed only the requested fields in the conversation, identified overlapping IDs 1 and 2 across the files, and found no matching titles or creation timestamps. Full content comparison was not performed. Both file hashes stayed unchanged. No import, code edit or commit occurred. The response's lesson table is intentionally not copied into Git, honoring the later explicit prohibition on committing test lesson data.
+
+## 2026-10-15 — Phase 9C.3 final validation
+
+### Exact user prompt from attachment af3c4cb7-06c3-41cf-9905-a4f8608e1bf1
+
+```text
+COACHLAB — PHASE 9C.3: FINAL DATA MIGRATION VALIDATION
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+OBJECTIVE:
+Complete the remaining SQLite-to-PostgreSQL migration
+validation so CoachLab can safely transition to Neon.
+
+Do not repeat completed investigations or previous phases.
+
+CURRENT VERIFIED STATUS:
+- Phase 9C.1 completed.
+- Phase 9C.2 completed.
+- Neon Development branch:
+  br-flat-fog-b5t1m0vy
+- PostgreSQL database: neondb
+- Prisma version: 7.10.0
+- 35 automated tests previously passed.
+- npm audit previously reported zero vulnerabilities.
+- Main SQLite database contains zero lessons.
+- Neon Development contains zero lessons.
+- Nine older browser-test lessons were discovered.
+- Those nine records are NOT approved for import.
+- SQLite remains the active application database.
+- Last reported GitHub commit: b656bfa
+
+PHASE 1 — VERIFY PROJECT STATE
+
+1. Read AGENTS.md.
+2. Read the Phase 9C.1 and 9C.2 reports.
+3. Inspect the existing migration implementation.
+4. Verify the current Git state.
+5. Confirm the active SQLite database.
+6. Confirm Neon Development configuration.
+7. Establish the current test baseline.
+
+Do not modify existing database records.
+
+PHASE 2 — PRESERVE OLD TEST DATABASES
+
+The following databases contain historical test lessons:
+
+Phase 5:
+coachlab-phase5-browser.sqlite
+2 lessons
+
+Phase 6:
+browser.sqlite
+7 lessons
+
+These lessons are not needed in the new database.
+
+Requirements:
+- Preserve the original database files.
+- Do not import their records into Neon Development.
+- Do not delete their records.
+- Do not modify their original IDs or timestamps.
+- Use disposable copies for migration testing.
+
+PHASE 3 — VALIDATE REAL-RECORD MIGRATION
+
+Create an isolated migration test environment.
+
+Use disposable copies of existing test records.
+
+Verify that migration correctly preserves:
+
+1. Lesson titles
+2. Disciplines
+3. All remaining lesson fields
+4. Lesson IDs
+5. Creation timestamps
+6. Timestamp precision and timezone handling
+7. Lesson content
+8. Database constraints
+9. Record relationships, if applicable
+
+Test:
+- Successful record migration
+- Duplicate ID handling
+- Conflicting ID ranges
+- Transaction rollback
+- Failed import recovery
+- Partial-import prevention
+- PostgreSQL identity sequence adjustment
+- Repeated migration attempts
+
+Compare records field by field.
+
+Do not consider matching record counts sufficient.
+
+IMPORTANT:
+Use an isolated PostgreSQL test database or schema
+whose identity and isolation have been verified.
+
+Do not place test records into Neon Development's
+existing application Lesson table.
+
+Do not modify Neon production.
+
+If isolated PostgreSQL testing cannot be performed
+safely, STOP and document the blocker.
+
+PHASE 4 — VERIFY APPLICATION COMPATIBILITY
+
+Review the existing CoachLab architecture.
+
+Verify that PostgreSQL can support the application's
+current lesson operations.
+
+Evaluate:
+- Creating lessons
+- Reading saved lessons
+- Updating lessons
+- Deleting lessons
+- Gemini-generated lesson persistence
+- Database error handling
+- API response compatibility
+
+Do not switch the active application database.
+
+Do not make unrelated application changes.
+
+Add targeted automated tests where appropriate.
+
+PHASE 5 — REGRESSION TESTING
+
+Run:
+- Existing SQLite tests
+- API tests
+- Gemini integration tests using mocks
+- Prisma tests
+- Migration regression tests
+- Prisma schema validation
+- Prisma Client generation
+- Frontend production build
+- JavaScript syntax checks
+- npm audit
+
+Report actual passing and failing results.
+
+Fix only issues directly related to this phase.
+
+Do not introduce breaking changes.
+
+PHASE 6 — PREPARE PHASE 9D
+
+Create a clear implementation plan for switching
+CoachLab from SQLite to Neon PostgreSQL.
+
+The plan must include:
+
+1. Database configuration changes
+2. Backend integration changes
+3. Prisma integration
+4. Lesson CRUD verification
+5. Gemini lesson persistence
+6. Environment-variable management
+7. Production database safeguards
+8. Rollback procedures
+9. End-to-end testing
+10. Deployment considerations
+
+Identify any remaining technical blockers.
+
+Do not execute the database switch.
+
+PHASE 7 — DOCUMENTATION
+
+Update:
+- PROMPT_LOG.md
+- CODE_WALKTHROUGH.md
+- README.md
+- Phase 9C.3 verification report
+
+Document new or modified source-code lines.
+
+Record test results, mistakes, corrections,
+and unresolved limitations accurately.
+
+PHASE 8 — GIT AND GITHUB
+
+1. Review all changes.
+2. Ensure no database files are staged.
+3. Ensure no credentials are exposed.
+4. Ensure no test lesson data is committed.
+5. Run final verification.
+6. Commit verified changes.
+7. Push to GitHub main.
+8. Confirm local and remote commit hashes match.
+
+Never force-push.
+
+STOP CONDITIONS:
+
+Do not:
+- Import the nine historical test lessons.
+- Delete original SQLite databases.
+- Modify Neon production.
+- Switch the active backend to PostgreSQL.
+- Deploy CoachLab.
+- Begin Phase 9D.
+- Add unrelated features.
+
+FINAL REPORT:
+
+Provide:
+1. Migration validation results
+2. Actual records tested
+3. Field-by-field comparison results
+4. ID and timestamp preservation results
+5. Duplicate and rollback test results
+6. Application compatibility findings
+7. Automated test results
+8. Security audit results
+9. Remaining blockers
+10. Recommended Phase 9D implementation plan
+11. Git commit hash and synchronization status
+
+STOP after Phase 9C.3.
+
+Wait for separate approval before Phase 9D.
+```
+
+### Assistant response, actual work and results
+
+Started clean at b656bfae7e361ab4038908e89d081b7a0afa7244. Read instructions, prior reports, configuration, table migration and actual Express/AI implementation. The existing import work was only a temporary empty-source reconciliation; no production-ready populated importer existed. Kept SQLite active. Fresh Neon Console verification confirmed CoachLab Development br-flat-fog-b5t1m0vy and ep-long-bird-b50l2nhb, distinct from production. The new opt-in test authenticated direct neondb/role and verified its isolated schema/table before inserts.
+
+Added server/migration-validation.test.js using existing dependencies. Read-only originals were backed up to disposable local copies outside OneDrive, then their nine records were tested separately in a UUID-named PostgreSQL schema inside a transaction. Compared all 81 fields explicitly, canonical UTC millisecond timestamps under changed session timezone, duplicate/repeated and cross-source conflicts, failed-batch rollback/recovery, constraints, sequence restart above the maximum and for empty/negative-ID inputs, and isolated SQL update/delete primitives. Eight scenarios plus parent passed (9 tests). All changes and the schema rolled back. Original SQLite hashes and public.lessons/public sequence fingerprints were unchanged; real application table still empty. Main SQLite read-only inventory remained zero with integrity_check ok.
+
+Baseline: 30 existing SQLite/API/mocked Gemini plus 5 Prisma tests passed. First live attempt failed before any scenario with an over-sanitized generic Error; added stage/code-only diagnostics and reran with NODE_USE_SYSTEM_CA=1 (strict TLS remains enabled). Failure cause is not known. The next run passed 9/9. Strengthened aggregate fingerprint comparison into explicit equality for each field and reran: 9/9 passed again. Final existing suites: 30/30 and 5/5; schema validation, Client 7.10.0 generation/compilation and React build (20 modules) passed; npm audit zero vulnerabilities. Opt-in-disabled execution correctly skipped one test, counted as skipped rather than passed. No new live Gemini request was made.
+
+Files: added test and PHASE_9C_3_VERIFICATION.md; updated README.md, AGENTS.md, CODE_WALKTHROUGH.md and this log. All 183 new code lines have numbered explanations. Walkthrough verification passed 34 files / 1,294 lines. Security/syntax/bundle scan passed 49 files; private configured keys, URLs and passwords were absent from candidate files. The new test is not wired into normal npm test to prevent unintended remote execution; README documents explicit opt-in after independent Console verification.
+
+Genuine mistakes: guessed nonexistent server/lessons.js and shared/ai-lesson.js paths; read actual server/app.js and client/src/lesson-draft.js after inspecting the imports. The first live failure was inadequately diagnosed; improved safe diagnostics without printing secrets. Diff check found spaces after two blank numbered walkthrough lines; removed the trailing spaces. No application behavior or original lesson was changed by these corrections.
+
+Compatibility: current API supports Create/Read only and uses synchronous SQLite statements. PostgreSQL SQL primitives and field/default compatibility passed, but async Prisma route integration, Postgres-backed Gemini/API/browser tests, restart durability of committed populated data and cutover/rollback procedures remain Phase 9D work. The report supplies a ten-step proposed plan; it is not authorization to switch or deploy. Existing record relationships are not applicable (one table, no foreign keys). Failed imports reject duplicates rather than silently skip or overwrite.
+
+Containing commit subject: `Validate historical lesson migration in isolated PostgreSQL schema`. Commit and push results are reported after creation; a commit cannot record its own hash. No historical fixture content, SQLite file, credential, dependency change or production configuration is included.
+
+Final review added a safe URL parser so malformed private URLs cannot appear in native parsing errors. A synthetic invalid-URL probe verified rejection before connection and confirmed its sentinel value was absent from output. The final live test rerun passed all 9 reported tests, with schema cleanup and unchanged original/public fingerprints. Reviewed every test/documentation diff and corrected the walkthrough cleanup explanations. No active application code or dependency changed.
