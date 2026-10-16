@@ -112,7 +112,7 @@ test('database failures return generic 500 errors for both routes', async t => {
 
 test('fresh database is migrated before app creation without changing the schema', async t => {
   const state = await fixture(t);
-  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }]);
+  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   const unknown = await fetch(`${state.url}/missing`);
   assert.equal(unknown.status, 404);

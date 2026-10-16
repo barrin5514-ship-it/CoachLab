@@ -4110,3 +4110,43 @@ BEGIN.
 ### Response and outcome
 
 Located the project, confirmed a clean tree at 7a43695 (one commit ahead of origin/main), read the handoff documents, ran the baseline (34/34 tests) and then tested the real UI in the built-in browser for the first time. Found and fixed: Codex's isolated Vite helper served the wrong folder (blank page), activity-card blank-line/cursor bug, unreliable lazy pictures. Added activity-minute totals and unreviewed search links for lessons outside the media catalog. Verified create, refresh, edit-after-save (same ID/timestamp), AI draft edit/approval/save, all six disciplines, rate-limit and offline error messages, restart persistence, delete with cancel/confirm, mobile width, and one real Gemini draft (discarded). Ran npm test 35/35, test:prisma 5/5, prisma:validate, build, and the opt-in PostgreSQL API test. Dropped only the disposable test schema; the 2 real Development lessons and the SQLite/backup hashes were unchanged. Video playback could not be demonstrated in the test browser. No push. Details: LESSON_MANAGER_VERIFICATION.md. Genuine AI mistakes: none beyond two mis-timed interactions with a lagging screenshot and an initial assumption that the SQLite folder was at %LOCALAPPDATA% (it is in Codex's virtualized package profile), both discovered by inspection and corrected without affecting data.
+
+## 2026-10-16 — Instructional media upgrade
+
+### Exact user prompt
+
+```text
+COACHLAB — INSTRUCTIONAL MEDIA UPGRADE
+
+Continue from the existing project.
+
+1. Add an "Add Media" button to lesson activities.
+2. Allow users to:
+   - Upload pictures and videos.
+   - Paste YouTube or image links.
+   - Preview, edit, and remove attachments.
+3. When AI generates lessons:
+   - Automatically find relevant instructional pictures and videos.
+   - Verify media links before displaying them.
+   - Match media to the correct exercises.
+   - Never fabricate media URLs.
+4. Save media attachments with each lesson.
+5. Ensure media remains available after editing,
+   refreshing, and restarting CoachLab.
+6. Make everything mobile-friendly.
+
+IMPORTANT:
+- Preserve existing lessons and functionality.
+- Do not modify production data.
+- Test all new features in the browser.
+- Run regression tests.
+- Fix failures and retest.
+- Commit verified changes locally.
+- Do not push without permission.
+
+Report completed features and any remaining issues.
+```
+
+### Response and outcome
+
+Implemented Add Media (upload and checked links) with preview, edit and remove; an additive `lesson_media` table for SQLite and PostgreSQL; server-side file-type and link verification (https only, private addresses refused); automatic verified media for AI drafts from the reviewed catalog, Wikimedia Commons and an optional YouTube key; lesson POST/PUT accept a `media` list while GET /api/lessons keeps its nine fields; mobile layout; and a replacement dev proxy. Tests: npm test 52/52, test:prisma 5/5, build, audit 0, opt-in PostgreSQL API test passed, walkthrough 54 files / 2,870 lines. Browser tests ran on a disposable PostgreSQL schema; the main app was only viewed. Found and fixed: Vite's proxy stalling above ~1 MB, jab media wrongly matched to a roundhouse-kick section (found with the live AI), live-applied attachment edits closing their panel, Enter submitting the lesson form from media fields, and one assertion that could never fail. Genuine mistakes: a regex bug in my ignored test helper applied the new media migration to the Development `public` schema once instead of the test schema (additive table only; recorded in `_prisma_migrations`; disclosed in MEDIA_UPGRADE_VERIFICATION.md); several shell-quoting slips that rewrote strings and were caught by syntax errors or failing tests. YouTube playback could not be demonstrated in the test browser. Committed locally; nothing pushed. Details: MEDIA_UPGRADE_VERIFICATION.md.

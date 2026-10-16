@@ -1,6 +1,6 @@
 # CoachLab code walkthrough
 
-Source walkthrough updated for the lesson-manager implementation on 2026-10-15. Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser test limitations are reported separately.
+Source walkthrough updated for the instructional media upgrade on 2026-10-16 (on top of the lesson-manager implementation). Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser test limitations are reported separately in LESSON_MANAGER_VERIFICATION.md and MEDIA_UPGRADE_VERIFICATION.md.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
@@ -13,6 +13,8 @@ Manual creation and saved editing share LessonForm. An existing lesson selects P
 AI generation sends generic class parameters to POST /api/ai/lesson-draft. The Express limiter/validator calls the server-only Gemini provider; response validation checks every guidance field and the five-section duration total. The unsaved draft stays in React state. ActivityEditor supports ordered text cards in either form. Editing resets AI approval. Explicit approval maps guidance to existing goal/drills/coaching_notes fields, then uses the normal POST route. Provider outages do not disable manual CRUD.
 
 LessonCard turns saved text into headings, cues and expandable details without rewriting records. LessonMedia matches a fixed source-reviewed catalog locally and loads publisher media only on disclosure/playback actions. Missing matches, images or embeds retain explanatory text/source links. No automatic media search or model-generated URL is trusted.
+
+Media: every activity card in LessonForm (and every section of an AI draft) shows an Add Media button. MediaEditor lets a coach upload a picture or video (POST /api/media/upload; the server checks the real file bytes and stores them in the lesson_media table) or paste a link (POST /api/media/verify; the server fetches the link safely and confirms it is a real picture, video or YouTube video). Nothing is attached to a lesson until Save: the form sends the list in the lesson's POST or PUT body, the server verifies any new links again, and the store attaches everything in the same database transaction as the lesson. Attachments find their activity through its heading line, so they follow it when it is renamed. After an AI draft is generated, the browser calls POST /api/media/suggest; media-finder.js combines the reviewed catalog, Wikimedia Commons and (if a server-side key exists) YouTube search, verifies every address and returns only verified items for the section that asked. App loads GET /api/lesson-media and gives each LessonCard its own attachments. Uploaded files are served by GET /api/media/:id/file with byte-range support. client/api-proxy.js forwards /api from the Vite development server because Vite's built-in proxy stalls on files over about 1 MB.
 
 Prisma generation emits ignored TypeScript and compiled ESM. Remote migrations are not part of application startup or these lesson-manager changes. Existing table constraints remain in effect. Isolated PostgreSQL tests use explicit random schemas; ordinary npm test uses disposable SQLite plus pure browser-data helpers.
 
@@ -102,18 +104,18 @@ Browser application state and dashboard. It loads lessons from Express and coord
 11 |   const [formOpen, setFormOpen] = useState(false);
 12 |   const [reload, setReload] = useState(0);
 13 |   const [editing, setEditing] = useState(null);
-14 |
-15 |   useEffect(() => {
-16 |     const controller = new AbortController();
-17 |     async function loadLessons() {
-18 |       setLoading(true);
-19 |       setError('');
-20 |       try {
-21 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-22 |         if (!response.ok) throw new Error('Unable to load lessons.');
-23 |         const data = await response.json();
-24 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-25 |         setLessons(data);
+14 |   const [media, setMedia] = useState([]);
+15 |   const [mediaError, setMediaError] = useState('');
+16 |   const [mediaReload, setMediaReload] = useState(0);
+17 |
+18 |   useEffect(() => {
+19 |     const controller = new AbortController();
+20 |     async function loadLessons() {
+21 |       setLoading(true);
+22 |       setError('');
+23 |       try {
+24 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+25 |         if (!response.ok) throw new Error('Unable to load lessons.');
 ```
 
 - **Line 1:** Imports React for JSX plus effect and state hooks from the installed React package.
@@ -129,103 +131,158 @@ Browser application state and dashboard. It loads lessons from Express and coord
 - **Line 11:** Stores whether the form is mounted; false initially hides it.
 - **Line 12:** Stores a numeric retry counter; changing it reruns the effect.
 - **Line 13:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 14:** Blank line separates related sections; it performs no operation.
-- **Line 15:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 16:** Creates a request cancellation controller scoped to this effect run.
-- **Line 17:** Declares an async helper, allowing await inside its braces.
-- **Line 18:** Marks the list request as running.
-- **Line 19:** Clears the previous list error before retrying.
-- **Line 20:** Starts a try block for request and JSON errors.
-- **Line 21:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 22:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 23:** Awaits parsing the JSON body into a JavaScript value.
-- **Line 24:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 25:** Stores the backend records, triggering a render.
+- **Line 14:** State for every saved attachment returned by the server.
+- **Line 15:** State for an error message when attachments could not be loaded.
+- **Line 16:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 17:** Blank line separates related sections; it performs no operation.
+- **Line 18:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 19:** Creates a request cancellation controller scoped to this effect run.
+- **Line 20:** Declares an async helper, allowing await inside its braces.
+- **Line 21:** Marks the list request as running.
+- **Line 22:** Clears the previous list error before retrying.
+- **Line 23:** Starts a try block for request and JSON errors.
+- **Line 24:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 25:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
 
 ### Lines 26–50
 
 ```text
-26 |       } catch (failure) {
-27 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-28 |       } finally {
-29 |         if (!controller.signal.aborted) setLoading(false);
-30 |       }
-31 |     }
-32 |     loadLessons();
-33 |     return () => controller.abort();
-34 |   }, [reload]);
-35 |
-36 |   function handleSaved(lesson) {
-37 |     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
-38 |     setNotice(`Saved “${lesson.title}”.`);
-39 |     setFormOpen(false);
-40 |     setEditing(null);
-41 |   }
-42 |
-43 |   return (
-44 |     <main>
-45 |       <header className="hero">
-46 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
-47 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('ai'); }}>AI lesson draft</button></div>
-48 |       </header>
-49 |       {notice && <p className="success" role="status">{notice}</p>}
-50 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+26 |         const data = await response.json();
+27 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+28 |         setLessons(data);
+29 |       } catch (failure) {
+30 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+31 |       } finally {
+32 |         if (!controller.signal.aborted) setLoading(false);
+33 |       }
+34 |     }
+35 |     loadLessons();
+36 |     return () => controller.abort();
+37 |   }, [reload]);
+38 |
+39 |   useEffect(() => {
+40 |     const controller = new AbortController();
+41 |     async function loadMedia() {
+42 |       try {
+43 |         const response = await fetch('/api/lesson-media', { signal: controller.signal });
+44 |         if (!response.ok) throw new Error('Unable to load media.');
+45 |         const data = await response.json();
+46 |         if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+47 |         setMedia(data);
+48 |         setMediaError('');
+49 |       } catch (failure) {
+50 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
 ```
 
-- **Line 26:** Closes try and catches failures under the name failure.
-- **Line 27:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 28:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 29:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 30:** Closes finally.
-- **Line 31:** Closes the async helper.
-- **Line 32:** Starts the helper; its own try/catch handles its failures.
-- **Line 33:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 34:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 35:** Blank line separates related sections; it performs no operation.
-- **Line 36:** Declares the callback receiving the row confirmed by LessonForm's successful POST.
-- **Line 37:** Uses a functional state update: puts the confirmed lesson first, spreads remaining rows, and filters out any existing row with that same ID. Arrow functions take current state and each item.
-- **Line 38:** Sets the success message with a template string that inserts the returned title using dollar-sign/braces interpolation.
-- **Line 39:** Closes the form; unmounting it discards its input state after success.
-- **Line 40:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 41:** Closes handleSaved.
-- **Line 42:** Blank line separates related sections; it performs no operation.
-- **Line 43:** Begins returning a parenthesized JSX tree.
-- **Line 44:** Opens the semantic main content element.
-- **Line 45:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 46:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
-- **Line 47:** Wraps two buttons in the existing responsive action row. Both disable while loading or either form is open; each clears notices and selects manual or ai form mode. Double negation converts the mode string to a boolean.
-- **Line 48:** Closes the header.
-- **Line 49:** Conditionally renders a success paragraph only when notice is nonempty; && means render the right side when the left side is truthy. role=status announces feedback politely.
-- **Line 50:** Mounts LessonForm for creation or editing. A changed record ID resets form state via key; cancellation closes the form and clears the selected record without saving.
+- **Line 26:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 27:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 28:** Stores the backend records, triggering a render.
+- **Line 29:** Closes try and catches failures under the name failure.
+- **Line 30:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 31:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 32:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 33:** Closes finally.
+- **Line 34:** Closes the async helper.
+- **Line 35:** Starts the helper; its own try/catch handles its failures.
+- **Line 36:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 37:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 38:** Blank line separates related sections; it performs no operation.
+- **Line 39:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 40:** Creates a request cancellation controller scoped to this effect run.
+- **Line 41:** Declares the loader for attachments inside the effect.
+- **Line 42:** Starts a try block for request and JSON errors.
+- **Line 43:** Fetches the list of attached media from the server, cancellable through the abort signal.
+- **Line 44:** A non-success status becomes an error handled below.
+- **Line 45:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 46:** Rejects replies that are not a list.
+- **Line 47:** Stores the attachments.
+- **Line 48:** Clears any earlier error.
+- **Line 49:** Closes try and catches failures under the name failure.
+- **Line 50:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
 
-### Lines 51–61
+### Lines 51–75
 
 ```text
-51 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-52 |       <section aria-labelledby="lessons-heading">
-53 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
-54 |         {loading && <p role="status">Loading lesson plans…</p>}
-55 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-56 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-57 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
-58 |       </section>
-59 |     </main>
-60 |   );
-61 | }
+51 |       }
+52 |     }
+53 |     loadMedia();
+54 |     return () => controller.abort();
+55 |   }, [reload, mediaReload]);
+56 |
+57 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+58 |
+59 |   function handleSaved(lesson) {
+60 |     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
+61 |     setNotice(`Saved “${lesson.title}”.`);
+62 |     setFormOpen(false);
+63 |     setEditing(null);
+64 |     setMediaReload(value => value + 1);
+65 |   }
+66 |
+67 |   return (
+68 |     <main>
+69 |       <header className="hero">
+70 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
+71 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('ai'); }}>AI lesson draft</button></div>
+72 |       </header>
+73 |       {notice && <p className="success" role="status">{notice}</p>}
+74 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+75 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
 ```
 
-- **Line 51:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 52:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 53:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
-- **Line 54:** Conditionally shows loading text as a live status paragraph.
-- **Line 55:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 56:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 57:** Maps records to cards. Edit selects the record, opens the form and scrolls to it; delete completion removes only that ID from state and announces success. Existing IDs supply React keys; an open form disables other card actions.
-- **Line 58:** Closes the lesson section.
-- **Line 59:** Closes main.
-- **Line 60:** Closes the parenthesized return statement with a semicolon.
-- **Line 61:** Closes the App function.
+- **Line 51:** Closes finally.
+- **Line 52:** Closes the async helper.
+- **Line 53:** Starts the load.
+- **Line 54:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 55:** Ends the effect; it re-runs when either reload counter changes.
+- **Line 56:** Blank line separates related sections; it performs no operation.
+- **Line 57:** Helper that returns only the attachments of one lesson.
+- **Line 58:** Blank line separates related sections; it performs no operation.
+- **Line 59:** Declares the callback receiving the row confirmed by LessonForm's successful POST.
+- **Line 60:** Uses a functional state update: puts the confirmed lesson first, spreads remaining rows, and filters out any existing row with that same ID. Arrow functions take current state and each item.
+- **Line 61:** Sets the success message with a template string that inserts the returned title using dollar-sign/braces interpolation.
+- **Line 62:** Closes the form; unmounting it discards its input state after success.
+- **Line 63:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 64:** After a lesson is saved, asks for the attachments to be loaded again so the new ones appear.
+- **Line 65:** Closes handleSaved.
+- **Line 66:** Blank line separates related sections; it performs no operation.
+- **Line 67:** Begins returning a parenthesized JSX tree.
+- **Line 68:** Opens the semantic main content element.
+- **Line 69:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 70:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
+- **Line 71:** Wraps two buttons in the existing responsive action row. Both disable while loading or either form is open; each clears notices and selects manual or ai form mode. Double negation converts the mode string to a boolean.
+- **Line 72:** Closes the header.
+- **Line 73:** Conditionally renders a success paragraph only when notice is nonempty; && means render the right side when the left side is truthy. role=status announces feedback politely.
+- **Line 74:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
+- **Line 75:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
 
+### Lines 76–86
+
+```text
+76 |       <section aria-labelledby="lessons-heading">
+77 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
+78 |         {loading && <p role="status">Loading lesson plans…</p>}
+79 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+80 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+81 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+82 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
+83 |       </section>
+84 |     </main>
+85 |   );
+86 | }
+```
+
+- **Line 76:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 77:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
+- **Line 78:** Conditionally shows loading text as a live status paragraph.
+- **Line 79:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 80:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 81:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 82:** Each lesson card now receives its own attachments; edit and delete callbacks are unchanged.
+- **Line 83:** Closes the lesson section.
+- **Line 84:** Closes main.
+- **Line 85:** Closes the parenthesized return statement with a semicolon.
+- **Line 86:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -345,7 +402,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 49:** Reduces form-panel and card padding to 20px.
 - **Line 50:** Closes the media-query block.
 
-### Lines 51–61
+### Lines 51–75
 
 ```text
 51 |
@@ -359,6 +416,20 @@ Current implementation; connections and behavior are explained alongside every s
 59 | .demonstration img, .demonstration iframe { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border: 0; margin: 12px 0; }
 60 | a { color: #176257; text-underline-offset: 3px; }
 61 | button.danger { color: #852b1d; }
+62 |
+63 | .media-editor { margin: 4px 0 16px; padding: 12px; background: #f7fafa; border: 1px dashed #b8c9cc; border-radius: 8px; }
+64 | .media-editor h4 { margin-top: 0; }
+65 | .media-list { list-style: none; margin: 12px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+66 | .media-attachment, .lesson-card .media-list li { min-width: 0; }
+67 | .media-item { margin: 0; background: white; border: 1px solid #d7e0e4; border-radius: 8px; overflow: hidden; }
+68 | .media-item img, .media-item video, .media-frame { display: block; width: 100%; max-width: 100%; background: #0f1c22; }
+69 | .media-item img, .media-item video { max-height: 420px; object-fit: contain; }
+70 | .media-frame { aspect-ratio: 16 / 9; }
+71 | .media-frame iframe { width: 100%; height: 100%; border: 0; }
+72 | .media-play { position: relative; display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: #0f1c22; aspect-ratio: 16 / 9; overflow: hidden; }
+73 | .media-play img { width: 100%; height: 100%; object-fit: cover; opacity: 0.85; }
+74 | .media-play span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2.5rem; color: white; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
+75 | .media-item figcaption { padding: 10px 12px; overflow-wrap: anywhere; }
 ```
 
 - **Line 51:** Blank line separating related statements; it has no runtime effect.
@@ -372,7 +443,62 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 59:** Styles elements matching `.demonstration img, .demonstration iframe`. `display: block` sets layout box type. `width: 100%` sets width relative to the container. `aspect-ratio: 16 / 9` sets preferred width-to-height ratio. `object-fit: contain` sets how an image fits its box without cropping. `border: 0` sets outline width, style and color. `margin: 12px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
 - **Line 60:** Styles elements matching `a`. `color: #176257` sets foreground text color. `text-underline-offset: 3px` sets distance between link text and underline.
 - **Line 61:** Styles elements matching `button.danger`. `color: #852b1d` sets foreground text color.
+- **Line 62:** Blank line separating related statements; it has no runtime effect.
+- **Line 63:** Styles the group of pictures and videos under an activity: a light dashed box with small outer margins and rounded corners so it reads as an optional add-on area.
+- **Line 64:** Removes the top margin of the group’s heading so it sits at the top of the box.
+- **Line 65:** Lays attachments out as a grid without bullet points: as many columns as fit, each at least 260 pixels wide (or the full width if the screen is narrower, using min()), with a 16-pixel gap.
+- **Line 66:** Lets each attachment shrink below its content width, which stops wide pictures from stretching the page sideways.
+- **Line 67:** Draws one attachment as a white card with a thin border and rounded corners; overflow hidden clips media to those corners.
+- **Line 68:** Makes pictures, videos and the YouTube frame fill the card width, never exceed it, and sit on a dark background.
+- **Line 69:** Limits pictures and videos to 420 pixels tall and fits them inside without cropping (object-fit: contain).
+- **Line 70:** Forces the YouTube frame to a 16:9 shape.
+- **Line 71:** Makes the iframe fill its 16:9 frame with no border.
+- **Line 72:** Styles the preview button that stands in for the YouTube player: full width, no padding or border, dark background, 16:9, positioned so the play symbol can be placed on top.
+- **Line 73:** Stretches the thumbnail to fill the button and slightly dims it.
+- **Line 74:** Places the play triangle across the whole button, centered with CSS grid, large and white with a shadow so it is visible on any thumbnail.
+- **Line 75:** Adds padding to the caption area and allows long words or addresses to wrap.
 
+### Lines 76–93
+
+```text
+76 | .media-item figcaption small { margin-top: 2px; }
+77 | .media-fallback { margin: 0; padding: 16px; background: #fff7e6; color: #5c3b00; overflow-wrap: anywhere; }
+78 | .media-attachment .actions, .media-edit .actions, .media-panel .actions { margin-top: 10px; }
+79 | .media-panel { margin-top: 12px; padding: 12px; background: white; border: 1px solid #d7e0e4; border-radius: 8px; }
+80 | .media-panel-body label, .media-edit label, .media-found label { margin-bottom: 12px; }
+81 | .media-edit { margin-top: 10px; padding: 12px; background: white; border: 1px solid #d7e0e4; border-radius: 8px; }
+82 | .media-found .success { margin: 0 0 12px; padding: 10px 12px; }
+83 | .add-media { margin-top: 4px; }
+84 | @media (max-width: 700px) {
+85 |   button, select, textarea, input:not([type=checkbox]) { min-height: 44px; }
+86 |   .media-editor { padding: 10px; }
+87 |   .media-list { grid-template-columns: 1fr; }
+88 |   .media-panel .actions button, .media-edit .actions button, .media-found > button, .add-media, .media-attachment .actions button { flex: 1 1 100%; }
+89 |   .activity-editor { padding: 12px; }
+90 |   .activity-editor .actions button { flex: 1 1 calc(50% - 6px); }
+91 | }
+92 | .coaching-block ul.media-list { padding-left: 0; }
+93 | .media-list li { margin-bottom: 0; }
+```
+
+- **Line 76:** Adds a little space between caption lines.
+- **Line 77:** Styles the “could not be loaded” message with a warm yellow background and brown text.
+- **Line 78:** Adds space above the Edit/Remove and panel button rows.
+- **Line 79:** Styles the add-media panel as a white box with a border.
+- **Line 80:** Adds spacing under the labeled inputs in the panels.
+- **Line 81:** Styles the edit panel like the add panel.
+- **Line 82:** Tightens the green “link checked” message.
+- **Line 83:** Adds a little space above the Add Media button.
+- **Line 84:** Starts a media query applying the enclosed overrides when the viewport is at most 700 CSS pixels wide.
+- **Line 85:** Inside the existing phone-width media query block: gives buttons, dropdowns, text areas and inputs (except checkboxes) a minimum height of 44 pixels, a common comfortable touch size.
+- **Line 86:** Uses slightly smaller padding for media groups on phones.
+- **Line 87:** Shows one attachment per row on phones.
+- **Line 88:** Makes the media buttons full width on phones (flex: 1 1 100% lets each fill its row), so they are easy to tap.
+- **Line 89:** Reduces padding of the activity editor on phones to give media more room.
+- **Line 90:** Makes the Move up, Move down and Remove buttons share rows, about two per row.
+- **Line 91:** Closes the media-query block.
+- **Line 92:** Removes the left padding that lesson text lists add, so attachment lists inside an activity line up with the card edge.
+- **Line 93:** Removes the extra bottom margin that text list items have.
 
 ## client/vite.config.js
 
@@ -380,35 +506,37 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Vite reads this file through the npm frontend/build commands. The development proxy connects browser API requests to Express without adding a CORS package.
 
-### Lines 1–12
+### Lines 1–13
 
 ```text
 1 | import { defineConfig } from 'vite';
 2 | import { fileURLToPath } from 'node:url';
-3 |
-4 | export default defineConfig({
-5 |   root: fileURLToPath(new URL('.', import.meta.url)),
-6 |   server: {
-7 |     host: '127.0.0.1',
-8 |     port: 5173,
-9 |     strictPort: true,
-10 |     proxy: { '/api': 'http://127.0.0.1:3001' },
-11 |   },
-12 | });
+3 | import { apiProxy } from './api-proxy.js';
+4 |
+5 | export default defineConfig({
+6 |   root: fileURLToPath(new URL('.', import.meta.url)),
+7 |   plugins: [apiProxy(3001)],
+8 |   server: {
+9 |     host: '127.0.0.1',
+10 |     port: 5173,
+11 |     strictPort: true,
+12 |   },
+13 | });
 ```
 
 - **Line 1:** Imports Vite's named defineConfig helper, which describes a Vite configuration object.
 - **Line 2:** Imports Node's named fileURLToPath helper to convert a file URL into an operating-system path.
-- **Line 3:** Blank line separates related sections for readability; it performs no operation.
-- **Line 4:** Exports the result of calling defineConfig as the default value. The ({ starts the function argument and its configuration object.
-- **Line 5:** Sets root to this config file's directory. import.meta.url is this module's URL; new URL('.', ...) resolves its directory; fileURLToPath converts it to a filesystem path. The comma separates object properties.
-- **Line 6:** Opens a nested object of development-server settings under the server key.
-- **Line 7:** Binds the frontend to IPv4 loopback, accessible on this computer rather than the local network.
-- **Line 8:** Chooses TCP port 5173 for frontend HTTP requests.
-- **Line 9:** Prevents Vite from silently choosing another port when 5173 is busy; startup fails instead.
-- **Line 10:** Maps requests starting with /api to Express at port 3001. Inner braces hold this path-to-target mapping, and the trailing comma permits another property.
-- **Line 11:** Closes the server settings object and separates it from any following top-level property.
-- **Line 12:** Closes the top-level object and defineConfig call; the semicolon ends the export statement.
+- **Line 3:** Imports the proxy plugin from the file next to this one.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Exports the result of calling defineConfig as the default value. The ({ starts the function argument and its configuration object.
+- **Line 6:** Sets root to this config file's directory. import.meta.url is this module's URL; new URL('.', ...) resolves its directory; fileURLToPath converts it to a filesystem path. The comma separates object properties.
+- **Line 7:** Uses the plugin to forward /api requests to the backend on port 3001, replacing the proxy setting that used to be in the server options below.
+- **Line 8:** Opens a nested object of development-server settings under the server key.
+- **Line 9:** Binds the frontend to IPv4 loopback, accessible on this computer rather than the local network.
+- **Line 10:** Chooses TCP port 5173 for frontend HTTP requests.
+- **Line 11:** strictPort remains so the server fails instead of silently choosing another port; the old proxy option that followed it has been removed.
+- **Line 12:** Closes the server settings object and separates it from any following top-level property.
+- **Line 13:** Closes the top-level object and defineConfig call; the semicolon ends the export statement.
 
 ## server/config.js
 
@@ -573,7 +701,7 @@ Current implementation; connections and behavior are explained alongside every s
 11 |     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
 12 |     "build": "vite build --config client/vite.config.js",
 13 |     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js",
+14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js",
 15 |     "prisma:validate": "prisma validate",
 16 |     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
 17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js"
@@ -600,7 +728,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 11:** Runs Express with an optional .env file and Node's source watch/restart mode.
 - **Line 12:** Builds the frontend using the same Vite configuration; this does not run the API or migrate SQLite.
 - **Line 13:** Defines npm run db:migrate: Node reads optional .env and executes server/migrate.js without watch mode.
-- **Line 14:** Defines npm test to run the SQLite, API, mocked AI and browser-data-helper suites with Node’s built-in runner; it does not silently run live remote tests.
+- **Line 14:** The npm test script now also runs the new media unit tests and the media API tests. These tests use fakes; they do not contact remote services.
 - **Line 15:** Adds a local schema-validation command using the pinned CLI; no datasource URL is configured.
 - **Line 16:** Generates the Prisma client, then compiles it only if generation succeeds; && links these two required local steps.
 - **Line 17:** Generates and compiles the client, then runs setup and compatibility regression tests; && runs tests only after generation succeeds.
@@ -650,7 +778,6 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 39:** Closes the config-specific override.
 - **Line 40:** Closes the overrides object.
 - **Line 41:** Closes the complete package manifest.
-
 
 ## .env.example
 
@@ -714,6 +841,15 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 24:** Leaves COACHLAB_PROD_DATABASE_URL blank in this committed template. Reserved for future deployment secrets, not local use.
 - **Line 25:** Leaves COACHLAB_PROD_DIRECT_URL blank in this committed template. Reserved for future deployment secrets, not local use.
 
+### Lines 26–27
+
+```text
+26 | # Optional, server only: lets AI lesson drafts also search YouTube for demonstration videos. Without it CoachLab uses its reviewed catalog and Wikimedia Commons.
+27 | YOUTUBE_API_KEY=
+```
+
+- **Line 26:** Configuration comment: the next setting is optional and server-only; it lets AI lesson drafts also search YouTube for demonstration videos, and without it CoachLab uses its reviewed catalog and Wikimedia Commons.
+- **Line 27:** Placeholder for an optional YouTube Data API key in the ignored .env file. It is empty in this example file, contains no credential and is never sent to the browser.
 
 ## .gitignore
 
@@ -843,7 +979,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 Tracks applied versions in schema_migrations. Each schema change and its version record are committed together, so a failure cannot falsely mark a version as applied. It receives an open connection; it does not choose the database path.
 
-### Lines 1–15
+### Lines 1–18
 
 ```text
 1 | import { readFileSync } from 'node:fs';
@@ -853,7 +989,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 5 |     version INTEGER PRIMARY KEY,
 6 |     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 7 |   ) STRICT`);
-8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }];
+8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }];
 9 |   for (const migration of migrations) {
 10 |     database.transaction(() => {
 11 |       const applied = database.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(migration.version);
@@ -861,6 +997,9 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 13 |       const sql = readFileSync(new URL(`./migrations/${migration.file}`, import.meta.url), 'utf8');
 14 |       database.exec(sql);
 15 |       database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration.version);
+16 |     })();
+17 |   }
+18 | }
 ```
 
 - **Line 1:** Imports the named readFileSync function to read migration SQL from disk as text.
@@ -870,7 +1009,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 - **Line 5:** Defines the tracking version as a unique integer primary key. The comma separates the timestamp column.
 - **Line 6:** Defines a required applied_at UTC timestamp with a default evaluated at insertion, using the same strftime format as lesson timestamps.
 - **Line 7:** Closes the tracking table columns, enables STRICT typing, closes the template string and exec call, and ends the JavaScript statement. Creating this bookkeeping table occurs before each version transaction.
-- **Line 8:** Creates an ordered array containing one migration descriptor. Its object pairs version 1 with a fixed SQL filename. Later versions can be appended to this array in order.
+- **Line 8:** Registers the second SQLite migration (media table) after the first. The loop below applies each version once and records it.
 - **Line 9:** Iterates the descriptors with for...of. const migration holds the current descriptor; braces open the loop.
 - **Line 10:** Creates a transaction wrapper around the arrow callback. The callback's queries will run as one atomic unit when the wrapper is called below.
 - **Line 11:** Prepares a SELECT query with a ? placeholder and binds the current version through get. This keeps data separate from SQL syntax; get returns one row or undefined.
@@ -878,15 +1017,6 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 - **Line 13:** Builds a file URL relative to this module using import.meta.url and interpolates the fixed migration filename using a dollar sign followed by braces. readFileSync reads UTF-8 SQL text. No user input supplies this SQL file.
 - **Line 14:** Executes the trusted migration SQL, creating the lessons table for version 1. A database failure throws rather than pretending to succeed.
 - **Line 15:** Records the version using a parameterized INSERT and run. The applied_at default supplies the timestamp. This insert shares the schema-change transaction.
-
-### Lines 16–18
-
-```text
-16 |     })();
-17 |   }
-18 | }
-```
-
 - **Line 16:** Closes the callback and transaction factory call, then immediately calls the returned wrapper with (). Success commits; an exception rolls back the changes and propagates.
 - **Line 17:** Closes the for loop.
 - **Line 18:** Closes migrate.
@@ -929,7 +1059,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 Automated checks using Node's built-in test runner. Tests create an isolated temporary database and fresh Node processes, then remove only their own verified temporary directory. They never insert sample rows into the normal CoachLab database. The rollback test deliberately simulates a database failure inside an isolated test, not a production bug.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | import test from 'node:test';
@@ -947,6 +1077,16 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 13 |     env: { ...process.env, DATABASE_PATH: filename }, encoding: 'utf8',
 14 |   });
 15 |   assert.equal(result.error, undefined);
+16 |   return result;
+17 | }
+18 |
+19 | test('database configuration accepts external paths and rejects unsafe paths', () => {
+20 |   const code = "import { databasePath } from './server/config.js'; console.log(databasePath);";
+21 |   const defaultResult = run(code, '');
+22 |   assert.equal(defaultResult.status, 0);
+23 |   assert.equal(defaultResult.stdout.trim(), path.join(homedir(), 'AppData', 'Local', 'CoachLab', 'coachlab.sqlite'));
+24 |   const custom = path.join(tmpdir(), 'coachlab-custom.sqlite');
+25 |   assert.equal(run(code, custom).stdout.trim(), custom);
 ```
 
 - **Line 1:** Imports Node's built-in test function for defining named test cases.
@@ -964,27 +1104,6 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 13:** Copies the existing environment with spread syntax, overrides DATABASE_PATH for isolation, and requests UTF-8 output strings. These environment values are not printed.
 - **Line 14:** Closes the options object and spawnSync call.
 - **Line 15:** Checks that the child process could be spawned. Normal program failures are checked through status by the caller.
-
-### Lines 16–30
-
-```text
-16 |   return result;
-17 | }
-18 |
-19 | test('database configuration accepts external paths and rejects unsafe paths', () => {
-20 |   const code = "import { databasePath } from './server/config.js'; console.log(databasePath);";
-21 |   const defaultResult = run(code, '');
-22 |   assert.equal(defaultResult.status, 0);
-23 |   assert.equal(defaultResult.stdout.trim(), path.join(homedir(), 'AppData', 'Local', 'CoachLab', 'coachlab.sqlite'));
-24 |   const custom = path.join(tmpdir(), 'coachlab-custom.sqlite');
-25 |   assert.equal(run(code, custom).stdout.trim(), custom);
-26 |   for (const invalid of ['relative.sqlite', path.join(homedir(), 'OneDrive', 'bad.sqlite'), path.join(homedir(), 'OneDrive - Company', 'bad.sqlite')]) {
-27 |     assert.notEqual(run(code, invalid).status, 0);
-28 |   }
-29 | });
-30 |
-```
-
 - **Line 16:** Returns the result object containing exit status and captured output.
 - **Line 17:** Closes the helper function.
 - **Line 18:** Blank line separates related sections for readability; it performs no operation.
@@ -995,15 +1114,15 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 23:** Asserts the selected default is the user's AppData/Local/CoachLab/coachlab.sqlite path.
 - **Line 24:** Builds a harmless custom filename under the temporary directory; this configuration test does not create it.
 - **Line 25:** Asserts the custom path is returned unchanged by configuration.
-- **Line 26:** Loops over a relative path and two typical OneDrive folder paths, including a business OneDrive name. These are test inputs, not files to create.
-- **Line 27:** Asserts each rejected path causes a nonzero exit. notEqual means the two values must differ.
-- **Line 28:** Closes the invalid-path loop.
-- **Line 29:** Closes the configuration test callback and test registration.
-- **Line 30:** Blank line separates related sections for readability; it performs no operation.
 
-### Lines 31–45
+### Lines 26–50
 
 ```text
+26 |   for (const invalid of ['relative.sqlite', path.join(homedir(), 'OneDrive', 'bad.sqlite'), path.join(homedir(), 'OneDrive - Company', 'bad.sqlite')]) {
+27 |     assert.notEqual(run(code, invalid).status, 0);
+28 |   }
+29 | });
+30 |
 31 | test('versioned migration, constraints, and persistence across processes', () => {
 32 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-test-'));
 33 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
@@ -1019,8 +1138,18 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 43 |     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
 44 |     insert.run(title, 'Boxing', 45);
 45 |     for (const values of [[' ', 'Boxing', 45], ['Test', 'Unknown', 45], ['Test', 'Boxing', -1], ['Test', 'Boxing', 1.5]]) {
+46 |       assert.throws(() => insert.run(...values));
+47 |     }
+48 |     assert.throws(() => database.prepare('INSERT INTO lessons (title, discipline, skill_level) VALUES (?, ?, ?)').run('Test', 'Boxing', 'Expert'));
+49 |     const saved = database.prepare('SELECT * FROM lessons').get();
+50 |     assert.equal(saved.skill_level, 'Beginner');
 ```
 
+- **Line 26:** Loops over a relative path and two typical OneDrive folder paths, including a business OneDrive name. These are test inputs, not files to create.
+- **Line 27:** Asserts each rejected path causes a nonzero exit. notEqual means the two values must differ.
+- **Line 28:** Closes the invalid-path loop.
+- **Line 29:** Closes the configuration test callback and test registration.
+- **Line 30:** Blank line separates related sections for readability; it performs no operation.
 - **Line 31:** Defines the disk migration/persistence test and opens its callback.
 - **Line 32:** Creates a unique test directory using the system temporary directory and a coachlab-test- prefix.
 - **Line 33:** Verifies that the resolved directory's parent is exactly the intended temporary directory before any recursive cleanup can happen.
@@ -1036,15 +1165,15 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 43:** Prepares a parameterized INSERT with three ? placeholders for title, discipline, and duration.
 - **Line 44:** Binds the title, Boxing, and 45 to those placeholders and inserts one lesson.
 - **Line 45:** Iterates invalid value arrays: blank title, unknown discipline, negative duration, and fractional duration.
+- **Line 46:** Uses spread syntax to pass each array as query arguments and asserts that the database rejects it with an exception.
+- **Line 47:** Closes the invalid-data loop.
+- **Line 48:** Asserts that inserting Expert as a skill level throws, using a separate parameterized query.
+- **Line 49:** Reads the single valid lesson, including generated/default fields, into saved.
+- **Line 50:** Checks the omitted skill level defaulted to Beginner.
 
-### Lines 46–60
+### Lines 51–75
 
 ```text
-46 |       assert.throws(() => insert.run(...values));
-47 |     }
-48 |     assert.throws(() => database.prepare('INSERT INTO lessons (title, discipline, skill_level) VALUES (?, ?, ?)').run('Test', 'Boxing', 'Expert'));
-49 |     const saved = database.prepare('SELECT * FROM lessons').get();
-50 |     assert.equal(saved.skill_level, 'Beginner');
 51 |     assert.equal(saved.goal, '');
 52 |     assert.ok(Number.isFinite(Date.parse(saved.created_at)));
 53 |     database.close();
@@ -1053,29 +1182,8 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 56 |     assert.equal(reader.status, 0);
 57 |     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
 58 |     database = new Database(filename);
-59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }]);
+59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
 60 |     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
-```
-
-- **Line 46:** Uses spread syntax to pass each array as query arguments and asserts that the database rejects it with an exception.
-- **Line 47:** Closes the invalid-data loop.
-- **Line 48:** Asserts that inserting Expert as a skill level throws, using a separate parameterized query.
-- **Line 49:** Reads the single valid lesson, including generated/default fields, into saved.
-- **Line 50:** Checks the omitted skill level defaulted to Beginner.
-- **Line 51:** Checks the omitted goal defaulted to empty text.
-- **Line 52:** Parses created_at and checks the result is a finite timestamp, so it is a usable date string.
-- **Line 53:** Closes the first connection before restarting the migration process.
-- **Line 54:** Runs migration again in another Node process and asserts success, exercising version skipping on an existing database.
-- **Line 55:** Runs a separate reader process that opens the same file, selects all rows, prints JSON, and closes it. No connection or in-memory JavaScript object is shared with that process.
-- **Line 56:** Asserts the reader process exited successfully.
-- **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
-- **Line 58:** Reopens the test database for tracking-table and integrity checks.
-- **Line 59:** Asserts exactly one version-1 row exists in the migration ledger; rerunning did not duplicate it.
-- **Line 60:** Runs SQLite's integrity check and requires the result ok.
-
-### Lines 61–75
-
-```text
 61 |   } finally {
 62 |     if (database?.open) database.close();
 63 |     rmSync(directory, { recursive: true, force: true });
@@ -1093,21 +1201,31 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 75 |   } finally {
 ```
 
+- **Line 51:** Checks the omitted goal defaulted to empty text.
+- **Line 52:** Parses created_at and checks the result is a finite timestamp, so it is a usable date string.
+- **Line 53:** Closes the first connection before restarting the migration process.
+- **Line 54:** Runs the migration in a fresh Node process against the test file and asserts success.
+- **Line 55:** Runs a separate reader process that opens the same file, selects all rows, prints JSON, and closes it. No connection or in-memory JavaScript object is shared with that process.
+- **Line 56:** Asserts the reader process exited successfully.
+- **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
+- **Line 58:** Opens that file for direct inspection through SQLite.
+- **Line 59:** Same update for the cross-process migration test: both migrations must be recorded.
+- **Line 60:** Runs SQLite's integrity check and requires the result ok.
 - **Line 61:** Closes try and begins cleanup with finally, which runs even when assertions fail.
 - **Line 62:** Uses optional chaining to check whether a connection exists and is still open, then closes it if needed.
 - **Line 63:** Removes only the test directory whose parent and prefix were verified above. recursive removes its nested files; force tolerates an already-missing directory.
-- **Line 64:** Closes the finally block.
-- **Line 65:** Closes the persistence test callback and registration.
+- **Line 64:** Closes the invalid-path loop.
+- **Line 65:** Closes the configuration test callback and test registration.
 - **Line 66:** Blank line separates related sections for readability; it performs no operation.
 - **Line 67:** Defines the atomic rollback test and opens its callback.
 - **Line 68:** Creates an isolated in-memory SQLite database; :memory: does not create a disk file.
-- **Line 69:** Starts a try block so the test connection always gets closed.
+- **Line 69:** Starts a try block whose finally will clean up resources even if an assertion fails.
 - **Line 70:** Creates a minimal existing migration ledger for fault injection in this test only.
 - **Line 71:** Creates a test-only trigger that runs before a version INSERT and raises an ABORT error. BEGIN/END enclose the trigger's SQL action, and the semicolons delimit its statements.
 - **Line 72:** Expects migrate to throw an error matching the /test failure/ regular expression when it tries to record the version.
 - **Line 73:** Queries SQLite's schema catalog and asserts the lessons table does not exist: its creation was rolled back with the failed version insert.
 - **Line 74:** Counts ledger rows using an SQL alias count and requires zero, confirming no version was falsely marked applied.
-- **Line 75:** Closes try and opens finally for unconditional cleanup.
+- **Line 75:** Closes try and begins cleanup with finally, which runs even when assertions fail.
 
 ### Lines 76–78
 
@@ -1117,9 +1235,9 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 78 | });
 ```
 
-- **Line 76:** Closes the in-memory database.
-- **Line 77:** Closes finally.
-- **Line 78:** Closes the rollback test callback and registration.
+- **Line 76:** Closes the first connection before restarting the migration process.
+- **Line 77:** Closes the invalid-path loop.
+- **Line 78:** Closes the configuration test callback and test registration.
 
 ## server/validate-lesson.js
 
@@ -1211,120 +1329,379 @@ Validates and normalizes the POST body before any write. It returns either an er
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\app.js`
 
-Express JSON API shared by both databases. Routes validate inputs and IDs, await store methods, and return safe HTTP errors.
+Express JSON API shared by both databases. Routes validate inputs and IDs, await store methods, and return safe HTTP errors. It now also verifies and stores lesson attachments, accepts file uploads, serves stored files with byte ranges, checks pasted links and finds suggested media for AI drafts.
 
 ### Lines 1–25
 
 ```text
 1 | import express from 'express';
-2 | import { sqliteLessons } from './lesson-store.js';
+2 | import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
 3 | import { validateLesson } from './validate-lesson.js';
 4 | import { registerAiRoute } from './ai-route.js';
-5 |
-6 | export function createApp(database, aiOptions) {
-7 |   const app = express();
-8 |   app.use(express.json({ limit: '32kb' }));
-9 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-10 |
-11 |   app.get('/api/health', (request, response) => {
-12 |     response.json({ status: 'ok', service: 'CoachLab API' });
-13 |   });
-14 |   app.get('/api/lessons', async (request, response) => {
-15 |     response.json(await lessons.list());
-16 |   });
-17 |   app.post('/api/lessons', async (request, response) => {
-18 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-19 |     const result = validateLesson(request.body);
-20 |     if (result.error) return response.status(400).json({ error: result.error });
-21 |     response.status(201).json(await lessons.create(result.lesson));
-22 |   });
-23 |   app.param('id', (request, response, next, value) => {
-24 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-25 |     request.lessonId = Number(value);
+5 | import { validateMediaList } from './media-validate.js';
+6 | import { verifyLink as defaultVerify, MediaLinkError } from './media-verify.js';
+7 | import { findMedia as defaultFind } from './media-finder.js';
+8 | import { sniffMedia } from './media-sniff.js';
+9 | import { mediaLimits, uploadTypes } from '../client/src/media.js';
+10 | import { disciplines } from '../client/src/lesson-draft.js';
+11 |
+12 | const orphanAgeMs = 24 * 60 * 60 * 1000;
+13 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
+14 |
+15 | function sendFile(request, response, file) {
+16 |   const data = Buffer.from(file.data);
+17 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, max-age=31536000, immutable', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+18 |   const range = request.headers.range;
+19 |   if (!range) return response.status(200).send(data);
+20 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+21 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
+22 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
+23 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
+24 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
+25 | }
 ```
 
 - **Line 1:** Imports Express from the existing installed package.
-- **Line 2:** Imports { sqliteLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 2:** Imports MediaReferenceError (raised when an attachment id does not exist or belongs to another lesson) next to the SQLite store factory.
 - **Line 3:** Imports the named input-validation function from its neighboring module.
 - **Line 4:** Imports the server-only registration function for the unsaved AI draft endpoint.
-- **Line 5:** Blank line separates related sections; it performs no operation.
-- **Line 6:** Exports the app factory with the existing SQLite connection plus optional AI provider/clock injection for tests; normal startup uses defaults.
-- **Line 7:** Creates an Express application object.
-- **Line 8:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
-- **Line 9:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 10:** Blank line separates related sections; it performs no operation.
-- **Line 11:** Registers the existing GET health route with request/response callback parameters.
-- **Line 12:** Returns the same health JSON as before, normally with HTTP 200.
-- **Line 13:** Closes the error callback and registration.
-- **Line 14:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 15:** Waits for the selected store's rows, then serializes them as JSON.
-- **Line 16:** Closes the error callback and registration.
-- **Line 17:** Registers asynchronous creation while retaining the existing request validation and response contract.
-- **Line 18:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 19:** Validates request.body, which was populated by the JSON parser.
-- **Line 20:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 21:** Creates through the selected database store and sends the saved row only after completion.
-- **Line 22:** Closes the error callback and registration.
-- **Line 23:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 24:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 25:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 5:** Imports the attachment list validator.
+- **Line 6:** Imports the link checker (renamed defaultVerify so tests can substitute their own) and the error type used for “this link cannot be used”.
+- **Line 7:** Imports the automatic media finder, also replaceable in tests.
+- **Line 8:** Imports the file-type sniffer.
+- **Line 9:** Imports the shared size limits and allowed upload types.
+- **Line 10:** Imports the six discipline names so the suggest route can reject unknown ones.
+- **Line 11:** Blank line separates related sections; it performs no operation.
+- **Line 12:** One day in milliseconds: unsaved uploads older than this are purged.
+- **Line 13:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
+- **Line 14:** Blank line separates related sections; it performs no operation.
+- **Line 15:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
+- **Line 16:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
+- **Line 17:** Sets the response headers: the verified file type; nosniff and a sandboxing Content-Security-Policy so a browser never treats an upload as a web page or runs scripts from it; one-year private caching because stored files never change; Accept-Ranges so videos can seek; and inline display.
+- **Line 18:** Reads the Range header the browser sends when playing or seeking a video.
+- **Line 19:** Without a Range header, sends the whole file with status 200.
+- **Line 20:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
+- **Line 21:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
+- **Line 22:** Works out the last byte: the given end (capped at the file end) or the end of the file.
+- **Line 23:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
+- **Line 24:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
+- **Line 25:** Closes createApp.
 
 ### Lines 26–50
 
 ```text
-26 |     next();
-27 |   });
-28 |   app.put('/api/lessons/:id', async (request, response) => {
-29 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-30 |     const result = validateLesson(request.body);
-31 |     if (result.error) return response.status(400).json({ error: result.error });
-32 |     const lesson = await lessons.update(request.lessonId, result.lesson);
-33 |     if (!lesson) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-34 |     response.json(lesson);
-35 |   });
-36 |   app.delete('/api/lessons/:id', async (request, response) => {
-37 |     if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
-38 |     response.status(204).end();
-39 |   });
-40 |   registerAiRoute(app, aiOptions);
-41 |   app.use((request, response) => {
-42 |     response.status(404).json({ error: 'Route not found.' });
-43 |   });
-44 |   app.use((error, request, response, next) => {
-45 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-46 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-47 |     response.status(status).json({ error: messages[status] });
-48 |   });
-49 |   return app;
-50 | }
+26 |
+27 | export function createApp(database, options = {}) {
+28 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
+29 |   const app = express();
+30 |   app.use(express.json({ limit: '32kb' }));
+31 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+32 |   let suggestions = [];
+33 |   let suggesting = false;
+34 |
+35 |   async function verifiedMedia(rawMedia) {
+36 |     const checked = validateMediaList(rawMedia);
+37 |     if (checked.error) return { error: checked.error };
+38 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+39 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
+40 |     const media = [];
+41 |     for (const [index, result] of results.entries()) {
+42 |       const item = checked.media[index];
+43 |       if (result.status === 'rejected') {
+44 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+45 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+46 |       }
+47 |       if (item.id) { media.push(item); continue; }
+48 |       const info = result.value;
+49 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+50 |     }
 ```
 
-- **Line 26:** Continues from the parameter guard into the matching route handler.
-- **Line 27:** Closes the error callback and registration.
-- **Line 28:** Registers the full editable-field update route for an existing lesson ID.
-- **Line 29:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 30:** Validates request.body, which was populated by the JSON parser.
-- **Line 31:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 32:** Waits for the selected store to update that ID with already validated editable fields.
-- **Line 33:** Reports an absent record without inserting a replacement or duplicate.
-- **Line 34:** Returns the confirmed updated record with HTTP 200.
-- **Line 35:** Closes the error callback and registration.
-- **Line 36:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 37:** Deletes through the selected store; returns 404 when no matching row existed.
-- **Line 38:** Finishes a successful deletion response without a JSON body.
-- **Line 39:** Closes the error callback and registration.
-- **Line 40:** Registers generation before the not-found handler. The route receives no database handle and cannot insert lessons.
-- **Line 41:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 42:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 43:** Closes the error callback and registration.
-- **Line 44:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 45:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 46:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 47:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 48:** Closes the error callback and registration.
-- **Line 49:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 50:** Closes createApp.
+- **Line 26:** Blank line separates related sections; it performs no operation.
+- **Line 27:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
+- **Line 28:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
+- **Line 29:** Creates an Express application object.
+- **Line 30:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
+- **Line 31:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 32:** Remembers the times of recent media searches for rate limiting.
+- **Line 33:** True while a media search is running, so only one runs at a time.
+- **Line 34:** Blank line separates related sections; it performs no operation.
+- **Line 35:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 36:** Validates and cleans the submitted list.
+- **Line 37:** Returns the validation message if it failed.
+- **Line 38:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 39:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
+- **Line 40:** The verified entries will be collected here.
+- **Line 41:** Walks through the results in order.
+- **Line 42:** The matching submitted entry.
+- **Line 43:** Handles a failed check.
+- **Line 44:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 45:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 46:** Closes the preceding block (function, object, or statement body).
+- **Line 47:** Stored attachments are kept as they are.
+- **Line 48:** The successful check result.
+- **Line 49:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
+- **Line 50:** Closes the preceding block (function, object, or statement body).
 
+### Lines 51–75
+
+```text
+51 |     return { media };
+52 |   }
+53 |   async function saveWithMedia(request, response, save) {
+54 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+55 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+56 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+57 |     const result = validateLesson(hasMedia ? fields : request.body);
+58 |     if (result.error) return response.status(400).json({ error: result.error });
+59 |     let media;
+60 |     if (hasMedia) {
+61 |       const checked = await verifiedMedia(rawMedia);
+62 |       if (checked.error) return response.status(400).json({ error: checked.error });
+63 |       media = checked.media;
+64 |     }
+65 |     try {
+66 |       return await save(result.lesson, media);
+67 |     } catch (error) {
+68 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+69 |       throw error;
+70 |     }
+71 |   }
+72 |
+73 |   app.get('/api/health', (request, response) => {
+74 |     response.json({ status: 'ok', service: 'CoachLab API' });
+75 |   });
+```
+
+- **Line 51:** Returns the verified list.
+- **Line 52:** Closes the preceding block (function, object, or statement body).
+- **Line 53:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 54:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 55:** True when the body is an ordinary object that contains a media key.
+- **Line 56:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 57:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 58:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 59:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 60:** Only when media was sent.
+- **Line 61:** Validates and verifies it before touching the database.
+- **Line 62:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 63:** Uses the verified list.
+- **Line 64:** Closes the preceding block (function, object, or statement body).
+- **Line 65:** Starts the database step.
+- **Line 66:** Calls the store’s save function (create or update) and returns its response.
+- **Line 67:** Catches store errors.
+- **Line 68:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 69:** Any other error continues to the general safe 500 handler.
+- **Line 70:** Closes the preceding block (function, object, or statement body).
+- **Line 71:** Closes the preceding block (function, object, or statement body).
+- **Line 72:** Blank line separates related sections; it performs no operation.
+- **Line 73:** Registers the existing GET health route with request/response callback parameters.
+- **Line 74:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 75:** Closes the error callback and registration.
+
+### Lines 76–100
+
+```text
+76 |   app.get('/api/lessons', async (request, response) => {
+77 |     response.json(await lessons.list());
+78 |   });
+79 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(lesson, media))));
+80 |   app.param('id', (request, response, next, value) => {
+81 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+82 |     request.lessonId = Number(value);
+83 |     next();
+84 |   });
+85 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+86 |     const saved = await lessons.update(request.lessonId, lesson, media);
+87 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
+88 |     return response.json(saved);
+89 |   }));
+90 |   app.delete('/api/lessons/:id', async (request, response) => {
+91 |     if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+92 |     response.status(204).end();
+93 |   });
+94 |
+95 |   app.get('/api/lesson-media', async (request, response) => {
+96 |     if (!lessons.media) return response.json([]);
+97 |     response.json(await lessons.media.list());
+98 |   });
+99 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
+100 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+```
+
+- **Line 76:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 77:** Waits for the selected store's rows, then serializes them as JSON.
+- **Line 78:** Closes the error callback and registration.
+- **Line 79:** Creating a lesson now goes through saveWithMedia; the success response is still 201 with the saved lesson, which keeps only its nine fields.
+- **Line 80:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 81:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 82:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 83:** Continues from the parameter guard into the matching route handler.
+- **Line 84:** Closes the error callback and registration.
+- **Line 85:** Updating a lesson goes through saveWithMedia as well.
+- **Line 86:** Asks the store to update the lesson and, if media was sent, its attachments, in one transaction.
+- **Line 87:** A missing lesson still returns 404.
+- **Line 88:** Returns the updated lesson.
+- **Line 89:** Closes the handler and the route.
+- **Line 90:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 91:** Deletes through the selected store; returns 404 when no matching row existed.
+- **Line 92:** Finishes a successful deletion response without a JSON body.
+- **Line 93:** Closes the error callback and registration.
+- **Line 94:** Blank line separates related sections; it performs no operation.
+- **Line 95:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 96:** Stores without media support return an empty list.
+- **Line 97:** Returns the list from the store.
+- **Line 98:** Closes the error callback and registration.
+- **Line 99:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
+- **Line 100:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+
+### Lines 101–125
+
+```text
+101 |     next();
+102 |   });
+103 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+104 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+105 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+106 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+107 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+108 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+109 |     const detected = sniffMedia(data);
+110 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+111 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+112 |     let name = '';
+113 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+114 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+115 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+116 |     response.status(201).json(await lessons.media.addUpload({ kind: detected.kind, mime: detected.mime, title, data }));
+117 |   });
+118 |   app.get('/api/media/:id/file', async (request, response) => {
+119 |     const file = lessons.media ? await lessons.media.getFile(request.lessonId) : null;
+120 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+121 |     sendFile(request, response, file);
+122 |   });
+123 |   app.delete('/api/media/:id', async (request, response) => {
+124 |     if (!lessons.media || !await lessons.media.removeOrphan(request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+125 |     response.status(204).end();
+```
+
+- **Line 101:** Continues from the parameter guard into the matching route handler.
+- **Line 102:** Closes the error callback and registration.
+- **Line 103:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 104:** Refuses when the store has no media support.
+- **Line 105:** The type the browser declared, without parameters, in lowercase.
+- **Line 106:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 107:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 108:** Empty uploads are rejected.
+- **Line 109:** Looks at the file’s real first bytes.
+- **Line 110:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 111:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 112:** Prepares the default caption.
+- **Line 113:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 114:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 115:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 116:** Stores the file in the database and returns its details with status 201.
+- **Line 117:** Closes the error callback and registration.
+- **Line 118:** New route: sends a stored file to the browser.
+- **Line 119:** Loads the file (the :id parameter was already validated by the app.param rule above).
+- **Line 120:** Unknown file: 404.
+- **Line 121:** Sends it, honoring byte ranges.
+- **Line 122:** Closes the error callback and registration.
+- **Line 123:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 124:** Only uploads that are not attached to any lesson can be deleted this way; anything else returns 404.
+- **Line 125:** Finishes a successful deletion response without a JSON body.
+
+### Lines 126–150
+
+```text
+126 |   });
+127 |   app.post('/api/media/verify', async (request, response) => {
+128 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
+129 |     try {
+130 |       response.json(await verifyLink(request.body.url));
+131 |     } catch (error) {
+132 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+133 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+134 |     }
+135 |   });
+136 |   app.post('/api/media/suggest', async (request, response) => {
+137 |     const body = request.body;
+138 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+139 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+140 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+141 |     const now = Date.now();
+142 |     suggestions = suggestions.filter(time => now - time < 86400000);
+143 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+144 |     suggestions.push(now);
+145 |     suggesting = true;
+146 |     try {
+147 |       response.json(await findMedia({ discipline: body.discipline, sections }));
+148 |     } catch {
+149 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
+150 |     } finally {
+```
+
+- **Line 126:** Closes the error callback and registration.
+- **Line 127:** New route: checks one pasted link.
+- **Line 128:** Requires JSON containing a text url.
+- **Line 129:** Starts the guarded call.
+- **Line 130:** Returns what the checker found.
+- **Line 131:** Handles failures.
+- **Line 132:** A link that cannot be used returns 400 with the explanation.
+- **Line 133:** Unexpected problems return 502 with a neutral message.
+- **Line 134:** Closes the preceding block (function, object, or statement body).
+- **Line 135:** Closes the error callback and registration.
+- **Line 136:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 137:** The request body.
+- **Line 138:** The sections list, or null if it is missing.
+- **Line 139:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 140:** Invalid requests get a 400.
+- **Line 141:** The current time.
+- **Line 142:** Forgets searches older than one day.
+- **Line 143:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 144:** Records this search.
+- **Line 145:** Marks a search as running.
+- **Line 146:** Starts the guarded search.
+- **Line 147:** Runs the finder and returns its verified results.
+- **Line 148:** Any failure is reported without technical details.
+- **Line 149:** A 502 with advice that media can still be added by hand.
+- **Line 150:** Whatever happened, finishes with…
+
+### Lines 151–165
+
+```text
+151 |       suggesting = false;
+152 |     }
+153 |   });
+154 |
+155 |   registerAiRoute(app, options);
+156 |   app.use((request, response) => {
+157 |     response.status(404).json({ error: 'Route not found.' });
+158 |   });
+159 |   app.use((error, request, response, next) => {
+160 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+161 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+162 |     response.status(status).json({ error: messages[status] });
+163 |   });
+164 |   return app;
+165 | }
+```
+
+- **Line 151:** …allowing the next search.
+- **Line 152:** Closes the preceding block (function, object, or statement body).
+- **Line 153:** Closes the error callback and registration.
+- **Line 154:** Blank line separates related sections; it performs no operation.
+- **Line 155:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 156:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 157:** Sends HTTP 404 with a short route-not-found JSON error.
+- **Line 158:** Closes the error callback and registration.
+- **Line 159:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 160:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 161:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 162:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 163:** Closes the error callback and registration.
+- **Line 164:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 165:** Closes createApp.
 
 ## server/api.test.js
 
@@ -1573,7 +1950,7 @@ Current implementation; connections and behavior are explained alongside every s
 112 |
 113 | test('fresh database is migrated before app creation without changing the schema', async t => {
 114 |   const state = await fixture(t);
-115 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }]);
+115 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
 116 |   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
 117 |   const unknown = await fetch(`${state.url}/missing`);
 118 |   assert.equal(unknown.status, 404);
@@ -1600,7 +1977,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 112:** Blank line separates related sections for readability; it performs no operation.
 - **Line 113:** Defines a fresh-file migration and unknown-route test.
 - **Line 114:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 115:** Requires exactly one applied migration record for version 1.
+- **Line 115:** The migration-history assertion now expects versions 1 and 2, because the media table migration is applied to every fresh SQLite database.
 - **Line 116:** Requires SQLite's integrity check to return ok.
 - **Line 117:** Requests an unknown route.
 - **Line 118:** Requires HTTP 404.
@@ -1656,7 +2033,6 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 143:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 - **Line 144:** Closes the final test callback and registration.
 
-
 ## client/src/LessonForm.jsx
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonForm.jsx`
@@ -1669,249 +2045,265 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 1 | import React, { useRef, useState } from 'react';
 2 | import ActivityEditor from './ActivityEditor.jsx';
 3 | import { activityMinutes } from './activities.js';
-4 |
-5 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-6 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
-7 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
-8 |
-9 | export default function LessonForm({ onSaved, onCancel, lesson }) {
-10 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
-11 |   const [saving, setSaving] = useState(false);
-12 |   const [error, setError] = useState('');
-13 |   const submitting = useRef(false);
-14 |
-15 |   function change(event) {
-16 |     const { name, value } = event.target;
-17 |     setValues(current => ({ ...current, [name]: value }));
-18 |   }
-19 |
-20 |   async function submit(event) {
-21 |     event.preventDefault();
-22 |     if (submitting.current) return;
-23 |     setError('');
-24 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
-25 |     submitting.current = true;
+4 | import { discardUpload, mediaPayload, newKey } from './media.js';
+5 |
+6 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+7 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+8 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
+9 |
+10 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
+11 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
+12 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
+13 |   const [saving, setSaving] = useState(false);
+14 |   const [error, setError] = useState('');
+15 |   const submitting = useRef(false);
+16 |
+17 |   function change(event) {
+18 |     const { name, value } = event.target;
+19 |     setValues(current => ({ ...current, [name]: value }));
+20 |   }
+21 |
+22 |   async function submit(event) {
+23 |     event.preventDefault();
+24 |     if (submitting.current) return;
+25 |     setError('');
 ```
 
 - **Line 1:** Imports React plus useRef for a persistent immediate lock and useState for renderable values.
 - **Line 2:** Imports ActivityEditor from './ActivityEditor.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 3:** Imports activityMinutes so the form can show how many minutes the activity cards add up to.
-- **Line 4:** Blank line separates related sections for readability; it performs no operation.
-- **Line 5:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
-- **Line 6:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
-- **Line 7:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
-- **Line 8:** Blank line separates related sections for readability; it performs no operation.
-- **Line 9:** Defines a form receiving success/cancel callbacks and an optional existing record. Presence of lesson selects update mode.
-- **Line 10:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
-- **Line 11:** Initializes the saving flag to false.
-- **Line 12:** Initializes the form error message to empty text.
-- **Line 13:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
-- **Line 14:** Blank line separates related sections for readability; it performs no operation.
-- **Line 15:** Begins the shared input-change handler with the browser/React event parameter.
-- **Line 16:** Destructures the changed control's name and string value from event.target.
-- **Line 17:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
-- **Line 18:** Closes submit.
-- **Line 19:** Blank line separates related sections for readability; it performs no operation.
-- **Line 20:** Declares the async form-submit handler.
-- **Line 21:** Prevents ordinary browser form navigation so React can perform the request.
-- **Line 22:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
-- **Line 23:** Clears any earlier error for this save attempt.
-- **Line 24:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
-- **Line 25:** Locks submission synchronously.
+- **Line 4:** Imports discardUpload (cleans up unsaved uploads), mediaPayload (turns attachments into the shape the API accepts) and newKey (makes temporary keys) from the new media helper file.
+- **Line 5:** Blank line separates related sections for readability; it performs no operation.
+- **Line 6:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
+- **Line 7:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
+- **Line 8:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
+- **Line 11:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
+- **Line 12:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
+- **Line 13:** Initializes the saving flag to false.
+- **Line 14:** Initializes the form error message to empty text.
+- **Line 15:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
+- **Line 16:** Blank line separates related sections for readability; it performs no operation.
+- **Line 17:** Begins the shared input-change handler with the browser/React event parameter.
+- **Line 18:** Destructures the changed control's name and string value from event.target.
+- **Line 19:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
+- **Line 20:** Closes submit.
+- **Line 21:** Blank line separates related sections for readability; it performs no operation.
+- **Line 22:** Declares the async form-submit handler.
+- **Line 23:** Prevents ordinary browser form navigation so React can perform the request.
+- **Line 24:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 25:** Clears any earlier error for this save attempt.
 
 ### Lines 26–50
 
 ```text
-26 |     setSaving(true);
-27 |     try {
-28 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
-29 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-30 |       const data = await response.json();
-31 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
-32 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
-33 |       onSaved(data);
-34 |     } catch (failure) {
-35 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
-36 |     } finally {
-37 |       submitting.current = false;
-38 |       setSaving(false);
-39 |     }
-40 |   }
-41 |
-42 |   return (
-43 |     <section className="form-panel" aria-labelledby="new-heading">
-44 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
-45 |       <p>Title and discipline are required. Add the details that help you coach.</p>
-46 |       <form onSubmit={submit}>
-47 |         <fieldset disabled={saving}>
-48 |           <legend className="sr-only">Lesson details</legend>
-49 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
-50 |           <div className="form-row">
+26 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+27 |     submitting.current = true;
+28 |     setSaving(true);
+29 |     try {
+30 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
+31 |       if (lesson || media.length) body.media = mediaPayload(media);
+32 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+33 |       const data = await response.json();
+34 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
+35 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
+36 |       onSaved(data);
+37 |     } catch (failure) {
+38 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
+39 |     } finally {
+40 |       submitting.current = false;
+41 |       setSaving(false);
+42 |     }
+43 |   }
+44 |
+45 |   return (
+46 |     <section className="form-panel" aria-labelledby="new-heading">
+47 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+48 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+49 |       <form onSubmit={submit}>
+50 |         <fieldset disabled={saving}>
 ```
 
-- **Line 26:** Sets saving state so controls disable and progress feedback renders.
-- **Line 27:** Starts a try block around request/parsing/confirmation.
-- **Line 28:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
-- **Line 29:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
-- **Line 30:** Parses the response body as JSON, awaiting completion.
-- **Line 31:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
-- **Line 32:** Requires an integer returned ID before treating the lesson as confirmed.
-- **Line 33:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
-- **Line 34:** Closes try and catches request or response failures.
-- **Line 35:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
-- **Line 36:** Begins finally, which always executes after the attempt.
-- **Line 37:** Releases the immediate lock.
-- **Line 38:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
-- **Line 39:** Closes finally.
-- **Line 40:** Closes submit.
-- **Line 41:** Blank line separates related sections for readability; it performs no operation.
-- **Line 42:** Begins returning the JSX form tree.
-- **Line 43:** Opens a styled section and connects its accessible name to new-heading.
-- **Line 44:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
-- **Line 45:** Explains required fields in a paragraph.
-- **Line 46:** Opens a form and binds submit to its submit event; native constraints run before this handler.
-- **Line 47:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
-- **Line 48:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
-- **Line 49:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
-- **Line 50:** Opens the responsive row for the three compact controls.
+- **Line 26:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 27:** Locks submission synchronously.
+- **Line 28:** Sets saving state so controls disable and progress feedback renders.
+- **Line 29:** Starts a try block around request/parsing/confirmation.
+- **Line 30:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
+- **Line 31:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
+- **Line 32:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
+- **Line 33:** Parses the response body as JSON, awaiting completion.
+- **Line 34:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
+- **Line 35:** Requires an integer returned ID before treating the lesson as confirmed.
+- **Line 36:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
+- **Line 37:** Closes try and catches request or response failures.
+- **Line 38:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
+- **Line 39:** Begins finally, which always executes after the attempt.
+- **Line 40:** Releases the immediate lock.
+- **Line 41:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
+- **Line 42:** Closes finally.
+- **Line 43:** Closes submit.
+- **Line 44:** Blank line separates related sections for readability; it performs no operation.
+- **Line 45:** Begins returning the JSX form tree.
+- **Line 46:** Opens a styled section and connects its accessible name to new-heading.
+- **Line 47:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
+- **Line 48:** Explains required fields in a paragraph.
+- **Line 49:** Opens a form and binds submit to its submit event; native constraints run before this handler.
+- **Line 50:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
 
-### Lines 51–65
+### Lines 51–68
 
 ```text
-51 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
-52 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
-53 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
-54 |           </div>
-55 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
-56 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} />
-57 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
-58 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={onCancel}>Cancel</button></div>
-59 |         </fieldset>
-60 |         {saving && <p role="status">Saving your lesson…</p>}
-61 |         {error && <p className="error" role="alert">{error}</p>}
-62 |       </form>
-63 |     </section>
-64 |   );
-65 | }
+51 |           <legend className="sr-only">Lesson details</legend>
+52 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
+53 |           <div className="form-row">
+54 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+55 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+56 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+57 |           </div>
+58 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+59 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
+60 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+61 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
+62 |         </fieldset>
+63 |         {saving && <p role="status">Saving your lesson…</p>}
+64 |         {error && <p className="error" role="alert">{error}</p>}
+65 |       </form>
+66 |     </section>
+67 |   );
+68 | }
 ```
 
-- **Line 51:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
-- **Line 52:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
-- **Line 53:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
-- **Line 54:** Closes the responsive row.
-- **Line 55:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
-- **Line 56:** Gives drill text to the reusable editor; its callback merges changed drills into state without discarding other fields.
-- **Line 57:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
-- **Line 58:** Labels the submit action Saving, Save changes or Save lesson according to state; Cancel calls the parent without submitting.
-- **Line 59:** Closes the fieldset.
-- **Line 60:** Conditionally displays an accessible saving status via &&.
-- **Line 61:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
-- **Line 62:** Closes the form.
-- **Line 63:** Closes the section.
-- **Line 64:** Closes the JSX return expression and statement.
-- **Line 65:** Closes the component function.
+- **Line 51:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
+- **Line 52:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
+- **Line 53:** Opens the responsive row for the three compact controls.
+- **Line 54:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 55:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 56:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 57:** Closes the responsive row.
+- **Line 58:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 59:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
+- **Line 60:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
+- **Line 61:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
+- **Line 62:** Closes the fieldset.
+- **Line 63:** Conditionally displays an accessible saving status via &&.
+- **Line 64:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
+- **Line 65:** Closes the form.
+- **Line 66:** Closes the section.
+- **Line 67:** Closes the JSX return expression and statement.
+- **Line 68:** Closes the component function.
 
 ## client/src/LessonCard.jsx
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
 
-Browser display for one saved record. It formats existing text, exposes edit and confirmed delete actions, and delegates media to LessonMedia.
+Browser display for one saved record. It formats existing text, shows each activity’s attached pictures and videos beneath it, exposes edit and confirmed delete actions, and delegates catalog demonstrations to LessonMedia.
 
 ### Lines 1–25
 
 ```text
 1 | import React, { useState } from 'react';
 2 | import LessonMedia from './LessonMedia.jsx';
-3 | import { activityMinutes } from './activities.js';
-4 |
-5 | export function CoachingText({ text }) {
-6 |   if (!text) return <p>Not added</p>;
-7 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-8 |     const lines = block.split('\n').filter(Boolean);
-9 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-10 |     return <section className="coaching-block" key={index}>
-11 |       {heading && <h4>{lines[0]}</h4>}
-12 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-13 |     </section>;
-14 |   })}</>;
-15 | }
-16 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled }) {
-17 |   const [confirming, setConfirming] = useState(false);
-18 |   const [busy, setBusy] = useState(false);
-19 |   const [error, setError] = useState('');
-20 |   async function remove() {
-21 |     if (busy) return;
-22 |     setBusy(true); setError('');
-23 |     try {
-24 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
-25 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+3 | import MediaItem from './MediaItem.jsx';
+4 | import { activityBlocks, activityMinutes } from './activities.js';
+5 | import { groupMedia, mediaKey } from './media.js';
+6 |
+7 | export function CoachingText({ text, after }) {
+8 |   if (!text) return <p>Not added</p>;
+9 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+10 |     const lines = block.split('\n').filter(Boolean);
+11 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+12 |     return <section className="coaching-block" key={index}>
+13 |       {heading && <h4>{lines[0]}</h4>}
+14 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+15 |       {after?.(index)}
+16 |     </section>;
+17 |   })}</>;
+18 | }
+19 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media = [] }) {
+20 |   const [confirming, setConfirming] = useState(false);
+21 |   const [busy, setBusy] = useState(false);
+22 |   const [error, setError] = useState('');
+23 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+24 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+25 |   async function remove() {
 ```
 
 - **Line 1:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 2:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports activityMinutes so each saved lesson card can display the total of its activity minutes.
-- **Line 4:** Blank line separates related sections for readability; it performs no operation.
-- **Line 5:** Defines the read-only coaching text formatter. It changes presentation, not saved database text.
-- **Line 6:** Renders a short placeholder when a text field is empty.
-- **Line 7:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 8:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 9:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 10:** Starts one formatted block, using its position as the React key.
-- **Line 11:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 12:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 13:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 14:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 15:** Closes the LessonCard function.
-- **Line 16:** Defines one saved-lesson card. Props supply the record, edit/delete-completed callbacks and whether another form prevents actions.
-- **Line 17:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 18:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
-- **Line 19:** Stores a safe user-facing failure message, initially empty.
-- **Line 20:** Defines the asynchronous deletion action, called only by the confirmation button.
-- **Line 21:** Ignores another action while a deletion request is in progress.
-- **Line 22:** Disables repeat actions and clears the previous error before making the request.
-- **Line 23:** Starts a guarded block whose failures are handled by the following catch or finally clause.
-- **Line 24:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
-- **Line 25:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 3:** Imports the component that shows one picture or video.
+- **Line 4:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
+- **Line 5:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
+- **Line 8:** Renders a short placeholder when a text field is empty.
+- **Line 9:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 10:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 11:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 12:** Starts one formatted block, using its position as the React key.
+- **Line 13:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 14:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 15:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
+- **Line 16:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 17:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 18:** Closes the LessonCard function.
+- **Line 19:** The card receives its own attachments as media (empty list by default).
+- **Line 20:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 21:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
+- **Line 22:** Stores a safe user-facing failure message, initially empty.
+- **Line 23:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 24:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 25:** Defines the asynchronous deletion action, called only by the confirmation button.
 
-### Lines 26–42
+### Lines 26–47
 
 ```text
-26 |       onDeleted();
-27 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-28 |     finally { setBusy(false); }
-29 |   }
-30 |   return <article className="lesson-card">
-31 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
-32 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
-33 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-34 |     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} />
-35 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
-36 |     <LessonMedia lesson={lesson} />
-37 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-38 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-39 |     {error && <p className="error" role="alert">{error}</p>}
-40 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-41 |   </article>;
-42 | }
+26 |     if (busy) return;
+27 |     setBusy(true); setError('');
+28 |     try {
+29 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+30 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+31 |       onDeleted();
+32 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+33 |     finally { setBusy(false); }
+34 |   }
+35 |   return <article className="lesson-card">
+36 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
+37 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+38 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+39 |     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} after={index => gallery(byBlock.get(index))} />{rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+40 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+41 |     <LessonMedia lesson={lesson} />
+42 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+43 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+44 |     {error && <p className="error" role="alert">{error}</p>}
+45 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+46 |   </article>;
+47 | }
 ```
 
-- **Line 26:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
-- **Line 27:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 28:** Always releases the busy state after success or failure.
-- **Line 29:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 30:** Begins the semantic saved-lesson article with its visual card style.
-- **Line 31:** Displays the discipline badge and lesson title using escaped React expressions.
-- **Line 32:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
-- **Line 33:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 34:** Displays drill and teaching text through the same formatter, retaining timed headings when present.
-- **Line 35:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
-- **Line 36:** Passes the record to the reviewed-media lookup component.
-- **Line 37:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 38:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 39:** Displays the stored error as an accessible alert only when it is nonempty.
-- **Line 40:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 41:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 42:** Closes the LessonCard function.
+- **Line 26:** Ignores another action while a deletion request is in progress.
+- **Line 27:** Disables repeat actions and clears the previous error before making the request.
+- **Line 28:** Starts a guarded block whose failures are handled by the following catch or finally clause.
+- **Line 29:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 30:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 31:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 32:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 33:** Always releases the busy state after success or failure.
+- **Line 34:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 35:** Begins the semantic saved-lesson article with its visual card style.
+- **Line 36:** Displays the discipline badge and lesson title using escaped React expressions.
+- **Line 37:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 38:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 39:** Draws the activities with each activity’s attachments directly beneath it, followed by a “whole lesson” group for attachments that are not tied to an activity.
+- **Line 40:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
+- **Line 41:** Passes the record to the reviewed-media lookup component.
+- **Line 42:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 43:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 44:** Displays the stored error as an accessible alert only when it is nonempty.
+- **Line 45:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 46:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 47:** Closes the LessonCard function.
 
 ## client/src/lesson-draft.js
 
@@ -2029,7 +2421,7 @@ Current implementation; connections and behavior are explained alongside every s
 6 |     ...Object.fromEntries(fields.map(field => [field, string])),
 7 |     sections: { type: 'array', minItems: 5, maxItems: 5, items: {
 8 |       type: 'object', required: ['name', 'minutes', 'instructions'], additionalProperties: false,
-9 |       properties: { name: string, minutes: { type: 'integer' }, instructions: string },
+9 |       properties: { name: string, minutes: { type: 'integer' }, instructions: string, media_queries: { type: 'array', maxItems: 2, items: string } },
 10 |     } },
 11 |   },
 12 | };
@@ -2041,11 +2433,11 @@ Current implementation; connections and behavior are explained alongside every s
 18 | Return exactly five sections in this order: Warm-up, Technique teaching, Progressive drills, Partner exercises, Cooldown.
 19 | Each section has name, integer minutes and instructions (maximum 1500 characters). Minutes must sum exactly to duration_minutes. All sections need positive time except Partner exercises may be zero with a solo alternative.
 20 | When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. Use short newline-separated bullet cues, not long paragraphs. Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
-21 | Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
-22 |
-23 | export async function generateDraft(request, { env = process.env, fetcher = fetch, timeout = 45000 } = {}) {
-24 |   const model = env.AI_MODEL || 'gemini-3.5-flash-lite';
-25 |   if ((env.AI_PROVIDER || 'gemini') !== 'gemini' || !env.GEMINI_API_KEY || !/^[a-z0-9.-]+$/.test(model)) throw new AiError(503, 'AI generation is not configured. Manual lessons still work.');
+21 | For sections that teach or drill a nameable technique or exercise, add media_queries: up to two short search phrases (2 to 5 words, maximum 80 characters) naming that technique, for example "knee cut half guard pass". Use an empty list for warm-ups, cooldowns and generic activity. Phrases are search terms only: never include web addresses.
+22 | Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
+23 |
+24 | export async function generateDraft(request, { env = process.env, fetcher = fetch, timeout = 45000 } = {}) {
+25 |   const model = env.AI_MODEL || 'gemini-3.5-flash-lite';
 ```
 
 - **Line 1:** Defines a reusable JSON-schema descriptor for text.
@@ -2056,7 +2448,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 6:** map creates key/descriptor pairs; Object.fromEntries turns them into properties, and spread inserts them here.
 - **Line 7:** Defines sections as an array of exactly five objects, then opens its item schema.
 - **Line 8:** Requires each item to contain only name, minutes and instructions.
-- **Line 9:** Specifies text names/instructions and integer minutes.
+- **Line 9:** Adds an optional media_queries list to each lesson section in the schema sent to Gemini: at most two text items. It is not in the required list, so older or simpler answers remain valid.
 - **Line 10:** Closes the item schema and sections descriptor.
 - **Line 11:** Closes the properties object.
 - **Line 12:** Closes the exported schema object.
@@ -2068,88 +2460,89 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 18:** This prompt line specifies the five activity names and their order.
 - **Line 19:** This prompt line requires integer times totaling the request and a solo alternative for zero partner time.
 - **Line 20:** This line is part of the provider's system prompt, not executed JavaScript. It asks for recommended missing details, minimal-equipment options, short bullet cues, teaching progression and allocation within the requested total time.
-- **Line 21:** This final prompt line asks for appropriate modifications and safety cues without medical or unsupported claims, then closes the template literal.
-- **Line 22:** Blank line separates related sections; it performs no operation.
-- **Line 23:** Opens the asynchronous generator. Destructured optional settings default to server environment, real fetch and 45000ms; tests can substitute all three.
-- **Line 24:** Chooses the configured model or the verified default model ID.
-- **Line 25:** Rejects unsupported providers, missing keys or model IDs outside the safe character pattern before making a network call.
+- **Line 21:** Tells the AI to name the technique of each teaching or drilling section as short search phrases (never web addresses) and to leave the list empty for warm-ups and cooldowns. CoachLab then searches for media itself and checks every link.
+- **Line 22:** This final prompt line asks for appropriate modifications and safety cues without medical or unsupported claims, then closes the template literal.
+- **Line 23:** Blank line separates related sections; it performs no operation.
+- **Line 24:** Opens the asynchronous generator. Destructured optional settings default to server environment, real fetch and 45000ms; tests can substitute all three.
+- **Line 25:** Chooses the configured model or the verified default model ID.
 
 ### Lines 26–50
 
 ```text
-26 |   const controller = new AbortController();
-27 |   const timer = setTimeout(() => controller.abort(), timeout);
-28 |   try {
-29 |     const response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-30 |       method: 'POST', signal: controller.signal,
-31 |       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-32 |       body: JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(request) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }),
-33 |     });
-34 |     if (!response.ok) { await response.body?.cancel(); throw new AiError(response.status === 429 ? 429 : 502, 'AI provider unavailable or quota exhausted. Try later; manual lessons still work.'); }
-35 |     if (!response.body) throw new AiError(502, 'AI provider returned an empty response.');
-36 |     const reader = response.body.getReader();
-37 |     const chunks = [];
-38 |     let bytes = 0;
-39 |     while (true) {
-40 |       const { done, value } = await reader.read();
-41 |       if (done) break;
-42 |       bytes += value.byteLength;
-43 |       if (bytes > 65536) { await reader.cancel(); throw new AiError(502, 'AI response exceeded the size limit.'); }
-44 |       chunks.push(Buffer.from(value));
-45 |     }
-46 |     const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-47 |     const candidate = result.candidates?.[0];
-48 |     if (candidate?.finishReason !== 'STOP') throw new AiError(502, 'AI did not return a complete lesson. Try a different request.');
-49 |     return JSON.parse(candidate.content.parts.filter(part => !part.thought).map(part => part.text || '').join(''));
-50 |   } catch (error) {
+26 |   if ((env.AI_PROVIDER || 'gemini') !== 'gemini' || !env.GEMINI_API_KEY || !/^[a-z0-9.-]+$/.test(model)) throw new AiError(503, 'AI generation is not configured. Manual lessons still work.');
+27 |   const controller = new AbortController();
+28 |   const timer = setTimeout(() => controller.abort(), timeout);
+29 |   try {
+30 |     const response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+31 |       method: 'POST', signal: controller.signal,
+32 |       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+33 |       body: JSON.stringify({ systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(request) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }),
+34 |     });
+35 |     if (!response.ok) { await response.body?.cancel(); throw new AiError(response.status === 429 ? 429 : 502, 'AI provider unavailable or quota exhausted. Try later; manual lessons still work.'); }
+36 |     if (!response.body) throw new AiError(502, 'AI provider returned an empty response.');
+37 |     const reader = response.body.getReader();
+38 |     const chunks = [];
+39 |     let bytes = 0;
+40 |     while (true) {
+41 |       const { done, value } = await reader.read();
+42 |       if (done) break;
+43 |       bytes += value.byteLength;
+44 |       if (bytes > 65536) { await reader.cancel(); throw new AiError(502, 'AI response exceeded the size limit.'); }
+45 |       chunks.push(Buffer.from(value));
+46 |     }
+47 |     const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+48 |     const candidate = result.candidates?.[0];
+49 |     if (candidate?.finishReason !== 'STOP') throw new AiError(502, 'AI did not return a complete lesson. Try a different request.');
+50 |     return JSON.parse(candidate.content.parts.filter(part => !part.thought).map(part => part.text || '').join(''));
 ```
 
-- **Line 26:** Creates an AbortController that can cancel the fetch and its body reading.
-- **Line 27:** Schedules cancellation after the configured timeout.
-- **Line 28:** Opens the protected network-operation block.
-- **Line 29:** Calls the fixed Google HTTPS hostname and inserts the validated model ID in the endpoint path.
-- **Line 30:** Uses POST and connects the abort signal.
-- **Line 31:** Declares JSON and sends the key in a server-side header, never in the URL or React code.
-- **Line 32:** Serializes the separate system instruction and user class data; requests schema-shaped JSON and caps output at 8192 tokens.
-- **Line 33:** Closes the options object and waits for fetch to resolve.
-- **Line 34:** On an unsuccessful HTTP response, cancels its body and throws a safe error; upstream 429 remains 429 and other failures become 502. Raw upstream text is never returned.
-- **Line 35:** Rejects a missing response body.
-- **Line 36:** Obtains a stream reader so response bytes can be limited while downloading.
-- **Line 37:** Creates an initially empty array of byte chunks.
-- **Line 38:** Initializes the running downloaded-byte count.
-- **Line 39:** Starts reading until the stream reports completion.
-- **Line 40:** Awaits one chunk and unpacks its done flag and byte value.
-- **Line 41:** Stops the loop when the stream is complete.
-- **Line 42:** Adds this chunk's byte length to the running total.
-- **Line 43:** Cancels oversized bodies above 65536 bytes and returns a safe error.
-- **Line 44:** Copies accepted bytes into a Node Buffer and retains the chunk.
-- **Line 45:** Closes the stream-reading loop.
-- **Line 46:** Combines accepted buffers, decodes UTF-8 text and parses the outer provider JSON.
-- **Line 47:** Selects the first candidate if candidates exists; optional chaining avoids an immediate missing-property exception.
-- **Line 48:** Requires the STOP finish reason so truncated or refused responses are not treated as complete lessons.
-- **Line 49:** Excludes thought parts, joins visible text, and parses the generated JSON into an object; malformed data falls into the catch block.
-- **Line 50:** Catches any network, parsing or intentional provider error.
+- **Line 26:** Rejects unsupported providers, missing keys or model IDs outside the safe character pattern before making a network call.
+- **Line 27:** Creates an AbortController that can cancel the fetch and its body reading.
+- **Line 28:** Schedules cancellation after the configured timeout.
+- **Line 29:** Opens the protected network-operation block.
+- **Line 30:** Calls the fixed Google HTTPS hostname and inserts the validated model ID in the endpoint path.
+- **Line 31:** Uses POST and connects the abort signal.
+- **Line 32:** Declares JSON and sends the key in a server-side header, never in the URL or React code.
+- **Line 33:** Serializes the separate system instruction and user class data; requests schema-shaped JSON and caps output at 8192 tokens.
+- **Line 34:** Closes the options object and waits for fetch to resolve.
+- **Line 35:** On an unsuccessful HTTP response, cancels its body and throws a safe error; upstream 429 remains 429 and other failures become 502. Raw upstream text is never returned.
+- **Line 36:** Rejects a missing response body.
+- **Line 37:** Obtains a stream reader so response bytes can be limited while downloading.
+- **Line 38:** Creates an initially empty array of byte chunks.
+- **Line 39:** Initializes the running downloaded-byte count.
+- **Line 40:** Starts reading until the stream reports completion.
+- **Line 41:** Awaits one chunk and unpacks its done flag and byte value.
+- **Line 42:** Stops the loop when the stream is complete.
+- **Line 43:** Adds this chunk's byte length to the running total.
+- **Line 44:** Cancels oversized bodies above 65536 bytes and returns a safe error.
+- **Line 45:** Copies accepted bytes into a Node Buffer and retains the chunk.
+- **Line 46:** Closes the stream-reading loop.
+- **Line 47:** Combines accepted buffers, decodes UTF-8 text and parses the outer provider JSON.
+- **Line 48:** Selects the first candidate if candidates exists; optional chaining avoids an immediate missing-property exception.
+- **Line 49:** Requires the STOP finish reason so truncated or refused responses are not treated as complete lessons.
+- **Line 50:** Excludes thought parts, joins visible text, and parses the generated JSON into an object; malformed data falls into the catch block.
 
-### Lines 51–57
+### Lines 51–58
 
 ```text
-51 |     if (controller.signal.aborted) throw new AiError(504, 'AI generation timed out. Try later.');
-52 |     if (error instanceof AiError) throw error;
-53 |     throw new AiError(502, 'AI returned an unreadable response or could not be reached.');
-54 |   } finally {
-55 |     clearTimeout(timer);
-56 |   }
-57 | }
+51 |   } catch (error) {
+52 |     if (controller.signal.aborted) throw new AiError(504, 'AI generation timed out. Try later.');
+53 |     if (error instanceof AiError) throw error;
+54 |     throw new AiError(502, 'AI returned an unreadable response or could not be reached.');
+55 |   } finally {
+56 |     clearTimeout(timer);
+57 |   }
+58 | }
 ```
 
-- **Line 51:** Converts an aborted operation into safe HTTP 504 timeout feedback.
-- **Line 52:** Preserves an already constructed safe AiError.
-- **Line 53:** Converts other failures into a generic 502 message without exposing upstream diagnostics or credentials.
-- **Line 54:** Starts cleanup that runs whether the operation succeeds or fails.
-- **Line 55:** Clears the timer to avoid a later unused cancellation.
-- **Line 56:** Closes the finally block.
-- **Line 57:** Closes generateDraft.
-
+- **Line 51:** Catches any network, parsing or intentional provider error.
+- **Line 52:** Converts an aborted operation into safe HTTP 504 timeout feedback.
+- **Line 53:** Preserves an already constructed safe AiError.
+- **Line 54:** Converts other failures into a generic 502 message without exposing upstream diagnostics or credentials.
+- **Line 55:** Starts cleanup that runs whether the operation succeeds or fails.
+- **Line 56:** Clears the timer to avoid a later unused cancellation.
+- **Line 57:** Closes the finally block.
+- **Line 58:** Closes generateDraft.
 
 ## server/ai-route.js
 
@@ -2238,191 +2631,266 @@ Browser AI request and editable draft workflow. Optional preferences allow recom
 ```text
 1 | import React, { useRef, useState } from 'react';
 2 | import ActivityEditor from './ActivityEditor.jsx';
-3 | import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
-4 |
-5 | const initial = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
-6 | export default function AiLessonForm({ onSaved, onCancel }) {
-7 |   const [request, setRequest] = useState(initial);
-8 |   const [draft, setDraft] = useState(null);
-9 |   const [approved, setApproved] = useState(false);
-10 |   const [busy, setBusy] = useState(false);
-11 |   const [error, setError] = useState('');
-12 |   const locked = useRef(false);
-13 |   function edit(key, value) {
-14 |     setDraft(current => ({ ...current, [key]: value }));
-15 |     setApproved(false);
-16 |   }
-17 |   async function submit(event) {
-18 |     event.preventDefault();
-19 |     if (locked.current) return;
-20 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
-21 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
-22 |     const body = draft ? toLesson(draft, request) : request;
-23 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
-24 |     locked.current = true;
-25 |     setBusy(true);
+3 | import MediaEditor from './MediaEditor.jsx';
+4 | import { discardUpload, mediaPayload, newKey } from './media.js';
+5 | import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
+6 |
+7 | const initial = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
+8 | export default function AiLessonForm({ onSaved, onCancel }) {
+9 |   const [request, setRequest] = useState(initial);
+10 |   const [draft, setDraft] = useState(null);
+11 |   const [approved, setApproved] = useState(false);
+12 |   const [media, setMediaList] = useState([]);
+13 |   const [finding, setFinding] = useState(false);
+14 |   const [findNote, setFindNote] = useState('');
+15 |   const [busy, setBusy] = useState(false);
+16 |   const [error, setError] = useState('');
+17 |   const locked = useRef(false);
+18 |   function edit(key, value) {
+19 |     setDraft(current => ({ ...current, [key]: value }));
+20 |     setApproved(false);
+21 |   }
+22 |   function setMedia(next) {
+23 |     setMediaList(next);
+24 |     setApproved(false);
+25 |   }
 ```
 
 - **Line 1:** Imports React plus useRef for a synchronous request lock and useState for screen data.
 - **Line 2:** Imports ActivityEditor from './ActivityEditor.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports lists, labels, validators and the converter shared with the server; this module contains no credentials.
-- **Line 4:** Blank line separates related sections; it performs no operation.
-- **Line 5:** Defines initial class details and an unchecked privacy confirmation.
-- **Line 6:** Exports the component and unpacks the parent callbacks onSaved and onCancel from props.
-- **Line 7:** Creates request state and its setter from the initial class details.
-- **Line 8:** Creates draft state, initially null because generation has not happened.
-- **Line 9:** Creates the approval checkbox state, initially false.
-- **Line 10:** Creates the busy state used to disable form controls.
-- **Line 11:** Creates an initially empty error-message state.
-- **Line 12:** Creates a mutable ref that prevents duplicate submissions before React rerenders.
-- **Line 13:** Opens a helper for editing one draft property.
-- **Line 14:** Copies the current object with spread and replaces the computed property key with the new value.
-- **Line 15:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
-- **Line 16:** Closes the submit handler.
-- **Line 17:** Opens the asynchronous form submission handler.
-- **Line 18:** Stops normal HTML form navigation so React handles the submission.
-- **Line 19:** Returns immediately if another submission is already running.
-- **Line 20:** The ternary chooses draft validation after generation, or request validation before it.
-- **Line 21:** Shows any validation error or missing approval and exits without sending a request.
-- **Line 22:** Chooses the existing lesson shape for saving, otherwise the generic generation request.
-- **Line 23:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
-- **Line 24:** Sets the immediate lock before starting asynchronous work.
-- **Line 25:** Marks the UI busy to disable its fieldset.
+- **Line 3:** Imports the media editor.
+- **Line 4:** Imports the helpers for deleting unsaved uploads, building the request list and making temporary keys.
+- **Line 5:** Imports lists, labels, validators and the converter shared with the server; this module contains no credentials.
+- **Line 6:** Blank line separates related sections; it performs no operation.
+- **Line 7:** Defines initial class details and an unchecked privacy confirmation.
+- **Line 8:** Exports the component and unpacks the parent callbacks onSaved and onCancel from props.
+- **Line 9:** Creates request state and its setter from the initial class details.
+- **Line 10:** Creates draft state, initially null because generation has not happened.
+- **Line 11:** Creates the approval checkbox state, initially false.
+- **Line 12:** State: the draft’s attachments (suggested by CoachLab or added by the coach).
+- **Line 13:** State: true while CoachLab searches for media.
+- **Line 14:** State: a sentence reporting what the search found.
+- **Line 15:** Creates the busy state used to disable form controls.
+- **Line 16:** Creates an initially empty error-message state.
+- **Line 17:** Creates a mutable ref that prevents duplicate submissions before React rerenders.
+- **Line 18:** Opens a helper for editing one draft property.
+- **Line 19:** Copies the current object with spread and replaces the computed property key with the new value.
+- **Line 20:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
+- **Line 21:** Closes the submit handler.
+- **Line 22:** Wrapper used by the editors: any change to attachments also needs fresh approval, just like editing the text.
+- **Line 23:** Stores the new list.
+- **Line 24:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
+- **Line 25:** Closes the submit handler.
 
 ### Lines 26–50
 
 ```text
-26 |     setError('');
-27 |     try {
-28 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-29 |       const data = await response.json();
-30 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
-31 |       if (draft) {
-32 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
-33 |         onSaved(data);
-34 |       } else {
-35 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
-36 |         setDraft(data.draft);
-37 |         setApproved(false);
-38 |       }
-39 |     } catch (failure) {
-40 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
-41 |     } finally {
-42 |       locked.current = false;
-43 |       setBusy(false);
-44 |     }
-45 |   }
-46 |   return (
-47 |     <section className="form-panel" aria-labelledby="ai-heading">
-48 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
-49 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
-50 |       <form onSubmit={submit}>
+26 |   async function findMedia(source) {
+27 |     setFinding(true);
+28 |     setFindNote('');
+29 |     try {
+30 |       const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
+31 |       const data = await response.json();
+32 |       if (!response.ok) throw new Error(data.error || 'Media search failed.');
+33 |       setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
+34 |       setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
+35 |     } catch (failure) {
+36 |       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
+37 |     } finally { setFinding(false); }
+38 |   }
+39 |   function discard() {
+40 |     media.forEach(discardUpload);
+41 |     onCancel();
+42 |   }
+43 |   async function submit(event) {
+44 |     event.preventDefault();
+45 |     if (locked.current) return;
+46 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
+47 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
+48 |     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
+49 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
+50 |     locked.current = true;
 ```
 
-- **Line 26:** Clears previous error feedback.
-- **Line 27:** Starts the request/error-handling block.
-- **Line 28:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
-- **Line 29:** Parses the server JSON reply.
-- **Line 30:** Throws the safe server message or a fallback on unsuccessful HTTP status.
-- **Line 31:** Starts the save-success branch when submitting a draft.
-- **Line 32:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
-- **Line 33:** Passes the saved row to App, which adds its card and closes the form.
-- **Line 34:** Starts the generation-success branch instead.
-- **Line 35:** Checks the returned draft with the same structure/timing validator before displaying it.
-- **Line 36:** Stores the unsaved generated draft in React state.
-- **Line 37:** Keeps approval unchecked for this newly generated content.
-- **Line 38:** Closes the generation/save branch.
-- **Line 39:** Catches request, parsing, validation and server failures.
-- **Line 40:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
-- **Line 41:** Begins cleanup that always runs.
-- **Line 42:** Releases the immediate submission lock.
-- **Line 43:** Re-enables UI controls by clearing busy.
-- **Line 44:** Closes cleanup.
-- **Line 45:** Closes the submit handler.
-- **Line 46:** Begins returning JSX, React's HTML-like UI description.
-- **Line 47:** Opens a styled section associated with its heading for accessibility.
-- **Line 48:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
-- **Line 49:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
-- **Line 50:** Opens a form whose submit event calls the handler above.
+- **Line 26:** Defines findMedia, which asks the server to find and verify pictures and videos for a draft.
+- **Line 27:** Shows the searching state.
+- **Line 28:** Clears the previous note.
+- **Line 29:** Starts the request/error-handling block.
+- **Line 30:** Sends the discipline and, for each section, its name, instructions (limited to 1500 characters) and the AI’s technique search phrases (text only, at most three of up to 80 characters). A 60-second limit stops a stuck search.
+- **Line 31:** Parses the server JSON reply.
+- **Line 32:** A failed answer becomes an error message.
+- **Line 33:** Replaces earlier suggestions with the new ones while keeping anything the coach added; every new item gets a temporary key.
+- **Line 34:** Writes the summary: how many items were found, that every link was checked, and any per-section notes; or that nothing was found.
+- **Line 35:** Catches request, parsing, validation and server failures.
+- **Line 36:** On failure shows the server’s friendly message, or a generic one for interruptions. Draft editing and saving still work.
+- **Line 37:** Always ends the searching state.
+- **Line 38:** Closes the submit handler.
+- **Line 39:** Defines discard, used by the Discard draft and Cancel buttons.
+- **Line 40:** Deletes any unsaved uploads from this draft.
+- **Line 41:** Then closes the form.
+- **Line 42:** Closes the submit handler.
+- **Line 43:** Opens the asynchronous form submission handler.
+- **Line 44:** Stops normal HTML form navigation so React handles the submission.
+- **Line 45:** Returns immediately if another submission is already running.
+- **Line 46:** The ternary chooses draft validation after generation, or request validation before it.
+- **Line 47:** Shows any validation error or missing approval and exits without sending a request.
+- **Line 48:** When saving an approved draft, adds the media list to the lesson. Each attachment’s section name is converted to the exact activity heading that the saved lesson text will contain (“Technique teaching — 12 minutes”), so the attachment finds its activity later; attachments of no section become whole-lesson media.
+- **Line 49:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
+- **Line 50:** Sets the immediate lock before starting asynchronous work.
 
 ### Lines 51–75
 
 ```text
-51 |         <fieldset disabled={busy}>
-52 |           <legend className="sr-only">AI lesson details</legend>
-53 |           {!draft ? <>
-54 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
-55 |             <div className="form-row">
-56 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
-57 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
-58 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
-59 |             </div>
-60 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
-61 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
-62 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
-63 |           </> : <>
-64 |             <p>{request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
-65 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
-66 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
-67 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
-68 |               <h3>{section.name}</h3>
-69 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
-70 |               <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
-71 |             </div>)}
-72 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
-73 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
-74 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
-75 |           </>}
+51 |     setBusy(true);
+52 |     setError('');
+53 |     try {
+54 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+55 |       const data = await response.json();
+56 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
+57 |       if (draft) {
+58 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
+59 |         onSaved(data);
+60 |       } else {
+61 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
+62 |         setDraft(data.draft);
+63 |         setApproved(false);
+64 |         setMediaList([]);
+65 |         findMedia(data.draft);
+66 |       }
+67 |     } catch (failure) {
+68 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
+69 |     } finally {
+70 |       locked.current = false;
+71 |       setBusy(false);
+72 |     }
+73 |   }
+74 |   return (
+75 |     <section className="form-panel" aria-labelledby="ai-heading">
 ```
 
-- **Line 51:** Opens a fieldset that disables all enclosed controls while busy.
-- **Line 52:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
-- **Line 53:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
-- **Line 54:** Shows the privacy warning and free-tier data-use disclosure before submission.
-- **Line 55:** Opens the existing responsive three-column input row.
-- **Line 56:** Renders a labelled discipline select. map creates keyed options; onChange copies request state and replaces discipline with the selected text.
-- **Line 57:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
-- **Line 58:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
-- **Line 59:** Closes the responsive input row.
-- **Line 60:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
-- **Line 61:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
-- **Line 62:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
-- **Line 63:** Closes the request fragment and opens the alternative draft-review fragment.
-- **Line 64:** Displays the original class context and reminds the coach that edits reset approval.
-- **Line 65:** Renders a required editable title capped at 200 characters through the edit helper.
-- **Line 66:** Renders required editable training objectives capped at 1500 characters.
-- **Line 67:** Maps draft sections into keyed styled containers, opening one div for each section.
-- **Line 68:** Displays that section's name in an h3 heading.
-- **Line 69:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
-- **Line 70:** Edits activities within this timed draft section. The parent maps to replace only this section's instructions, retains other sections and clears coach approval through edit().
-- **Line 71:** Closes the section div, map callback and JSX expression.
-- **Line 72:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
-- **Line 73:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
-- **Line 74:** Renders the explicit coach approval checkbox, controlled by approved state.
-- **Line 75:** Closes the draft fragment and conditional JSX expression.
+- **Line 51:** Marks the UI busy to disable its fieldset.
+- **Line 52:** Clears previous error feedback.
+- **Line 53:** Starts the request/error-handling block.
+- **Line 54:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
+- **Line 55:** Parses the server JSON reply.
+- **Line 56:** Throws the safe server message or a fallback on unsuccessful HTTP status.
+- **Line 57:** Starts the save-success branch when submitting a draft.
+- **Line 58:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
+- **Line 59:** Passes the saved row to App, which adds its card and closes the form.
+- **Line 60:** Starts the generation-success branch instead.
+- **Line 61:** Checks the returned draft with the same structure/timing validator before displaying it.
+- **Line 62:** Stores the unsaved generated draft in React state.
+- **Line 63:** Keeps approval unchecked for this newly generated content.
+- **Line 64:** When a new draft arrives, clears old attachments.
+- **Line 65:** Immediately starts the automatic media search. The draft is already visible and editable while the search runs.
+- **Line 66:** Closes the generation/save branch.
+- **Line 67:** Catches request, parsing, validation and server failures.
+- **Line 68:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
+- **Line 69:** Begins cleanup that always runs.
+- **Line 70:** Releases the immediate submission lock.
+- **Line 71:** Re-enables UI controls by clearing busy.
+- **Line 72:** Closes cleanup.
+- **Line 73:** Closes the submit handler.
+- **Line 74:** Begins returning JSX, React's HTML-like UI description.
+- **Line 75:** Opens a styled section associated with its heading for accessibility.
 
-### Lines 76–83
+### Lines 76–100
 
 ```text
-76 |           <div className="actions"><button type="submit" disabled={!!draft && !approved}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={onCancel}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
-77 |         </fieldset>
-78 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
-79 |         {error && <p role="alert" className="error">{error}</p>}
-80 |       </form>
-81 |     </section>
-82 |   );
-83 | }
+76 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
+77 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
+78 |       <form onSubmit={submit}>
+79 |         <fieldset disabled={busy}>
+80 |           <legend className="sr-only">AI lesson details</legend>
+81 |           {!draft ? <>
+82 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
+83 |             <div className="form-row">
+84 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
+85 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
+86 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
+87 |             </div>
+88 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
+89 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
+90 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
+91 |           </> : <>
+92 |             <p>{request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
+93 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
+94 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
+95 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
+96 |               <h3>{section.name}</h3>
+97 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
+98 |               <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+99 |               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
+100 |             </div>)}
 ```
 
-- **Line 76:** Renders a submit button disabled for unapproved drafts, with busy/generate/save labels, plus a non-submit Cancel or Discard button calling onCancel.
-- **Line 77:** Closes the fieldset of controls.
-- **Line 78:** Conditionally announces saving or generation progress in a status paragraph.
-- **Line 79:** Conditionally displays error text in an alert paragraph; React treats it as text rather than HTML.
-- **Line 80:** Closes the form.
-- **Line 81:** Closes the outer section.
-- **Line 82:** Closes the grouped JSX return expression.
-- **Line 83:** Closes AiLessonForm.
+- **Line 76:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
+- **Line 77:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
+- **Line 78:** Opens a form whose submit event calls the handler above.
+- **Line 79:** Opens a fieldset that disables all enclosed controls while busy.
+- **Line 80:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
+- **Line 81:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
+- **Line 82:** Shows the privacy warning and free-tier data-use disclosure before submission.
+- **Line 83:** Opens the existing responsive three-column input row.
+- **Line 84:** Renders a labelled discipline select. map creates keyed options; onChange copies request state and replaces discipline with the selected text.
+- **Line 85:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
+- **Line 86:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
+- **Line 87:** Closes the responsive input row.
+- **Line 88:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
+- **Line 89:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
+- **Line 90:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
+- **Line 91:** Closes the request fragment and opens the alternative draft-review fragment.
+- **Line 92:** Displays the original class context and reminds the coach that edits reset approval.
+- **Line 93:** Renders a required editable title capped at 200 characters through the edit helper.
+- **Line 94:** Renders required editable training objectives capped at 1500 characters.
+- **Line 95:** Maps draft sections into keyed styled containers, opening one div for each section.
+- **Line 96:** Displays that section's name in an h3 heading.
+- **Line 97:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
+- **Line 98:** Edits activities within this timed draft section. The parent maps to replace only this section's instructions, retains other sections and clears coach approval through edit().
+- **Line 99:** Under each section’s instructions, adds an editor for that section’s pictures and videos, filtered by the section name.
+- **Line 100:** Closes the section div, map callback and JSX expression.
 
+### Lines 101–118
+
+```text
+101 |             <div className="draft-section">
+102 |               <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
+103 |               {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
+104 |               {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
+105 |               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
+106 |             </div>
+107 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
+108 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
+109 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
+110 |           </>}
+111 |           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
+112 |         </fieldset>
+113 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
+114 |         {error && <p role="alert" className="error">{error}</p>}
+115 |       </form>
+116 |     </section>
+117 |   );
+118 | }
+```
+
+- **Line 101:** Starts a block for whole-lesson media.
+- **Line 102:** Editor for attachments that belong to no section.
+- **Line 103:** While searching, a status message says so.
+- **Line 104:** When finished, shows the summary note.
+- **Line 105:** Button to run the search again.
+- **Line 106:** Closes the responsive input row.
+- **Line 107:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
+- **Line 108:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
+- **Line 109:** Renders the explicit coach approval checkbox, controlled by approved state.
+- **Line 110:** Closes the draft fragment and conditional JSX expression.
+- **Line 111:** The save button is also disabled while a media search runs, so a lesson is never saved with a half-finished list. Cancel/Discard now uses discard to clean up uploads.
+- **Line 112:** Closes the fieldset of controls.
+- **Line 113:** Conditionally announces saving or generation progress in a status paragraph.
+- **Line 114:** Conditionally displays error text in an alert paragraph; React treats it as text rather than HTML.
+- **Line 115:** Closes the form.
+- **Line 116:** Closes the outer section.
+- **Line 117:** Closes the grouped JSX return expression.
+- **Line 118:** Closes AiLessonForm.
 
 ## server/ai.test.js
 
@@ -2693,7 +3161,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\pris
 
 PostgreSQL design only. It generates a separate client and does not change the active SQLite application.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | generator client {
@@ -2711,6 +3179,16 @@ PostgreSQL design only. It generates a separate client and does not change the a
 13 |   id               Int      @id @default(autoincrement())
 14 |   title            String   @db.Text
 15 |   discipline       String   @db.Text
+16 |   skill_level      String   @default("Beginner") @db.Text
+17 |   duration_minutes Int?
+18 |   goal             String   @default("") @db.Text
+19 |   drills           String   @default("") @db.Text
+20 |   coaching_notes   String   @default("") @db.Text
+21 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
+22 |   media            LessonMedia[]
+23 |
+24 |   @@map("lessons")
+25 | }
 ```
 
 - **Line 1:** Opens the client-generation configuration block.
@@ -2722,36 +3200,70 @@ PostgreSQL design only. It generates a separate client and does not change the a
 - **Line 7:** Blank line separates related sections and performs no operation.
 - **Line 8:** Opens the database-provider block.
 - **Line 9:** Selects PostgreSQL; no credential or URL is stored here.
-- **Line 10:** Closes the datasource block.
+- **Line 10:** Closes the generator block.
 - **Line 11:** Blank line separates related sections and performs no operation.
 - **Line 12:** Opens the single Lesson model; no future entities are introduced.
 - **Line 13:** Defines a required integer primary key with automatically allocated IDs. SQLite ID ranges must be checked before any future import.
 - **Line 14:** Defines required unrestricted PostgreSQL text for the title.
 - **Line 15:** Defines required text for the discipline; allowed values are enforced by reviewed migration SQL and existing API validation.
-
-### Lines 16–24
-
-```text
-16 |   skill_level      String   @default("Beginner") @db.Text
-17 |   duration_minutes Int?
-18 |   goal             String   @default("") @db.Text
-19 |   drills           String   @default("") @db.Text
-20 |   coaching_notes   String   @default("") @db.Text
-21 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
-22 |
-23 |   @@map("lessons")
-24 | }
-```
-
 - **Line 16:** Defines required skill-level text with Beginner as the default.
 - **Line 17:** The question mark makes integer duration nullable, preserving an omitted manual duration.
 - **Line 18:** Defines required goal text with an empty-string default.
 - **Line 19:** Defines required drill text with an empty-string default.
 - **Line 20:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
 - **Line 21:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
-- **Line 22:** Blank line separates related sections and performs no operation.
-- **Line 23:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
-- **Line 24:** Closes the Lesson model.
+- **Line 22:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
+- **Line 23:** Blank line separates related sections and performs no operation.
+- **Line 24:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 25:** Closes the generator block.
+
+### Lines 26–46
+
+```text
+26 |
+27 | model LessonMedia {
+28 |   id          Int      @id @default(autoincrement())
+29 |   lesson_id   Int?
+30 |   position    Int      @default(0)
+31 |   kind        String   @db.Text
+32 |   origin      String   @db.Text
+33 |   url         String?  @db.Text
+34 |   title       String   @default("") @db.Text
+35 |   activity    String   @default("") @db.Text
+36 |   mime        String?  @db.Text
+37 |   size_bytes  Int?
+38 |   data        Bytes?
+39 |   credit      String   @default("") @db.Text
+40 |   source_page String?  @db.Text
+41 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
+42 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+43 |
+44 |   @@index([lesson_id])
+45 |   @@map("lesson_media")
+46 | }
+```
+
+- **Line 26:** Blank line separates related sections and performs no operation.
+- **Line 27:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
+- **Line 28:** Auto-incrementing whole-number primary key.
+- **Line 29:** Optional (?) lesson id: empty for uploads not saved yet.
+- **Line 30:** Order within the lesson, defaulting to 0.
+- **Line 31:** Text column for the kind of attachment.
+- **Line 32:** Text column for where the attachment came from.
+- **Line 33:** Optional web address for linked media.
+- **Line 34:** Caption text, empty by default.
+- **Line 35:** Activity heading the attachment belongs to.
+- **Line 36:** Optional MIME type of an upload.
+- **Line 37:** Optional size in bytes.
+- **Line 38:** Optional binary file contents (Bytes maps to BYTEA).
+- **Line 39:** Credit text, empty by default.
+- **Line 40:** Optional link to the source page.
+- **Line 41:** Creation time with timezone, set automatically.
+- **Line 42:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
+- **Line 43:** Blank line separates related sections and performs no operation.
+- **Line 44:** Asks Prisma for an index on lesson_id.
+- **Line 45:** Maps the model to the existing table name lesson_media.
+- **Line 46:** Closes the generator block.
 
 ## prisma.config.js
 
@@ -3558,7 +4070,7 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\ActivityEditor.jsx`
 
-Browser component shared by LessonForm and AiLessonForm. It edits the existing drills/instructions text as ordered cards; no schema change or network request is involved.
+Browser component shared by LessonForm and AiLessonForm. It edits the existing drills/instructions text as ordered cards with stable ids. When the parent passes attachments it also shows each activity’s pictures and videos with an Add Media button, and a whole-lesson media area; attachments follow their activity when its heading is renamed. No schema change is involved in the text itself.
 
 ### Lines 1–25
 
@@ -3566,81 +4078,135 @@ Browser component shared by LessonForm and AiLessonForm. It edits the existing d
 1 | import React, { useEffect, useRef, useState } from 'react';
 2 |
 3 | import { activityBlocks, joinActivities, moveActivity } from './activities.js';
-4 |
-5 | export default function ActivityEditor({ value, onChange, label = 'Exercises and activities', limit = 10000 }) {
-6 |   const nextId = useRef(0);
-7 |   const makeCards = text => activityBlocks(text).map(item => ({ id: nextId.current++, text: item }));
-8 |   const [cards, setCards] = useState(() => makeCards(value));
-9 |
-10 |   useEffect(() => {
-11 |     if (value !== joinActivities(cards.map(card => card.text))) setCards(makeCards(value));
-12 |   }, [value]);
+4 | import MediaEditor from './MediaEditor.jsx';
+5 | import { headingOf, renameActivity, sameActivity, unassignedMedia } from './media.js';
+6 |
+7 | export default function ActivityEditor({ value, onChange, label = 'Exercises and activities', limit = 10000, media, onMediaChange }) {
+8 |   const nextId = useRef(0);
+9 |   const makeCards = text => activityBlocks(text).map(item => ({ id: nextId.current++, text: item }));
+10 |   const [cards, setCards] = useState(() => makeCards(value));
+11 |   const withMedia = Array.isArray(media) && onMediaChange;
+12 |   const headings = cards.map(card => headingOf(card.text));
 13 |
-14 |   function update(next) {
-15 |     setCards(next);
-16 |     onChange(joinActivities(next.map(card => card.text)));
-17 |   }
-18 |   function swap(index, direction) {
-19 |     const order = moveActivity(cards.map((_, position) => position), index, direction);
-20 |     update(order.map(position => cards[position]));
+14 |   useEffect(() => {
+15 |     if (value !== joinActivities(cards.map(card => card.text))) setCards(makeCards(value));
+16 |   }, [value]);
+17 |
+18 |   function update(next) {
+19 |     setCards(next);
+20 |     onChange(joinActivities(next.map(card => card.text)));
 21 |   }
-22 |   return <section className="activity-editor" aria-label={label}>
-23 |     <h3>{label}</h3><p>Each card is one activity. Put a heading with its minutes on the first line, for example “Warm-up — 10 minutes”, then one coaching cue per line. Use Add activity for a new card.</p>
-24 |     {cards.map((card, index) => <div className="draft-section" key={card.id}>
-25 |       <label>{label} {index + 1}<textarea rows="4" maxLength={limit} value={card.text} onChange={event => update(cards.map(item => item.id === card.id ? { ...item, text: event.target.value } : item))} /></label>
+22 |   function edit(card, text) {
+23 |     if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(renameActivity(media, headingOf(card.text), headingOf(text)));
+24 |     update(cards.map(item => item.id === card.id ? { ...item, text } : item));
+25 |   }
 ```
 
 - **Line 1:** Imports React plus three hooks: useEffect re-synchronizes cards with outside text, useRef keeps a counter that survives renders, and useState stores the card list.
 - **Line 2:** Blank line separates related sections for readability; it performs no operation.
 - **Line 3:** Imports the text-splitting helper, the new joinActivities helper that rebuilds one string, and moveActivity that reorders an array. Braces mark named imports.
-- **Line 4:** Blank line separates related sections for readability; it performs no operation.
-- **Line 5:** Defines and exports the editor component. Destructuring reads the stored text, the change callback, an accessible label and a character limit; the default values apply when a parent omits them.
-- **Line 6:** Creates a ref holding a number that gives every card a permanent id. Changing a ref does not redraw the page, so ids stay stable.
-- **Line 7:** Defines a helper that splits saved text into activity blocks and wraps each one as an object with a new unique id and its text; the ++ takes the next number.
-- **Line 8:** Stores the cards as component state. The function form of useState runs makeCards only once, for the first render.
-- **Line 9:** Blank line separates related sections for readability; it performs no operation.
-- **Line 10:** Starts an effect that runs after rendering whenever the dependency list at the end changes.
-- **Line 11:** If the text from the parent no longer equals what the local cards would produce, another part of the program (such as opening a different lesson) changed it, so the cards are rebuilt. Typing never triggers this because the cards produced that text.
-- **Line 12:** Ends the effect; the array [value] tells React to re-run it only when the parent text changes.
+- **Line 4:** Imports the media editor that draws attachments and the Add Media button.
+- **Line 5:** Imports the helpers that read an activity heading, rename it in the attachments, compare headings and find attachments without an activity.
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** The component now also receives the lesson’s attachments (media) and a setter (onMediaChange). Both are optional: without them it behaves as the plain text editor used by the AI draft sections.
+- **Line 8:** Creates a ref holding a number that gives every card a permanent id. Changing a ref does not redraw the page, so ids stay stable.
+- **Line 9:** Turns saved text into cards, giving each a permanent id from the counter.
+- **Line 10:** Stores the cards as component state. The function form of useState runs makeCards only once, for the first render.
+- **Line 11:** True only when the parent supplied both the attachment list and its setter; every media feature below is switched on by this flag.
+- **Line 12:** The heading (first line) of every card, recalculated on each render.
 - **Line 13:** Blank line separates related sections for readability; it performs no operation.
-- **Line 14:** Defines update, the single function used for every card change.
-- **Line 15:** Saves the new card list in local state so unsaved details such as a blank line inside a card are kept while the coach types.
-- **Line 16:** Tells the parent the new combined text. joinActivities removes blank lines inside cards and puts one blank line between cards.
-- **Line 17:** Closes the update function.
-- **Line 18:** Defines swap, which moves one card up or down.
-- **Line 19:** Reuses moveActivity on a list of positions (0, 1, 2 ...) rather than on the text, so the cards keep their ids when reordered. The underscore names an unused value.
-- **Line 20:** Rebuilds the card list from the reordered positions and saves it through update.
-- **Line 21:** Closes the swap function.
-- **Line 22:** Returns the editor markup, starting a labeled section element that screen readers announce with the supplied label.
-- **Line 23:** Shows the heading and beginner instructions: heading with minutes on the first line, one cue per line, and Add activity for new cards. The quotation marks are ordinary text inside JSX.
-- **Line 24:** Loops over the cards and draws one block per card. The key is the permanent card id, so React keeps the same textarea (and cursor focus) when other cards change, move or disappear.
-- **Line 25:** Draws the labeled textarea for one card. Its value comes from the card and each keystroke replaces only that card’s text, found by id, before calling update.
+- **Line 14:** Starts an effect that runs after rendering whenever the dependency list at the end changes.
+- **Line 15:** If the text from the parent no longer equals what the local cards would produce, another part of the program (such as opening a different lesson) changed it, so the cards are rebuilt. Typing never triggers this because the cards produced that text.
+- **Line 16:** Ends the effect; the array [value] tells React to re-run it only when the parent text changes.
+- **Line 17:** Blank line separates related sections for readability; it performs no operation.
+- **Line 18:** Defines update, the single function used for every card change.
+- **Line 19:** Saves the new card list in local state so unsaved details such as a blank line inside a card are kept while the coach types.
+- **Line 20:** Tells the parent the new combined text. joinActivities removes blank lines inside cards and puts one blank line between cards.
+- **Line 21:** Closes the update function.
+- **Line 22:** Defines edit, called whenever the text of one card changes.
+- **Line 23:** If the first line changed, renames that activity in the attachments so they follow the activity instead of being left behind.
+- **Line 24:** Then saves the new text for just that card, found by its permanent id.
+- **Line 25:** Closes the update function.
 
-### Lines 26–35
+### Lines 26–50
 
 ```text
-26 |       <div className="actions">
-27 |         <button type="button" className="secondary" disabled={index === 0} onClick={() => swap(index, -1)}>Move up {index + 1}</button>
-28 |         <button type="button" className="secondary" disabled={index === cards.length - 1} onClick={() => swap(index, 1)}>Move down {index + 1}</button>
-29 |         <button type="button" className="secondary" onClick={() => update(cards.filter(item => item.id !== card.id))}>Remove activity {index + 1}</button>
-30 |       </div>
-31 |     </div>)}
-32 |     <button type="button" className="secondary" onClick={() => update([...cards, { id: nextId.current++, text: 'New activity — add minutes\nAdd coaching cues here.' }])}>Add activity</button>
-33 |     <small>{value.length} / {limit} characters</small>
-34 |   </section>;
-35 | }
+26 |   function swap(index, direction) {
+27 |     const order = moveActivity(cards.map((_, position) => position), index, direction);
+28 |     update(order.map(position => cards[position]));
+29 |   }
+30 |   function addActivity() {
+31 |     let number = cards.length + 1;
+32 |     while (headings.includes(`New activity ${number} — add minutes`)) number += 1;
+33 |     update([...cards, { id: nextId.current++, text: `New activity ${number} — add minutes\nAdd coaching cues here.` }]);
+34 |   }
+35 |   return <section className="activity-editor" aria-label={label}>
+36 |     <h3>{label}</h3><p>Each card is one activity. Put a heading with its minutes on the first line, for example “Warm-up — 10 minutes”, then one coaching cue per line. Use Add activity for a new card.</p>
+37 |     {cards.map((card, index) => {
+38 |       const heading = headings[index];
+39 |       const unique = heading !== '' && headings.indexOf(heading) === index;
+40 |       return <div className="draft-section" key={card.id}>
+41 |         <label>{label} {index + 1}<textarea rows="4" maxLength={limit} value={card.text} onChange={event => edit(card, event.target.value)} /></label>
+42 |         {withMedia && <MediaEditor media={media} onChange={onMediaChange} activity={heading} headings={headings.filter(Boolean)} disabled={!unique}
+43 |           items={unique ? media.filter(item => sameActivity(item, heading)) : []}
+44 |           note={unique ? undefined : 'Give this activity its own first-line heading to attach pictures and videos to it.'} />}
+45 |         <div className="actions">
+46 |           <button type="button" className="secondary" disabled={index === 0} onClick={() => swap(index, -1)}>Move up {index + 1}</button>
+47 |           <button type="button" className="secondary" disabled={index === cards.length - 1} onClick={() => swap(index, 1)}>Move down {index + 1}</button>
+48 |           <button type="button" className="secondary" onClick={() => update(cards.filter(item => item.id !== card.id))}>Remove activity {index + 1}</button>
+49 |         </div>
+50 |       </div>;
 ```
 
-- **Line 26:** Opens the row that holds this card’s buttons.
-- **Line 27:** Move up button; it is disabled for the first card and calls swap with -1. The visible number tells screen-reader users which card it affects.
-- **Line 28:** Move down button; it is disabled for the last card and calls swap with 1.
-- **Line 29:** Remove button; it keeps every card whose id differs from this one and saves the shorter list.
-- **Line 30:** Closes the row of buttons.
-- **Line 31:** Closes the card block and the loop expression.
-- **Line 32:** Add activity button; it appends a new card with a unique id and a starter heading and cue to the existing cards.
-- **Line 33:** Shows how many characters the combined text uses compared with the limit.
-- **Line 34:** Closes the section element and the returned JSX expression.
-- **Line 35:** Closes the component function.
+- **Line 26:** Defines swap, which moves one card up or down.
+- **Line 27:** Reuses moveActivity on a list of positions (0, 1, 2 ...) rather than on the text, so the cards keep their ids when reordered. The underscore names an unused value.
+- **Line 28:** Rebuilds the card list from the reordered positions and saves it through update.
+- **Line 29:** Closes the update function.
+- **Line 30:** Defines addActivity for the Add activity button.
+- **Line 31:** Starts counting from the next card number.
+- **Line 32:** Skips numbers whose heading already exists, so every new activity gets a unique heading and attachments cannot be mixed up between two new cards.
+- **Line 33:** Adds the new card with a numbered starter heading and a starter cue; \n is a line break.
+- **Line 34:** Closes the update function.
+- **Line 35:** Returns the editor markup, starting a labeled section element that screen readers announce with the supplied label.
+- **Line 36:** Shows the heading and updated instructions. They now explain that the first line is the heading with minutes, which is also how attachments find their activity.
+- **Line 37:** Starts drawing each card; a function body with braces is used so local variables can be defined first.
+- **Line 38:** This card’s heading (first line).
+- **Line 39:** True when the heading is not empty and no earlier card has the same heading. Attachments need a unique heading to know which card they belong to.
+- **Line 40:** Returns the card’s block, keyed by its permanent id.
+- **Line 41:** The textarea; typing calls edit, which also renames attachments if the heading changed.
+- **Line 42:** When the parent provided attachments, draws this card’s media editor. Add Media is disabled for cards without a unique heading.
+- **Line 43:** Shows only the attachments whose activity equals this card’s heading (none for duplicate or blank headings).
+- **Line 44:** For cards without a unique heading, explains why media cannot be attached yet.
+- **Line 45:** Starts the row of move and remove buttons.
+- **Line 46:** Move up button; disabled for the first card; calls swap upward.
+- **Line 47:** Move down button; disabled for the last card.
+- **Line 48:** Remove button; the card’s attachments are not deleted: they move to the whole-lesson group because their heading no longer exists.
+- **Line 49:** Closes the div element.
+- **Line 50:** Closes the div element and the returned expression.
+
+### Lines 51–59
+
+```text
+51 |     })}
+52 |     <button type="button" className="secondary" onClick={addActivity}>Add activity</button>
+53 |     <small>{value.length} / {limit} characters</small>
+54 |     {withMedia && <div className="draft-section">
+55 |       <MediaEditor media={media} onChange={onMediaChange} activity="" headings={headings.filter(Boolean)} label="Whole-lesson media" note="Pictures and videos that are not tied to one activity, including any whose activity was renamed or removed."
+56 |         items={unassignedMedia(media, headings)} />
+57 |     </div>}
+58 |   </section>;
+59 | }
+```
+
+- **Line 51:** Closes the callback and map call inside the JSX expression.
+- **Line 52:** Add activity button, now using addActivity so new cards get unique headings.
+- **Line 53:** Character counter for the combined text.
+- **Line 54:** After the cards, adds a separate area for whole-lesson media when attachments are supported.
+- **Line 55:** The whole-lesson media editor: empty activity, a label and a note explaining what appears here.
+- **Line 56:** Lists attachments with no activity or with an activity that no longer exists.
+- **Line 57:** Closes the whole-lesson area.
+- **Line 58:** Closes the section element and the returned JSX expression.
+- **Line 59:** Closes the component function.
 
 ## client/src/LessonMedia.jsx
 
@@ -3672,7 +4238,7 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 19 |   const items = lessonMedia(lesson);
 20 |   const query = encodeURIComponent(`${lesson.discipline} ${lesson.title} technique`);
 21 |   return <details onToggle={event => setOpen(event.currentTarget.open)}>
-22 |     <summary>Instructional pictures and videos</summary>
+22 |     <summary>Reference demonstrations from the CoachLab catalog</summary>
 23 |     {open && (items.length ? items.map(item => <Demonstration key={item.source} item={item} />) : <p>No reviewed demonstration in CoachLab’s reference catalog matches this lesson yet. No links have been invented for it.</p>)}
 24 |     {open && <p className="search-links">Find more: <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer">search instructional videos</a> · <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer">search pictures</a>. Search results are not reviewed by CoachLab; have a qualified coach check them before teaching.</p>}
 25 |   </details>;
@@ -3699,7 +4265,7 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 - **Line 19:** Looks up matching catalog entries locally; unrelated demonstrations are excluded.
 - **Line 20:** Builds a URL-safe search phrase from the discipline and lesson title; encodeURIComponent escapes spaces and symbols.
 - **Line 21:** Uses the native disclosure's toggle event to mirror its current open state into React.
-- **Line 22:** Provides the keyboard-operable label for opening the media disclosure.
+- **Line 22:** Renames the catalog disclosure so coaches can tell it apart from the pictures and videos attached to the lesson itself.
 - **Line 23:** When opened, shows each matching reviewed demonstration, or a sentence saying that none matches yet and that no links were invented.
 - **Line 24:** When opened, always shows two search links (videos and pictures) for lessons the catalog does not cover. They open in a new tab with noopener protection, and the note says CoachLab has not reviewed those results.
 - **Line 25:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
@@ -3791,80 +4357,257 @@ Fixed public reference catalog and local relevance filter. No AI-generated URL i
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-store.js`
 
-Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and transactions; Prisma uses asynchronous bound queries. Both preserve the existing nine-field API.
+Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and transactions; Prisma uses asynchronous bound queries. Both preserve the existing nine-field lesson API and add a media group that stores uploaded files and links in the lesson_media table, attached to lessons inside the same transaction.
 
 ### Lines 1–25
 
 ```text
-1 | export function sqliteLessons(database) {
-2 |   const list = database.prepare('SELECT * FROM lessons ORDER BY created_at DESC, id DESC');
-3 |   const find = database.prepare('SELECT * FROM lessons WHERE id = ?');
-4 |   const insert = database.prepare(`INSERT INTO lessons
-5 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes)
-6 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes)`);
-7 |   const create = database.transaction(lesson => {
-8 |     const result = insert.run(lesson);
-9 |     return find.get(result.lastInsertRowid);
-10 |   });
-11 |   const update = database.transaction((id, lesson) => {
-12 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id').run({ ...lesson, id });
-13 |     return result.changes ? find.get(id) : null;
-14 |   });
-15 |   const remove = id => database.prepare('DELETE FROM lessons WHERE id=?').run(id).changes > 0;
-16 |   return { list: () => list.all(), create, update, remove };
-17 | }
-18 |
-19 | export function prismaLessons(client) {
-20 |   const serialize = row => ({ ...row, created_at: row.created_at.toISOString() });
-21 |   return {
-22 |     list: async () => (await client.lesson.findMany({ orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
-23 |     create: async lesson => serialize(await client.lesson.create({ data: lesson })),
-24 |     update: async (id, lesson) => {
-25 |       try { return serialize(await client.lesson.update({ where: { id }, data: lesson })); }
+1 | export class MediaReferenceError extends Error {}
+2 |
+3 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
+4 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
+5 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
+6 |
+7 | export function sqliteLessons(database) {
+8 |   database.pragma('foreign_keys = ON');
+9 |   const list = database.prepare('SELECT * FROM lessons ORDER BY created_at DESC, id DESC');
+10 |   const find = database.prepare('SELECT * FROM lessons WHERE id = ?');
+11 |   const insert = database.prepare(`INSERT INTO lessons
+12 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes)
+13 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes)`);
+14 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
+15 |   const findMedia = database.prepare('SELECT id, lesson_id FROM lesson_media WHERE id = ?');
+16 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
+17 |   const addLink = database.prepare(`INSERT INTO lesson_media (lesson_id, position, kind, origin, url, title, activity, credit, source_page)
+18 |     VALUES (@lessonId, @position, @kind, @origin, @url, @title, @activity, @credit, @source_page)`);
+19 |   const dropMedia = database.prepare('DELETE FROM lesson_media WHERE id = ?');
+20 |   function attach(lessonId, items) {
+21 |     const before = attachedIds.all(lessonId).map(row => row.id);
+22 |     const keep = new Set();
+23 |     items.forEach((item, position) => {
+24 |       if (item.id) {
+25 |         const row = findMedia.get(item.id);
 ```
 
-- **Line 1:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
-- **Line 2:** Prepares a newest-first select with ID as a tie-breaker; preparing separates SQL structure from later values.
-- **Line 3:** Prepares lookup of a single row by a bound ID placeholder, avoiding SQL interpolation.
-- **Line 4:** Begins a multiline template string defining the parameterized INSERT command.
-- **Line 5:** Lists the seven editable columns; ID and creation timestamp are supplied by database defaults.
-- **Line 6:** Uses named bound placeholders for each editable value and closes the SQL template and prepare call.
-- **Line 7:** Wraps insert and readback in one SQLite transaction so they complete together.
-- **Line 8:** Runs the prepared insert with the validated lesson values and records SQLite's insertion result.
-- **Line 9:** Reads back the new row using its database-assigned ID, including the generated timestamp.
-- **Line 10:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 11:** Starts a SQLite transaction that updates a specific ID and returns the stored row.
-- **Line 12:** Binds all seven editable values and the ID into UPDATE. The WHERE clause limits it to one row; ID and created_at are not assigned and therefore stay unchanged.
-- **Line 13:** Returns the read-back updated row when a row matched; otherwise returns null for Express's 404 handling.
-- **Line 14:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 15:** Uses a bound ID in DELETE and returns whether a row was affected; it never interpolates user text into SQL.
-- **Line 16:** Exposes the four store operations as object methods; list executes its prepared statement when called.
-- **Line 17:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 18:** Blank line separating related statements; it has no runtime effect.
-- **Line 19:** Builds the PostgreSQL-backed store from the guarded Prisma client.
-- **Line 20:** Copies each row and converts Prisma's Date object to a UTC ISO timestamp, preserving the API's text timestamp type.
-- **Line 21:** Starts the returned object containing the store methods; each following property supplies one operation.
-- **Line 22:** Awaits a newest-first Prisma query, then maps every row through timestamp serialization.
-- **Line 23:** Awaits a Prisma insert of validated data and serializes the returned row. Prisma binds values as parameters.
-- **Line 24:** Begins the asynchronous Prisma update method with a numeric ID and validated editable lesson.
-- **Line 25:** Updates exactly the row selected by id, then returns its serialized result. No ID or creation timestamp is included in data.
+- **Line 1:** Defines MediaReferenceError, thrown when a lesson refers to an attachment that does not exist or belongs to another lesson; the API turns it into a 400 message.
+- **Line 2:** Blank line separating related statements; it has no runtime effect.
+- **Line 3:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
+- **Line 4:** The same list in Prisma’s select format.
+- **Line 5:** Creates the standard error for a missing attachment.
+- **Line 6:** Blank line separating related statements; it has no runtime effect.
+- **Line 7:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
+- **Line 8:** Turns on SQLite foreign key enforcement for this connection (it is off by default), so the attachments table’s link to lessons is checked.
+- **Line 9:** Prepares a newest-first select with ID as a tie-breaker; preparing separates SQL structure from later values.
+- **Line 10:** Prepares lookup of a single row by a bound ID placeholder, avoiding SQL interpolation.
+- **Line 11:** Begins a multiline template string defining the parameterized INSERT command.
+- **Line 12:** Lists the seven editable columns; ID and creation timestamp are supplied by database defaults.
+- **Line 13:** Uses named bound placeholders for each editable value and closes the SQL template and prepare call.
+- **Line 14:** Prepared query: the ids already attached to a lesson.
+- **Line 15:** Prepared query: finds an attachment and the lesson it belongs to.
+- **Line 16:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
+- **Line 17:** Prepared insert for a new link attachment, listing the columns.
+- **Line 18:** The matching named values (the @ names are filled safely by the database driver, never by joining text).
+- **Line 19:** Prepared delete of one attachment.
+- **Line 20:** Defines attach: makes a lesson’s attachments equal the given list. It always runs inside a transaction.
+- **Line 21:** Remembers which attachments the lesson had before.
+- **Line 22:** Will hold the ids that stay.
+- **Line 23:** Goes through the new list with each item’s position.
+- **Line 24:** An item with an id is an existing attachment.
+- **Line 25:** Looks it up.
 
-### Lines 26–30
+### Lines 26–50
 
 ```text
-26 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
-27 |     },
-28 |     remove: async id => (await client.lesson.deleteMany({ where: { id } })).count > 0,
-29 |   };
-30 | }
+26 |         if (!row || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+27 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
+28 |         keep.add(item.id);
+29 |       } else {
+30 |         keep.add(Number(addLink.run({ lessonId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
+31 |       }
+32 |     });
+33 |     for (const id of before) if (!keep.has(id)) dropMedia.run(id);
+34 |   }
+35 |   const create = database.transaction((lesson, media) => {
+36 |     const result = insert.run(lesson);
+37 |     if (media) attach(Number(result.lastInsertRowid), media);
+38 |     return find.get(result.lastInsertRowid);
+39 |   });
+40 |   const update = database.transaction((id, lesson, media) => {
+41 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id').run({ ...lesson, id });
+42 |     if (!result.changes) return null;
+43 |     if (media) attach(id, media);
+44 |     return find.get(id);
+45 |   });
+46 |   const remove = database.transaction(id => {
+47 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
+48 |     return database.prepare('DELETE FROM lessons WHERE id=?').run(id).changes > 0;
+49 |   });
+50 |   const media = {
 ```
 
-- **Line 26:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
-- **Line 27:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 28:** Deletes only rows matching the unique numeric ID and returns whether the affected count exceeds zero.
-- **Line 29:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 30:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 26:** It must exist and either be unattached (a fresh upload) or already belong to this lesson; otherwise the whole save is cancelled.
+- **Line 27:** Attaches it and updates its caption, activity and position.
+- **Line 28:** Remembers to keep it.
+- **Line 29:** Otherwise it is a new link.
+- **Line 30:** Inserts the link row (empty credit and source page are stored appropriately) and remembers its new id.
+- **Line 31:** Closes the preceding block (function, object, or statement body).
+- **Line 32:** Closes the callback body and the function call that received it.
+- **Line 33:** Deletes attachments that were attached before but are not in the new list.
+- **Line 34:** Closes the preceding block (function, object, or statement body).
+- **Line 35:** Create now accepts an optional media list as well, in the same transaction as the lesson.
+- **Line 36:** Runs the prepared insert with the validated lesson values and records SQLite's insertion result.
+- **Line 37:** If a list was given (even an empty one), attaches it to the new lesson’s id.
+- **Line 38:** Reads back the new row using its database-assigned ID, including the generated timestamp.
+- **Line 39:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 40:** Update also accepts the optional media list.
+- **Line 41:** Binds all seven editable values and the ID into UPDATE. The WHERE clause limits it to one row; ID and created_at are not assigned and therefore stay unchanged.
+- **Line 42:** If no row matched, returns null (lesson not found) without touching media.
+- **Line 43:** If a list was given, makes the lesson’s attachments match it. When no list is given, existing attachments are left alone.
+- **Line 44:** Returns the updated lesson.
+- **Line 45:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 46:** Delete is now a transaction too.
+- **Line 47:** Deletes the lesson’s attachments first.
+- **Line 48:** Then deletes the lesson and reports whether one existed.
+- **Line 49:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 50:** Starts the media functions exposed to the API.
 
+### Lines 51–75
+
+```text
+51 |     list: () => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(),
+52 |     addUpload: ({ kind, mime, title, data }) => {
+53 |       const id = database.prepare('INSERT INTO lesson_media (kind, origin, title, mime, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?)').run(kind, 'upload', title, mime, data.length, data).lastInsertRowid;
+54 |       return database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE id = ?`).get(id);
+55 |     },
+56 |     getFile: id => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND origin = 'upload'").get(id) || null,
+57 |     removeOrphan: id => database.prepare("DELETE FROM lesson_media WHERE id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id).changes > 0,
+58 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
+59 |   };
+60 |   return { list: () => list.all(), create, update, remove, media };
+61 | }
+62 |
+63 | export function prismaLessons(client) {
+64 |   const serialize = row => ({ ...row, created_at: row.created_at.toISOString() });
+65 |   const serializeMedia = row => ({ ...row, created_at: row.created_at.toISOString() });
+66 |   async function attach(tx, lessonId, items) {
+67 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
+68 |     const keep = new Set();
+69 |     for (const [position, item] of items.entries()) {
+70 |       if (item.id) {
+71 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true } });
+72 |         if (!row || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+73 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
+74 |         keep.add(item.id);
+75 |       } else {
+```
+
+- **Line 51:** Lists attachments of saved lessons only (unsaved uploads are hidden), ordered by lesson and position.
+- **Line 52:** Stores a new uploaded file that does not belong to a lesson yet.
+- **Line 53:** Inserts the file bytes and details and remembers the new id.
+- **Line 54:** Returns the new row without its bytes.
+- **Line 55:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 56:** Fetches an uploaded file’s type and bytes for downloading, or null.
+- **Line 57:** Deletes an upload only if it is still unattached.
+- **Line 58:** Deletes unattached uploads older than the given age and reports how many.
+- **Line 59:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 60:** Returns the store with its original functions plus the new media group.
+- **Line 61:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 62:** Blank line separating related statements; it has no runtime effect.
+- **Line 63:** Builds the PostgreSQL-backed store from the guarded Prisma client.
+- **Line 64:** Copies each row and converts Prisma's Date object to a UTC ISO timestamp, preserving the API's text timestamp type.
+- **Line 65:** Converts a media row’s timestamp to text, like lessons.
+- **Line 66:** Prisma version of attach; it receives the transaction object tx so all queries commit or roll back together.
+- **Line 67:** Remembers the lesson’s current attachments.
+- **Line 68:** Will hold the ids that stay.
+- **Line 69:** Goes through the new list with positions.
+- **Line 70:** An item with an id is an existing attachment.
+- **Line 71:** Looks it up.
+- **Line 72:** It must exist and be unattached or belong to this lesson.
+- **Line 73:** Attaches it and updates caption, activity and position.
+- **Line 74:** Remembers to keep it.
+- **Line 75:** Otherwise it is a new link.
+
+### Lines 76–100
+
+```text
+76 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
+77 |         keep.add(created.id);
+78 |       }
+79 |     }
+80 |     const stale = before.filter(id => !keep.has(id));
+81 |     if (stale.length) await tx.lessonMedia.deleteMany({ where: { id: { in: stale } } });
+82 |   }
+83 |   const transaction = work => client.$transaction(work, { timeout: 30000, maxWait: 10000 });
+84 |   return {
+85 |     list: async () => (await client.lesson.findMany({ orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
+86 |     create: (lesson, media) => transaction(async tx => {
+87 |       const created = await tx.lesson.create({ data: lesson });
+88 |       if (media) await attach(tx, created.id, media);
+89 |       return serialize(created);
+90 |     }),
+91 |     update: (id, lesson, media) => transaction(async tx => {
+92 |       let updated;
+93 |       try { updated = await tx.lesson.update({ where: { id }, data: lesson }); }
+94 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
+95 |       if (media) await attach(tx, id, media);
+96 |       return serialize(updated);
+97 |     }),
+98 |     remove: async id => (await client.lesson.deleteMany({ where: { id } })).count > 0,
+99 |     media: {
+100 |       list: async () => (await client.lessonMedia.findMany({ where: { lesson_id: { not: null } }, orderBy: [{ lesson_id: 'asc' }, { position: 'asc' }, { id: 'asc' }], select: publicSelect })).map(serializeMedia),
+```
+
+- **Line 76:** Creates the link row.
+- **Line 77:** Remembers its id.
+- **Line 78:** Closes the preceding block (function, object, or statement body).
+- **Line 79:** Closes the preceding block (function, object, or statement body).
+- **Line 80:** Works out which previous attachments are no longer wanted.
+- **Line 81:** Deletes them if there are any.
+- **Line 82:** Closes the preceding block (function, object, or statement body).
+- **Line 83:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
+- **Line 84:** Starts the returned object containing the store methods; each following property supplies one operation.
+- **Line 85:** Awaits a newest-first Prisma query, then maps every row through timestamp serialization.
+- **Line 86:** Create now runs inside a transaction and accepts the optional media list.
+- **Line 87:** Creates the lesson.
+- **Line 88:** Attaches media if a list was given.
+- **Line 89:** Returns the lesson in the API format.
+- **Line 90:** Ends the transaction callback.
+- **Line 91:** Update also runs inside a transaction with the optional media list.
+- **Line 92:** Will hold the updated lesson.
+- **Line 93:** Updates the lesson; the next line turns “record not found” (code P2025) into null.
+- **Line 94:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
+- **Line 95:** Makes attachments match the list when one was given.
+- **Line 96:** Returns the updated lesson.
+- **Line 97:** Ends the transaction callback.
+- **Line 98:** Deletes only rows matching the unique numeric ID and returns whether the affected count exceeds zero.
+- **Line 99:** Starts the media functions for the PostgreSQL store.
+- **Line 100:** Lists attachments of saved lessons in order, selecting only the public columns.
+
+### Lines 101–110
+
+```text
+101 |       addUpload: async ({ kind, mime, title, data }) => serializeMedia(await client.lessonMedia.create({ data: { kind, origin: 'upload', title, mime, size_bytes: data.length, data }, select: publicSelect })),
+102 |       getFile: async id => {
+103 |         const row = await client.lessonMedia.findFirst({ where: { id, origin: 'upload' }, select: { mime: true, data: true } });
+104 |         return row ? { mime: row.mime, data: Buffer.from(row.data) } : null;
+105 |       },
+106 |       removeOrphan: async id => (await client.lessonMedia.deleteMany({ where: { id, lesson_id: null, origin: 'upload' } })).count > 0,
+107 |       purgeOrphans: async maxAgeMs => (await client.lessonMedia.deleteMany({ where: { lesson_id: null, created_at: { lt: new Date(Date.now() - maxAgeMs) } } })).count,
+108 |     },
+109 |   };
+110 | }
+```
+
+- **Line 101:** Stores a new upload with its bytes and returns its details without them.
+- **Line 102:** Fetches an uploaded file.
+- **Line 103:** Reads only the type and bytes of the upload.
+- **Line 104:** Returns them with the bytes as a Buffer, or null when it does not exist.
+- **Line 105:** Closes the object or block and continues the surrounding list.
+- **Line 106:** Deletes an upload only if it is unattached.
+- **Line 107:** Deletes unattached uploads older than a given age.
+- **Line 108:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 109:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 110:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/lesson-ui.test.js
 
@@ -3880,26 +4623,26 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 3 | import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 4 | import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 5 | import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
-6 |
-7 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
-8 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
-9 |   const items = activityBlocks(original);
-10 |   assert.equal(items.join('\n\n'), original);
-11 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
-12 |   assert.deepEqual(moveActivity(items, 0, -1), items);
-13 |   assert.deepEqual(items, activityBlocks(original));
-14 |   assert.deepEqual(activityBlocks(''), []);
-15 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
-16 | });
-17 |
-18 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
-19 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
-20 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
-21 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
-22 |   assert.equal(activityMinutes(''), 0);
-23 | });
-24 |
-25 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
+6 | import { groupMedia, headingOf } from '../client/src/media.js';
+7 |
+8 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
+9 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
+10 |   const items = activityBlocks(original);
+11 |   assert.equal(items.join('\n\n'), original);
+12 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
+13 |   assert.deepEqual(moveActivity(items, 0, -1), items);
+14 |   assert.deepEqual(items, activityBlocks(original));
+15 |   assert.deepEqual(activityBlocks(''), []);
+16 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
+17 | });
+18 |
+19 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
+20 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
+21 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
+22 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
+23 |   assert.equal(activityMinutes(''), 0);
+24 | });
+25 |
 ```
 
 - **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
@@ -3907,56 +4650,76 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 - **Line 3:** Imports the two new helpers beside the existing ones so the tests can exercise them.
 - **Line 4:** Imports { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 5:** Imports { disciplines, validateRequest } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 6:** Blank line separating related statements; it has no runtime effect.
-- **Line 7:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 8:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
-- **Line 9:** Parses that synthetic text into activity blocks for testing.
-- **Line 10:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 11:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 12:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 16:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 17:** Blank line separating related statements; it has no runtime effect.
-- **Line 18:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
-- **Line 19:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
-- **Line 20:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
-- **Line 21:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
-- **Line 22:** Checks that empty text adds up to zero.
-- **Line 23:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 24:** Blank line separating related statements; it has no runtime effect.
-- **Line 25:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 6:** Imports groupMedia and headingOf, the helpers that decide which attachment appears under which activity.
+- **Line 7:** Blank line separating related statements; it has no runtime effect.
+- **Line 8:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 9:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
+- **Line 10:** Parses that synthetic text into activity blocks for testing.
+- **Line 11:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 12:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 17:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 18:** Blank line separating related statements; it has no runtime effect.
+- **Line 19:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
+- **Line 20:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
+- **Line 21:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
+- **Line 22:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
+- **Line 23:** Checks that empty text adds up to zero.
+- **Line 24:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 25:** Blank line separating related statements; it has no runtime effect.
 
-### Lines 26–37
+### Lines 26–47
 
 ```text
-26 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
-27 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-28 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
-29 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
-30 | });
-31 |
-32 | test('media matches both discipline and technique with an empty safe fallback', () => {
-33 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
-34 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
-35 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
-36 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
-37 | });
+26 | test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
+27 |   const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
+28 |   assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
+29 |   const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
+30 |   const { byBlock, rest } = groupMedia(media, blocks);
+31 |   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
+32 |   assert.deepEqual(rest.map(item => item.id), [3, 4]);
+33 | });
+34 |
+35 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
+36 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
+37 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
+38 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
+39 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
+40 | });
+41 |
+42 | test('media matches both discipline and technique with an empty safe fallback', () => {
+43 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
+44 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
+45 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
+46 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+47 | });
 ```
 
-- **Line 26:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
-- **Line 27:** Checks every supported discipline accepts the minimal request without a validation error.
-- **Line 28:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 29:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 30:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 31:** Blank line separating related statements; it has no runtime effect.
-- **Line 32:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 33:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
-- **Line 34:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 35:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 36:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
-- **Line 37:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 26:** Registers a test of the grouping rule: each attachment goes under the first activity with a matching heading, and the rest are collected separately.
+- **Line 27:** Builds three activity blocks from text; the second and third share the heading “Drill — 10 minutes”.
+- **Line 28:** Checks that headingOf reads the first line of a block.
+- **Line 29:** Defines five sample attachments: two for the duplicated drill heading, one for the warm-up, one for the whole lesson (empty activity) and one for an activity that no longer exists.
+- **Line 30:** Runs the grouping function.
+- **Line 31:** Checks that attachments 1 and 5 both appear under block index 1 (the first “Drill” block, never the duplicate) and attachment 2 under block 0.
+- **Line 32:** Checks that the whole-lesson and orphaned attachments (3 and 4) are returned as the rest, so no attachment is lost.
+- **Line 33:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 34:** Blank line separating related statements; it has no runtime effect.
+- **Line 35:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 36:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
+- **Line 37:** Checks every supported discipline accepts the minimal request without a validation error.
+- **Line 38:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 39:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 41:** Blank line separating related statements; it has no runtime effect.
+- **Line 42:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 43:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
+- **Line 44:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 45:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 46:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
+- **Line 47:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/postgres-api.test.js
 
@@ -3971,241 +4734,2289 @@ Opt-in live Development test. Fresh independent Console verification is required
 2 | import assert from 'node:assert/strict';
 3 | import { once } from 'node:events';
 4 | import { randomUUID } from 'node:crypto';
-5 | import { readFileSync } from 'node:fs';
-6 | import pg from 'pg';
-7 | import { createApp } from './app.js';
-8 | import { prismaLessons } from './lesson-store.js';
-9 | import { createDevelopmentClient } from './prisma-development.js';
-10 | import { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js';
-11 |
-12 | export const mockDraft = { title: 'Integration draft', objectives: 'Practice controlled movement.', ...Object.fromEntries(details.map(key => [key, 'Mock guidance for integration testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: 'Demonstrate, then practice under supervision.' })) };
-13 |
-14 | test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures', { skip: process.env.COACHLAB_RUN_POSTGRES_TESTS !== 'verified-development', timeout: 120000 }, async t => {
-15 |   const env = process.env;
-16 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
-17 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
-18 |   const schema = 'coachlab_test_' + randomUUID().replaceAll('-', '');
-19 |   let client = createDevelopmentClient(env, schema);
-20 |   let direct;
-21 |   try { direct = new URL(env.COACHLAB_DEV_DIRECT_URL); } catch { throw new Error('Invalid direct configuration.'); }
-22 |   assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));
-23 |   assert.equal(direct.pathname, '/neondb');
-24 |   assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));
-25 |   direct.search = '';
+5 | import { readFileSync, readdirSync } from 'node:fs';
+6 | import { png } from './media-fixtures.js';
+7 | import pg from 'pg';
+8 | import { createApp } from './app.js';
+9 | import { prismaLessons } from './lesson-store.js';
+10 | import { createDevelopmentClient } from './prisma-development.js';
+11 | import { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js';
+12 |
+13 | export const mockDraft = { title: 'Integration draft', objectives: 'Practice controlled movement.', ...Object.fromEntries(details.map(key => [key, 'Mock guidance for integration testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: 'Demonstrate, then practice under supervision.' })) };
+14 |
+15 | test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures', { skip: process.env.COACHLAB_RUN_POSTGRES_TESTS !== 'verified-development', timeout: 120000 }, async t => {
+16 |   const env = process.env;
+17 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
+18 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
+19 |   const schema = 'coachlab_test_' + randomUUID().replaceAll('-', '');
+20 |   let client = createDevelopmentClient(env, schema);
+21 |   let direct;
+22 |   try { direct = new URL(env.COACHLAB_DEV_DIRECT_URL); } catch { throw new Error('Invalid direct configuration.'); }
+23 |   assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));
+24 |   assert.equal(direct.pathname, '/neondb');
+25 |   assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));
 ```
 
 - **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 2:** Imports assert from 'node:assert/strict'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 3:** Imports { once } from 'node:events'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 4:** Imports { randomUUID } from 'node:crypto'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 5:** Imports { readFileSync } from 'node:fs'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 6:** Imports pg from 'pg'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 7:** Imports { createApp } from './app.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 8:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 9:** Imports { createDevelopmentClient } from './prisma-development.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 10:** Imports { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 11:** Blank line separating related statements; it has no runtime effect.
-- **Line 12:** Exports deterministic synthetic guidance and five 12-minute sections for repeatable tests. Object.fromEntries builds guidance fields and structuredClone later prevents shared mutation; no real provider is called.
-- **Line 13:** Blank line separating related statements; it has no runtime effect.
-- **Line 14:** Registers this named test with Node: PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 15:** Reads server environment settings without printing private values.
-- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 18:** Creates a unique test schema name using a random UUID stripped of hyphens; its characters meet the factory's strict allowlist.
-- **Line 19:** Constructs a client targeting that random schema explicitly, never implicitly public.
-- **Line 20:** Declares a variable for the parsed private direct connection URL.
-- **Line 21:** Parses the direct URL and replaces URL-parser exceptions with a generic configuration error to avoid printing credentials.
-- **Line 22:** Checks the stated expectation using Node strict assertions: `assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 23:** Checks the stated expectation using Node strict assertions: `assert.equal(direct.pathname, '/neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 24:** Checks the stated expectation using Node strict assertions: `assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 25:** Removes URL query options after validation so the explicit TLS driver options control encryption.
+- **Line 5:** Imports readdirSync as well so the test can find every migration folder.
+- **Line 6:** Imports the fake PNG for the media checks.
+- **Line 7:** Imports pg from 'pg'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 8:** Imports { createApp } from './app.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 9:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 10:** Imports { createDevelopmentClient } from './prisma-development.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 11:** Imports { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 12:** Blank line separating related statements; it has no runtime effect.
+- **Line 13:** Exports deterministic synthetic guidance and five 12-minute sections for repeatable tests. Object.fromEntries builds guidance fields and structuredClone later prevents shared mutation; no real provider is called.
+- **Line 14:** Blank line separating related statements; it has no runtime effect.
+- **Line 15:** Registers this named test with Node: PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 16:** Reads server environment settings without printing private values.
+- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 18:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 19:** Creates a unique test schema name using a random UUID stripped of hyphens; its characters meet the factory's strict allowlist.
+- **Line 20:** Constructs a client targeting that random schema explicitly, never implicitly public.
+- **Line 21:** Declares a variable for the parsed private direct connection URL.
+- **Line 22:** Parses the direct URL and replaces URL-parser exceptions with a generic configuration error to avoid printing credentials.
+- **Line 23:** Checks the stated expectation using Node strict assertions: `assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 24:** Checks the stated expectation using Node strict assertions: `assert.equal(direct.pathname, '/neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 25:** Checks the stated expectation using Node strict assertions: `assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 
 ### Lines 26–50
 
 ```text
-26 |   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
-27 |   let server, url, created = false;
-28 |   const stop = async () => {
-29 |     if (server?.listening) await new Promise(resolve => server.close(resolve));
-30 |     await client.$disconnect();
-31 |   };
-32 |   const start = async () => {
-33 |     client = createDevelopmentClient(env, schema);
-34 |     server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft) }).listen(0, '127.0.0.1');
-35 |     await once(server, 'listening');
-36 |     url = `http://127.0.0.1:${server.address().port}`;
-37 |   };
-38 |   const get = async () => (await fetch(url + '/api/lessons')).json();
-39 |   const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-40 |   try {
-41 |     await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));
-42 |     await client.$disconnect();
-43 |     await admin.connect();
-44 |     assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');
-45 |     const before = JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows);
-46 |     await admin.query(`CREATE SCHEMA "${schema}"`);
-47 |     created = true;
-48 |     await admin.query('BEGIN');
-49 |     await admin.query(`SET LOCAL search_path TO "${schema}"`);
-50 |     const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
+26 |   direct.search = '';
+27 |   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
+28 |   let server, url, created = false;
+29 |   const stop = async () => {
+30 |     if (server?.listening) await new Promise(resolve => server.close(resolve));
+31 |     await client.$disconnect();
+32 |   };
+33 |   const start = async () => {
+34 |     client = createDevelopmentClient(env, schema);
+35 |     server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
+36 |     await once(server, 'listening');
+37 |     url = `http://127.0.0.1:${server.address().port}`;
+38 |   };
+39 |   const get = async () => (await fetch(url + '/api/lessons')).json();
+40 |   const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+41 |   try {
+42 |     await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));
+43 |     await client.$disconnect();
+44 |     await admin.connect();
+45 |     assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');
+46 |     const before = JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows);
+47 |     await admin.query(`CREATE SCHEMA "${schema}"`);
+48 |     created = true;
+49 |     await admin.query('BEGIN');
+50 |     await admin.query(`SET LOCAL search_path TO "${schema}"`);
 ```
 
-- **Line 26:** Creates a direct PostgreSQL connection for isolated schema setup/cleanup with certificate validation and bounded connection/query times.
-- **Line 27:** Tracks the test server, its local address, and whether this test actually created its disposable schema.
-- **Line 28:** Defines cleanup for the test HTTP server and Prisma client.
-- **Line 29:** Only closes an existing listening server, awaiting its close callback through a Promise; optional chaining handles an unset server.
-- **Line 30:** Waits for Prisma's pool to close before recreation or cleanup.
-- **Line 31:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 32:** Defines a helper to start a fresh test client and HTTP server against the same committed test data.
-- **Line 33:** Recreates the Prisma client using the same isolated schema after a stop.
-- **Line 34:** Starts Express with the isolated store and deterministic mock AI provider on an OS-assigned local-only port; cloned drafts cannot mutate the shared fixture.
-- **Line 35:** Waits for the listener-ready event before sending HTTP requests.
-- **Line 36:** Builds the loopback HTTP address using the actual port allocated by the operating system.
-- **Line 37:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 38:** Defines a helper to fetch and decode the lesson list from the test server.
-- **Line 39:** Defines a JSON POST helper for either lesson creation or the AI draft route.
-- **Line 40:** Starts a guarded block whose failures are handled by the following catch or finally clause.
-- **Line 41:** Checks the stated expectation using Node strict assertions: `await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 42:** Waits for Prisma's pool to close before recreation or cleanup.
-- **Line 43:** Authenticates the direct database connection before any schema operation.
-- **Line 44:** Checks the stated expectation using Node strict assertions: `assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 45:** Takes an in-memory ordered snapshot of real public lessons for later unchanged-data verification; contents are not printed.
-- **Line 46:** Creates only the randomly named schema after target and isolation checks. Interpolation is safe here because the generated identifier has been strictly constrained.
-- **Line 47:** Records successful creation so cleanup only drops a schema this test owns.
-- **Line 48:** Starts a transaction for the disposable schema's table setup.
-- **Line 49:** Restricts unqualified SQL in this transaction to the random test schema.
-- **Line 50:** Reads the reviewed versioned migration from its exact repository-relative URL; this does not run migrations against public.
+- **Line 26:** Removes URL query options after validation so the explicit TLS driver options control encryption.
+- **Line 27:** Creates a direct PostgreSQL connection for isolated schema setup/cleanup with certificate validation and bounded connection/query times.
+- **Line 28:** Tracks the test server, its local address, and whether this test actually created its disposable schema.
+- **Line 29:** Defines cleanup for the test HTTP server and Prisma client.
+- **Line 30:** Only closes an existing listening server, awaiting its close callback through a Promise; optional chaining handles an unset server.
+- **Line 31:** Waits for Prisma's pool to close before recreation or cleanup.
+- **Line 32:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 33:** Defines a helper to start a fresh test client and HTTP server against the same committed test data.
+- **Line 34:** Recreates the Prisma client using the same isolated schema after a stop.
+- **Line 35:** The test server now receives a fake link verifier next to the mock AI, so the media checks need no internet.
+- **Line 36:** Waits for the listener-ready event before sending HTTP requests.
+- **Line 37:** Builds the loopback HTTP address using the actual port allocated by the operating system.
+- **Line 38:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 39:** Defines a helper to fetch and decode the lesson list from the test server.
+- **Line 40:** Defines a JSON POST helper for either lesson creation or the AI draft route.
+- **Line 41:** Starts a guarded block whose failures are handled by the following catch or finally clause.
+- **Line 42:** Checks the stated expectation using Node strict assertions: `await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 43:** Waits for Prisma's pool to close before recreation or cleanup.
+- **Line 44:** Authenticates the direct database connection before any schema operation.
+- **Line 45:** Checks the stated expectation using Node strict assertions: `assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 46:** Takes an in-memory ordered snapshot of real public lessons for later unchanged-data verification; contents are not printed.
+- **Line 47:** Creates only the randomly named schema after target and isolation checks. Interpolation is safe here because the generated identifier has been strictly constrained.
+- **Line 48:** Records successful creation so cleanup only drops a schema this test owns.
+- **Line 49:** Starts a transaction for the disposable schema's table setup.
+- **Line 50:** Restricts unqualified SQL in this transaction to the random test schema.
 
 ### Lines 51–75
 
 ```text
-51 |     await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
-52 |     await admin.query('COMMIT');
-53 |     await start();
-54 |     assert.deepEqual(await get(), []);
-55 |     for (const discipline of disciplines) {
-56 |       const response = await post('/api/lessons', { title: `Integration ${discipline}`, discipline });
-57 |       assert.equal(response.status, 201);
-58 |       const saved = await response.json();
-59 |       assert.ok(Number.isInteger(saved.id));
-60 |       assert.equal(saved.created_at, new Date(saved.created_at).toISOString());
-61 |       assert.equal(saved.discipline, discipline);
-62 |     }
-63 |     const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Controlled practice', techniques: 'Basic positions', equipment: 'Mats', privacy_confirmed: true };
-64 |     const generated = await post('/api/ai/lesson-draft', request);
-65 |     assert.equal(generated.status, 200);
-66 |     const draft = (await generated.json()).draft;
-67 |     assert.equal((await get()).length, 6);
-68 |     draft.objectives = 'Edited and approved integration objective.';
-69 |     const approved = toLesson(draft, request);
-70 |     const savedResponse = await post('/api/lessons', approved);
-71 |     assert.equal(savedResponse.status, 201);
-72 |     const saved = await savedResponse.json();
-73 |     assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });
-74 |     const changed = { ...approved, title: 'Updated integration lesson', drills: 'Reordered activity two\n\nActivity one' };
-75 |     const update = await fetch(url + '/api/lessons/' + saved.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
+51 |     for (const name of readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
+52 |       const sql = readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8');
+53 |       await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+54 |     }
+55 |     await admin.query('COMMIT');
+56 |     await start();
+57 |     assert.deepEqual(await get(), []);
+58 |     for (const discipline of disciplines) {
+59 |       const response = await post('/api/lessons', { title: `Integration ${discipline}`, discipline });
+60 |       assert.equal(response.status, 201);
+61 |       const saved = await response.json();
+62 |       assert.ok(Number.isInteger(saved.id));
+63 |       assert.equal(saved.created_at, new Date(saved.created_at).toISOString());
+64 |       assert.equal(saved.discipline, discipline);
+65 |     }
+66 |     const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Controlled practice', techniques: 'Basic positions', equipment: 'Mats', privacy_confirmed: true };
+67 |     const generated = await post('/api/ai/lesson-draft', request);
+68 |     assert.equal(generated.status, 200);
+69 |     const draft = (await generated.json()).draft;
+70 |     assert.equal((await get()).length, 6);
+71 |     draft.objectives = 'Edited and approved integration objective.';
+72 |     const approved = toLesson(draft, request);
+73 |     const savedResponse = await post('/api/lessons', approved);
+74 |     assert.equal(savedResponse.status, 201);
+75 |     const saved = await savedResponse.json();
 ```
 
-- **Line 51:** Removes the migration's outer BEGIN/COMMIT wrappers and runs its table SQL inside this test's own transaction and schema.
-- **Line 52:** Commits isolated table setup so separate pooled application connections can see the test table.
-- **Line 53:** Starts the local test API with a fresh Prisma pool and the committed test schema.
-- **Line 54:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 55:** Loops through all six supported disciplines for real PostgreSQL creation tests.
-- **Line 56:** Creates a synthetic lesson for the current discipline through the actual API, rather than inserting behind the API.
-- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 58:** Decodes the server-confirmed saved row for identity, timestamp and discipline assertions.
-- **Line 59:** Checks the stated expectation using Node strict assertions: `assert.ok(Number.isInteger(saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 60:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.created_at, new Date(saved.created_at).toISOString());`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 61:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.discipline, discipline);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 62:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 63:** Defines generic BJJ parameters for mocked draft generation; no personal athlete data is used.
-- **Line 64:** Calls the actual AI route with the injected test provider.
-- **Line 65:** Checks the stated expectation using Node strict assertions: `assert.equal(generated.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 66:** Extracts the validated draft returned by the server; subsequent assertions check generation has not saved a record.
-- **Line 67:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 68:** Simulates a coach editing a draft before approval and persistence.
-- **Line 69:** Maps the edited draft into the existing seven editable lesson fields, exactly as the browser does after approval.
-- **Line 70:** Saves that approved synthetic lesson through the existing creation API.
-- **Line 71:** Checks the stated expectation using Node strict assertions: `assert.equal(savedResponse.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 72:** Decodes the confirmed row for comparison with the approved payload and generated metadata.
-- **Line 73:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 74:** Copies the approved payload and modifies title and activity order to exercise an update without creating a new ID.
-- **Line 75:** Issues a JSON PUT for the saved ID and waits for the confirmed update response.
+- **Line 51:** Builds the disposable schema from every migration folder in name order, not only the first, so the media table exists in the test schema.
+- **Line 52:** Reads one migration file.
+- **Line 53:** Runs it without its own BEGIN and COMMIT, because the test already wraps all of them in one transaction scoped to the disposable schema.
+- **Line 54:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 55:** Commits isolated table setup so separate pooled application connections can see the test table.
+- **Line 56:** Starts the local test API with a fresh Prisma pool and the committed test schema.
+- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 58:** Loops through all six supported disciplines for real PostgreSQL creation tests.
+- **Line 59:** Creates a synthetic lesson for the current discipline through the actual API, rather than inserting behind the API.
+- **Line 60:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 61:** Decodes the server-confirmed saved row for identity, timestamp and discipline assertions.
+- **Line 62:** Checks the stated expectation using Node strict assertions: `assert.ok(Number.isInteger(saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 63:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.created_at, new Date(saved.created_at).toISOString());`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 64:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.discipline, discipline);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 65:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 66:** Defines generic BJJ parameters for mocked draft generation; no personal athlete data is used.
+- **Line 67:** Calls the actual AI route with the injected test provider.
+- **Line 68:** Checks the stated expectation using Node strict assertions: `assert.equal(generated.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 69:** Extracts the validated draft returned by the server; subsequent assertions check generation has not saved a record.
+- **Line 70:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 71:** Simulates a coach editing a draft before approval and persistence.
+- **Line 72:** Maps the edited draft into the existing seven editable lesson fields, exactly as the browser does after approval.
+- **Line 73:** Saves that approved synthetic lesson through the existing creation API.
+- **Line 74:** Checks the stated expectation using Node strict assertions: `assert.equal(savedResponse.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 75:** Decodes the confirmed row for comparison with the approved payload and generated metadata.
 
 ### Lines 76–100
 
 ```text
-76 |     assert.equal(update.status, 200);
-77 |     assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });
-78 |     const snapshot = await get();
-79 |     assert.equal(snapshot.length, 7);
-80 |     await stop();
-81 |     await start();
-82 |     assert.deepEqual(await get(), snapshot);
-83 |     assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);
-84 |     assert.equal((await get()).length, 7);
-85 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);
-86 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);
-87 |     await stop(); await start();
-88 |     assert.equal((await get()).length, 6);
-89 |     assert.ok(!(await get()).some(row => row.id === saved.id));
-90 |     await stop();
-91 |     server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }).listen(0, '127.0.0.1');
-92 |     await once(server, 'listening');
-93 |     url = `http://127.0.0.1:${server.address().port}`;
-94 |     for (const response of [await fetch(url + '/api/lessons'), await post('/api/lessons', { title: 'Failure probe', discipline: 'Boxing' })]) {
-95 |       assert.equal(response.status, 500);
-96 |       assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
-97 |     }
-98 |     assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);
-99 |     t.diagnostic('Six disciplines and mocked approval saved; committed rows survived server/client recreation; public table unchanged.');
-100 |   } catch (error) {
+76 |     assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });
+77 |     const changed = { ...approved, title: 'Updated integration lesson', drills: 'Reordered activity two\n\nActivity one' };
+78 |     const update = await fetch(url + '/api/lessons/' + saved.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
+79 |     assert.equal(update.status, 200);
+80 |     assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });
+81 |     const upload = await (await fetch(url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-File-Name': 'pg-test.png' }, body: png })).json();
+82 |     const withMedia = await post('/api/lessons', { ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Stored picture', activity: 'Activity one' }, { url: 'https://example.com/pic.png', title: 'Linked picture' }] });
+83 |     assert.equal(withMedia.status, 201);
+84 |     const mediaLesson = await withMedia.json();
+85 |     const mediaRows = async () => (await fetch(url + '/api/lesson-media')).json();
+86 |     assert.deepEqual((await mediaRows()).map(item => [item.origin, item.title, item.lesson_id]), [['upload', 'Stored picture', mediaLesson.id], ['link', 'Linked picture', mediaLesson.id]]);
+87 |     const snapshot = await get();
+88 |     assert.equal(snapshot.length, 8);
+89 |     await stop();
+90 |     await start();
+91 |     assert.deepEqual(await get(), snapshot);
+92 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Stored picture', 'Linked picture']);
+93 |     assert.deepEqual(Buffer.from(await (await fetch(`${url}/api/media/${upload.id}/file`)).arrayBuffer()), png);
+94 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`, { headers: { Range: 'bytes=0-3' } })).status, 206);
+95 |     const kept = await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Renamed picture', activity: '' }] }) });
+96 |     assert.equal(kept.status, 200);
+97 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Renamed picture']);
+98 |     assert.equal((await post('/api/lessons', { ...changed, media: [{ id: 99999999 }] })).status, 400);
+99 |     assert.equal((await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'DELETE' })).status, 204);
+100 |     assert.deepEqual(await mediaRows(), []);
 ```
 
-- **Line 76:** Checks the stated expectation using Node strict assertions: `assert.equal(update.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 77:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 78:** Captures all test rows before restarting the test server/client for persistence comparison.
-- **Line 79:** Checks the stated expectation using Node strict assertions: `assert.equal(snapshot.length, 7);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 80:** Stops the current test HTTP server and its Prisma pool.
-- **Line 81:** Starts the local test API with a fresh Prisma pool and the committed test schema.
-- **Line 82:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), snapshot);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 83:** Checks the stated expectation using Node strict assertions: `assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 84:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 7);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 85:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 86:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 87:** Closes and recreates server/client connections to verify committed changes survive recreation.
-- **Line 88:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 89:** Checks the stated expectation using Node strict assertions: `assert.ok(!(await get()).some(row => row.id === saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 90:** Stops the current test HTTP server and its Prisma pool.
-- **Line 91:** Starts a deliberately failing store with private-looking error text, so the API's safe error response can be checked without breaking a real database.
-- **Line 92:** Waits for the listener-ready event before sending HTTP requests.
-- **Line 93:** Builds the loopback HTTP address using the actual port allocated by the operating system.
-- **Line 94:** Exercises both read and create failure paths on that deliberately failing server.
-- **Line 95:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 500);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 96:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 97:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 98:** Checks the stated expectation using Node strict assertions: `assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 99:** Prints a concise successful-test explanation without credentials or lesson contents.
-- **Line 100:** Handles a thrown error using a local error variable rather than exposing it directly to callers.
+- **Line 76:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 77:** Copies the approved payload and modifies title and activity order to exercise an update without creating a new ID.
+- **Line 78:** Issues a JSON PUT for the saved ID and waits for the confirmed update response.
+- **Line 79:** Checks the stated expectation using Node strict assertions: `assert.equal(update.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 80:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 81:** Uploads a picture through the real API into the disposable PostgreSQL schema.
+- **Line 82:** Creates a lesson that attaches the upload and a new link.
+- **Line 83:** Expects 201.
+- **Line 84:** Reads the saved lesson.
+- **Line 85:** Helper that lists attachments.
+- **Line 86:** Checks both attachments with their origins, captions and lesson id.
+- **Line 87:** Captures all test rows before restarting the test server/client for persistence comparison.
+- **Line 88:** The lesson count is now eight because of the extra media lesson.
+- **Line 89:** Stops the current test HTTP server and its Prisma pool.
+- **Line 90:** Starts the local test API with a fresh Prisma pool and the committed test schema.
+- **Line 91:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), snapshot);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 92:** After the server and database client are recreated, both attachments are still there.
+- **Line 93:** The uploaded bytes come back identical from PostgreSQL.
+- **Line 94:** A byte-range request works against the PostgreSQL store.
+- **Line 95:** Updates the lesson keeping only the upload, renamed.
+- **Line 96:** Expects success.
+- **Line 97:** Only the renamed upload remains.
+- **Line 98:** A missing attachment id is refused with 400.
+- **Line 99:** Deletes the media lesson.
+- **Line 100:** Its attachments are removed too.
+
+### Lines 101–125
+
+```text
+101 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`)).status, 404);
+102 |     assert.equal((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".lesson_media`)).rows[0].n, 0);
+103 |     assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);
+104 |     assert.equal((await get()).length, 7);
+105 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);
+106 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);
+107 |     await stop(); await start();
+108 |     assert.equal((await get()).length, 6);
+109 |     assert.ok(!(await get()).some(row => row.id === saved.id));
+110 |     await stop();
+111 |     server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }).listen(0, '127.0.0.1');
+112 |     await once(server, 'listening');
+113 |     url = `http://127.0.0.1:${server.address().port}`;
+114 |     for (const response of [await fetch(url + '/api/lessons'), await post('/api/lessons', { title: 'Failure probe', discipline: 'Boxing' })]) {
+115 |       assert.equal(response.status, 500);
+116 |       assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
+117 |     }
+118 |     assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);
+119 |     t.diagnostic('Six disciplines and mocked approval saved; committed rows survived server/client recreation; public table unchanged.');
+120 |   } catch (error) {
+121 |     throw new Error('PostgreSQL integration failed: ' + (/^[A-Z0-9_]+$/.test(error.code || '') ? error.code : error.name));
+122 |   } finally {
+123 |     await stop();
+124 |     await admin.query('ROLLBACK').catch(() => {});
+125 |     if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+```
+
+- **Line 101:** The stored file is gone.
+- **Line 102:** Counts media rows directly in the disposable schema: none remain, proving the cascade.
+- **Line 103:** Checks the stated expectation using Node strict assertions: `assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 104:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 7);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 105:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 106:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 107:** Closes and recreates server/client connections to verify committed changes survive recreation.
+- **Line 108:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 109:** Checks the stated expectation using Node strict assertions: `assert.ok(!(await get()).some(row => row.id === saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 110:** Stops the current test HTTP server and its Prisma pool.
+- **Line 111:** Starts a deliberately failing store with private-looking error text, so the API's safe error response can be checked without breaking a real database.
+- **Line 112:** Waits for the listener-ready event before sending HTTP requests.
+- **Line 113:** Builds the loopback HTTP address using the actual port allocated by the operating system.
+- **Line 114:** Exercises both read and create failure paths on that deliberately failing server.
+- **Line 115:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 500);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 116:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 117:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 118:** Checks the stated expectation using Node strict assertions: `assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 119:** Prints a concise successful-test explanation without credentials or lesson contents.
+- **Line 120:** Handles a thrown error using a local error variable rather than exposing it directly to callers.
+- **Line 121:** Replaces failures with a safe error name or uppercase error code; database messages and connection strings are not printed.
+- **Line 122:** Begins cleanup that runs whether the guarded operation succeeded or failed.
+- **Line 123:** Stops the current test HTTP server and its Prisma pool.
+- **Line 124:** Ends any unfinished setup transaction during cleanup; an already-ended transaction is harmless here.
+- **Line 125:** Drops only this test's owned random schema and its objects, never public or production; the created flag prevents deleting an unowned schema.
+
+### Lines 126–128
+
+```text
+126 |     await admin.end();
+127 |   }
+128 | });
+```
+
+- **Line 126:** Closes the direct test-administration connection.
+- **Line 127:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 128:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+
+## client/src/media.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\media.js`
+
+Shared pure helpers for pictures and videos. The browser components use them to show, edit and save attachments, and the Node server imports the same limits and YouTube parser so both sides apply identical rules. The only network calls here are the three small fetch helpers at the end.
+
+### Lines 1–25
+
+```text
+1 | export const mediaLimits = { image: 6 * 1024 * 1024, video: 20 * 1024 * 1024, perLesson: 12, title: 120, activity: 200, url: 2000 };
+2 | export const uploadTypes = { 'image/png': 'image', 'image/jpeg': 'image', 'image/gif': 'image', 'image/webp': 'image', 'video/mp4': 'video', 'video/webm': 'video' };
+3 |
+4 | export function youtubeId(value) {
+5 |   let url;
+6 |   try { url = new URL(String(value).trim()); } catch { return null; }
+7 |   if (!['https:', 'http:'].includes(url.protocol)) return null;
+8 |   const host = url.hostname.replace(/^www\.|^m\./, '');
+9 |   let id = null;
+10 |   if (host === 'youtu.be') id = url.pathname.split('/')[1];
+11 |   else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+12 |     const [, kind, part] = url.pathname.split('/');
+13 |     id = kind === 'watch' ? url.searchParams.get('v') : ['embed', 'shorts', 'live', 'v'].includes(kind) ? part : null;
+14 |   }
+15 |   return /^[\w-]{11}$/.test(id || '') ? id : null;
+16 | }
+17 |
+18 | export const attachmentSrc = item => item.origin === 'upload' ? `/api/media/${item.id}/file` : item.url;
+19 | export const headingOf = text => (text || '').split('\n')[0].trim();
+20 | export const sameActivity = (item, heading) => (item.activity || '').trim() === (heading || '').trim();
+21 |
+22 | export function renameActivity(media, from, to) {
+23 |   const source = (from || '').trim();
+24 |   if (!source || source === (to || '').trim()) return media;
+25 |   return media.map(item => sameActivity(item, source) ? { ...item, activity: to.trim() } : item);
+```
+
+- **Line 1:** Exports the size and length limits: pictures up to 6 MB, videos up to 20 MB, at most 12 attachments per lesson, and maximum lengths for captions, activity headings and web addresses. 6 * 1024 * 1024 is 6 megabytes written out.
+- **Line 2:** Exports the allowed upload types mapped to what they are (image or video). Anything not listed, such as SVG, is refused.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Exports youtubeId, which pulls the 11-character video id out of any common YouTube link form, or returns null.
+- **Line 5:** Declares url without a value so the try block below can fill it.
+- **Line 6:** Parses the text as a web address after trimming spaces. If parsing throws (not a valid address) the catch returns null.
+- **Line 7:** Only http and https addresses are considered; other schemes such as javascript: return null.
+- **Line 8:** Removes a leading www. or m. from the host name so youtube.com, www.youtube.com and m.youtube.com all compare equal.
+- **Line 9:** Starts with no id found.
+- **Line 10:** Short youtu.be links keep the id as the first path segment.
+- **Line 11:** Full YouTube and the privacy-enhanced youtube-nocookie hosts are handled in the block below; any other host never matches.
+- **Line 12:** Splits the path (/watch, /embed/ID …) with array destructuring; the leading comma skips the empty text before the first slash, leaving kind and part.
+- **Line 13:** For /watch the id is the v= query parameter; for /embed, /shorts, /live and /v the id is the next path segment; otherwise there is no id.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Accepts the id only if it is exactly 11 letters, digits, dashes or underscores, otherwise null. This prevents arbitrary text from being placed into a player address.
+- **Line 16:** Closes the preceding block (function, object, or statement body).
+- **Line 17:** Blank line separates related sections for readability; it performs no operation.
+- **Line 18:** Chooses where a browser should load the attachment from: the CoachLab file endpoint for uploads, or the stored link for everything else.
+- **Line 19:** Returns the first line of an activity’s text, trimmed. That line is the activity’s heading and the key that attachments use to find their activity.
+- **Line 20:** True when an attachment’s activity text equals a heading, ignoring surrounding spaces and treating missing values as empty.
+- **Line 21:** Blank line separates related sections for readability; it performs no operation.
+- **Line 22:** Exports renameActivity, used while typing in a heading so attachments follow the activity they belong to.
+- **Line 23:** The old heading, trimmed.
+- **Line 24:** Does nothing (returns the same list) if there was no old heading or nothing changed.
+- **Line 25:** Returns a new list in which every attachment with the old heading now carries the new heading; the other attachments are copied unchanged.
+
+### Lines 26–50
+
+```text
+26 | }
+27 |
+28 | export function mediaPayload(media) {
+29 |   return media.map(item => item.id
+30 |     ? { id: item.id, title: item.title, activity: item.activity || '' }
+31 |     : { url: item.url, origin: item.origin === 'suggested' ? 'suggested' : 'link', title: item.title, activity: item.activity || '', credit: item.credit || '', source_page: item.source_page || '' });
+32 | }
+33 |
+34 | export function unassignedMedia(media, headings) {
+35 |   const known = new Set(headings.map(heading => heading.trim()).filter(Boolean));
+36 |   return media.filter(item => !(item.activity || '').trim() || !known.has(item.activity.trim()));
+37 | }
+38 |
+39 | export const formatSize = bytes => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+40 |
+41 | let keyCounter = 0;
+42 | export const newKey = () => `new-${++keyCounter}`;
+43 | export const mediaKey = item => item.id ?? item.clientKey;
+44 | export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
+45 | export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+46 |
+47 | export function groupMedia(media, blocks) {
+48 |   const headings = blocks.map(headingOf);
+49 |   const byBlock = new Map();
+50 |   const rest = [];
+```
+
+- **Line 26:** Closes the preceding block (function, object, or statement body).
+- **Line 27:** Blank line separates related sections for readability; it performs no operation.
+- **Line 28:** Exports mediaPayload, which converts the editor’s attachments into the minimal objects the API accepts.
+- **Line 29:** Maps each attachment to a request object; the ternary on the next lines chooses between two shapes.
+- **Line 30:** Already saved or uploaded files are sent by id with only the editable fields (title and activity).
+- **Line 31:** New links are sent with their address, origin, caption, activity and credit details. The server decides the real kind after checking the link, so the browser’s guess is not sent.
+- **Line 32:** Closes the preceding block (function, object, or statement body).
+- **Line 33:** Blank line separates related sections for readability; it performs no operation.
+- **Line 34:** Exports unassignedMedia: attachments that should appear in the whole-lesson group.
+- **Line 35:** Builds a set of the non-empty activity headings that currently exist.
+- **Line 36:** Keeps attachments with no activity and attachments whose activity heading no longer exists (renamed or removed), so nothing disappears from view.
+- **Line 37:** Closes the preceding block (function, object, or statement body).
+- **Line 38:** Blank line separates related sections for readability; it performs no operation.
+- **Line 39:** Formats a byte count as megabytes with one decimal, or whole kilobytes (at least 1) for smaller files.
+- **Line 40:** Blank line separates related sections for readability; it performs no operation.
+- **Line 41:** A module-level counter used to make temporary keys.
+- **Line 42:** Returns a new temporary key such as new-1. React needs a stable key for attachments that have no database id yet.
+- **Line 43:** Uses the database id when there is one, otherwise the temporary key. ?? only falls back for null or undefined.
+- **Line 44:** Chooses the small label shown under an attachment so people know whether they uploaded it, pasted it, or CoachLab suggested it (and that the link was checked).
+- **Line 45:** Returns the text only if it is a string starting with https://, otherwise null. It stops unsafe schemes such as javascript: from becoming clickable links.
+- **Line 46:** Blank line separates related sections for readability; it performs no operation.
+- **Line 47:** Exports groupMedia, used by lesson cards to place attachments under activities.
+- **Line 48:** Takes the first line of every activity block.
+- **Line 49:** A Map from block position to its attachments.
+- **Line 50:** The list of attachments that belong to no visible activity.
+
+### Lines 51–73
+
+```text
+51 |   for (const item of media) {
+52 |     const index = (item.activity || '').trim() ? headings.findIndex(heading => heading && sameActivity(item, heading)) : -1;
+53 |     if (index < 0) rest.push(item);
+54 |     else byBlock.set(index, [...(byBlock.get(index) || []), item]);
+55 |   }
+56 |   return { byBlock, rest };
+57 | }
+58 |
+59 | export async function uploadFile(file) {
+60 |   const response = await fetch('/api/media/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) }, body: file });
+61 |   const data = await response.json().catch(() => ({}));
+62 |   if (response.status !== 201) throw new Error(data.error || 'The upload failed. Check the connection and try again.');
+63 |   return data;
+64 | }
+65 |
+66 | export async function checkLink(url) {
+67 |   const response = await fetch('/api/media/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+68 |   const data = await response.json().catch(() => ({}));
+69 |   if (!response.ok) throw new Error(data.error || 'The link could not be checked.');
+70 |   return data;
+71 | }
+72 |
+73 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
+```
+
+- **Line 51:** Loops over every attachment.
+- **Line 52:** Finds the first block whose heading matches the attachment’s activity; blank activities and blank headings never match (index -1). Using the first match means a duplicated heading shows the attachment once.
+- **Line 53:** No matching block: the attachment goes to the rest list.
+- **Line 54:** Otherwise it is added to that block’s list, creating a new list from the old one plus the new attachment.
+- **Line 55:** Closes the preceding block (function, object, or statement body).
+- **Line 56:** Returns both results as an object.
+- **Line 57:** Closes the preceding block (function, object, or statement body).
+- **Line 58:** Blank line separates related sections for readability; it performs no operation.
+- **Line 59:** Exports uploadFile, which sends one chosen file to the server.
+- **Line 60:** POSTs the raw file as the request body, declaring its type and sending its name (URL-encoded so any characters are safe) in a header. No form wrapper is needed.
+- **Line 61:** Reads the JSON reply, using an empty object if the reply is not JSON.
+- **Line 62:** Anything other than status 201 (Created) becomes an Error carrying the server’s message or a friendly default.
+- **Line 63:** Returns the saved file’s details.
+- **Line 64:** Closes the preceding block (function, object, or statement body).
+- **Line 65:** Blank line separates related sections for readability; it performs no operation.
+- **Line 66:** Exports checkLink, which asks the server to verify a pasted link.
+- **Line 67:** POSTs the link as JSON to the verification route.
+- **Line 68:** Reads the reply as JSON, tolerating non-JSON.
+- **Line 69:** A failed check throws an Error with the server’s explanation so the form can show it.
+- **Line 70:** Returns what the server confirmed: kind, address, caption suggestion and credit.
+- **Line 71:** Closes the preceding block (function, object, or statement body).
+- **Line 72:** Blank line separates related sections for readability; it performs no operation.
+- **Line 73:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
+
+## client/src/MediaItem.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\MediaItem.jsx`
+
+Browser component that shows one attachment: a picture, an uploaded or linked video, or a YouTube video that loads only after a click. It is used in lesson cards, in the editors and in link previews. It shows credits and falls back to a friendly message when the file cannot load.
+
+### Lines 1–25
+
+```text
+1 | import React, { useState } from 'react';
+2 | import { attachmentSrc, formatSize, originLabel, safeLink, youtubeId } from './media.js';
+3 |
+4 | export default function MediaItem({ item }) {
+5 |   const [failed, setFailed] = useState(false);
+6 |   const [playing, setPlaying] = useState(false);
+7 |   const src = attachmentSrc(item);
+8 |   const id = item.kind === 'youtube' ? youtubeId(item.url) : null;
+9 |   const title = item.title || (item.kind === 'image' ? 'Lesson picture' : 'Lesson video');
+10 |   const original = safeLink(item.origin === 'upload' ? null : item.url);
+11 |   const credit = safeLink(item.source_page);
+12 |   return <figure className="media-item">
+13 |     {failed && <p className="media-fallback" role="status">This {item.kind === 'image' ? 'picture' : 'video'} could not be loaded.{original && <> <a href={original} target="_blank" rel="noopener noreferrer">Open the original link</a>.</>}</p>}
+14 |     {!failed && item.kind === 'image' && <img src={src} alt={title} referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
+15 |     {!failed && item.kind === 'video' && <video controls preload="metadata" playsInline src={src} onError={() => setFailed(true)} aria-label={title} />}
+16 |     {item.kind === 'youtube' && id && (playing
+17 |       ? <div className="media-frame"><iframe title={title} src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1`} allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div>
+18 |       : <button type="button" className="media-play" onClick={() => setPlaying(true)} aria-label={`Play video: ${title}`}><img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" referrerPolicy="no-referrer" /><span aria-hidden="true">▶</span></button>)}
+19 |     <figcaption>
+20 |       <strong>{title}</strong>
+21 |       <small>{originLabel(item)}{item.kind === 'youtube' && ' · YouTube video'}{item.size_bytes ? ` · ${formatSize(item.size_bytes)}` : ''}</small>
+22 |       {item.credit && <small>{item.credit}</small>}
+23 |       {(original || credit) && <small>{original && <a href={original} target="_blank" rel="noopener noreferrer">{item.kind === 'youtube' ? 'Watch on YouTube' : 'Open original'}</a>}{original && credit && credit !== original && ' · '}{credit && credit !== original && <a href={credit} target="_blank" rel="noopener noreferrer">Source and credit</a>}</small>}
+24 |     </figcaption>
+25 |   </figure>;
+```
+
+- **Line 1:** Imports React and the useState hook for the failed and playing flags.
+- **Line 2:** Imports the helpers that choose the address, format the size, label the origin, check links for safety and read YouTube ids.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Exports the component; it receives one attachment as item.
+- **Line 5:** Remembers whether loading the file failed.
+- **Line 6:** Remembers whether the coach pressed play on a YouTube preview.
+- **Line 7:** The address the browser should load.
+- **Line 8:** The YouTube id for YouTube items, otherwise null.
+- **Line 9:** Uses the caption, or a default name for screen readers and headings.
+- **Line 10:** The original link for the “Open original” text; uploads have none, and unsafe addresses become null.
+- **Line 11:** The source or credit page, shown only if it is an https link.
+- **Line 12:** Starts a figure element, the semantic container for media with a caption.
+- **Line 13:** When loading failed, shows a warning message (announced to screen readers) with a link to the original when there is one.
+- **Line 14:** Pictures use an img tag. referrerPolicy="no-referrer" stops the picture’s host from seeing which page is loading it, and onError switches to the failure message.
+- **Line 15:** Uploaded or linked video files use a video tag with controls; preload="metadata" loads only the length and size, not the whole file; playsInline keeps phones from forcing full screen.
+- **Line 16:** For YouTube items with a valid id, chooses between the player and the preview using the playing flag.
+- **Line 17:** After the coach presses play, an iframe loads the privacy-enhanced YouTube player at the checked id inside a 16:9 frame. The allow list grants only fullscreen, picture-in-picture and playback features.
+- **Line 18:** Before that, only a thumbnail with a play button is shown, so no video code loads until the coach asks for it. The thumbnail address is built from the checked id.
+- **Line 19:** Starts the caption area.
+- **Line 20:** Shows the caption in bold.
+- **Line 21:** Shows where the attachment came from, the YouTube label when relevant, and the file size for uploads.
+- **Line 22:** Shows the credit text (for example the photographer and licence) when there is one.
+- **Line 23:** Shows an “Open original” or “Watch on YouTube” link and, if different, a “Source and credit” link. Both open in a new tab with noopener noreferrer so the new page cannot control this one.
+- **Line 24:** Ends the caption area.
+- **Line 25:** Closes the figure element and the returned expression.
+
+### Lines 26–26
+
+```text
+26 | }
+```
+
+- **Line 26:** Closes the preceding block (function, object, or statement body).
+
+## client/src/MediaEditor.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\MediaEditor.jsx`
+
+Browser components for adding, previewing, editing and removing attachments. MediaEditor is the Add Media button and attachment list used under each activity, in the whole-lesson area and in the AI draft. Inside it, LinkChecker verifies a pasted link and Attachment shows one attachment with Edit and Remove. Nothing is saved to a lesson here: the parent form holds the list until Save.
+
+### Lines 1–25
+
+```text
+1 | import React, { useState } from 'react';
+2 | import MediaItem from './MediaItem.jsx';
+3 | import { checkLink, discardUpload, mediaKey, mediaLimits, newKey, uploadFile, uploadTypes } from './media.js';
+4 |
+5 | const accept = Object.keys(uploadTypes).join(',');
+6 |
+7 | function LinkChecker({ initial = '', onVerified, onCancel, action }) {
+8 |   const [text, setText] = useState(initial);
+9 |   const [checking, setChecking] = useState(false);
+10 |   const [error, setError] = useState('');
+11 |   const [found, setFound] = useState(null);
+12 |   const [title, setTitle] = useState('');
+13 |   async function check() {
+14 |     if (checking) return;
+15 |     setError(''); setFound(null); setChecking(true);
+16 |     try {
+17 |       const info = await checkLink(text);
+18 |       setFound(info);
+19 |       setTitle(info.title || '');
+20 |     } catch (failure) { setError(failure.message); }
+21 |     finally { setChecking(false); }
+22 |   }
+23 |   return <div className="media-panel-body">
+24 |     <label>Picture or YouTube link
+25 |       <input type="url" inputMode="url" placeholder="https://www.youtube.com/watch?v=… or https://…/picture.jpg" value={text} maxLength={mediaLimits.url} disabled={checking}
+```
+
+- **Line 1:** Imports React and the useState hook for the many small pieces of screen state.
+- **Line 2:** Imports the preview component.
+- **Line 3:** Imports the helpers for checking links, discarding unsaved uploads, identifying attachments, the limits, new keys, uploading and the allowed upload types.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Builds the accept text for the file chooser (comma-separated allowed MIME types) so the browser only offers supported files.
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** Defines LinkChecker, the “paste a link, check it, preview it” mini form. It receives a starting text, callbacks for success and cancel, and the label for its confirm button.
+- **Line 8:** The address being typed.
+- **Line 9:** True while the server is checking the link.
+- **Line 10:** The message shown when the check fails.
+- **Line 11:** What the server confirmed (kind, address, caption suggestion), or null.
+- **Line 12:** The caption the coach may edit.
+- **Line 13:** Defines the check action.
+- **Line 14:** Ignores repeated presses while a check is already running.
+- **Line 15:** Clears the previous result and error and shows the checking state.
+- **Line 16:** Starts the guarded request.
+- **Line 17:** Asks the server to verify the link; the server contacts YouTube or the picture host and inspects the real file.
+- **Line 18:** Stores the confirmed details so a preview appears.
+- **Line 19:** Pre-fills the caption with the title the server found.
+- **Line 20:** On failure shows the server’s explanation (for example “this link opens a web page, not a picture”).
+- **Line 21:** Whether it worked or not, stops the checking state.
+- **Line 22:** Closes the preceding block (function, object, or statement body).
+- **Line 23:** Returns the mini form markup.
+- **Line 24:** Starts the labeled link field; wrapping the input in a label makes the text its accessible name.
+- **Line 25:** The link input: type="url" with inputMode="url" shows a suitable phone keyboard, maxLength follows the shared limit, and it is disabled while checking.
+
+### Lines 26–50
+
+```text
+26 |         onChange={event => { setText(event.target.value); setFound(null); setError(''); }}
+27 |         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); check(); } }} />
+28 |       <small>CoachLab checks that the link really is a picture, video or YouTube video before it is added.</small>
+29 |     </label>
+30 |     <div className="actions">
+31 |       <button type="button" disabled={checking || !text.trim()} onClick={check}>{checking ? 'Checking link…' : 'Check link'}</button>
+32 |       <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+33 |     </div>
+34 |     {error && <p className="error" role="alert">{error}</p>}
+35 |     {found && <div className="media-found" role="status">
+36 |       <p className="success">Link checked — this is a {found.kind === 'youtube' ? 'YouTube video' : found.kind === 'image' ? 'picture' : 'video'}. Preview:</p>
+37 |       <MediaItem item={{ ...found, origin: 'link', title }} />
+38 |       <label>Caption<input value={title} maxLength={mediaLimits.title} onChange={event => setTitle(event.target.value)} /></label>
+39 |       <button type="button" onClick={() => onVerified({ ...found, title })}>{action}</button>
+40 |     </div>}
+41 |   </div>;
+42 | }
+43 |
+44 | function Attachment({ item, headings, onChange, onRemove, disabled }) {
+45 |   const [editing, setEditing] = useState(false);
+46 |   const [relinking, setRelinking] = useState(false);
+47 |   const [draft, setDraft] = useState({ title: '', activity: '' });
+48 |   const isLink = item.origin !== 'upload';
+49 |   return <li className="media-attachment">
+50 |     <MediaItem key={`${item.url}-${item.kind}`} item={item} />
+```
+
+- **Line 26:** Typing updates the text and clears any old result or error, so a preview never belongs to a different address.
+- **Line 27:** Pressing Enter checks the link and prevents the Enter key from submitting the whole lesson form that contains this field.
+- **Line 28:** Helper text explaining the verification promise.
+- **Line 29:** Closes the label.
+- **Line 30:** Starts the button row.
+- **Line 31:** Check link button: type="button" so it never submits the lesson form; disabled when empty or busy.
+- **Line 32:** Cancel button that calls the parent’s cancel callback.
+- **Line 33:** Closes the div element.
+- **Line 34:** Shows the failure message in an alert region.
+- **Line 35:** When a link was confirmed, shows the result area (announced politely to screen readers).
+- **Line 36:** Confirms what was found, translating the kind into words.
+- **Line 37:** Previews the attachment exactly as it will look, using the edited caption.
+- **Line 38:** Lets the coach edit the caption.
+- **Line 39:** Confirm button: hands the confirmed details and caption to the parent.
+- **Line 40:** Closes the result area.
+- **Line 41:** Closes the div element and the returned expression.
+- **Line 42:** Closes the preceding block (function, object, or statement body).
+- **Line 43:** Blank line separates related sections for readability; it performs no operation.
+- **Line 44:** Defines Attachment: one attachment with Edit and Remove. It receives the attachment, the list of activity headings, change and remove callbacks and a disabled flag.
+- **Line 45:** Whether the edit panel is open.
+- **Line 46:** Whether the “Change link” checker is open inside the edit panel.
+- **Line 47:** A private copy of the caption and activity being edited; nothing changes until the coach presses Done, so the attachment does not jump to another activity while editing.
+- **Line 48:** True for pasted and suggested links, false for uploads (which cannot change address).
+- **Line 49:** Starts a list item.
+- **Line 50:** The preview. The key changes when the address or kind changes, so the preview resets itself.
+
+### Lines 51–75
+
+```text
+51 |     {!editing && <div className="actions">
+52 |       <button type="button" className="secondary" disabled={disabled} onClick={() => { setDraft({ title: item.title || '', activity: headings.includes((item.activity || '').trim()) ? item.activity.trim() : '' }); setEditing(true); }} aria-label={`Edit ${item.title || 'media'}`}>Edit</button>
+53 |       <button type="button" className="secondary danger" disabled={disabled} onClick={onRemove} aria-label={`Remove ${item.title || 'media'}`}>Remove</button>
+54 |     </div>}
+55 |     {editing && !relinking && <div className="media-edit">
+56 |       <label>Caption<input value={draft.title} maxLength={mediaLimits.title} onChange={event => setDraft({ ...draft, title: event.target.value })} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
+57 |       <label>Show with
+58 |         <select value={draft.activity} onChange={event => setDraft({ ...draft, activity: event.target.value })}>
+59 |           <option value="">Whole lesson (not one activity)</option>
+60 |           {headings.map(heading => <option key={heading} value={heading}>{heading}</option>)}
+61 |         </select>
+62 |       </label>
+63 |       <div className="actions">
+64 |         {isLink && <button type="button" className="secondary" onClick={() => setRelinking(true)}>Change link</button>}
+65 |         <button type="button" onClick={() => { setEditing(false); onChange(draft); }}>Done</button>
+66 |         <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel</button>
+67 |       </div>
+68 |     </div>}
+69 |     {editing && relinking && <LinkChecker initial={item.url} action="Use this link" onCancel={() => setRelinking(false)} onVerified={info => { onChange({ replace: { ...info, origin: 'link', activity: item.activity || '' } }); setRelinking(false); setEditing(false); }} />}
+70 |   </li>;
+71 | }
+72 |
+73 | export default function MediaEditor({ media, onChange, items, activity = '', headings = [], label, disabled = false, note }) {
+74 |   const [panel, setPanel] = useState(null);
+75 |   const [busy, setBusy] = useState(false);
+```
+
+- **Line 51:** When not editing, shows the Edit and Remove buttons.
+- **Line 52:** Edit button: copies the current caption and activity into the private draft (using the empty option if the activity no longer exists) and opens the edit panel. aria-label names the item for screen readers.
+- **Line 53:** Remove button; the parent decides what removal means (deleting an unsaved upload immediately, or dropping a saved one so the server deletes it on Save).
+- **Line 54:** Closes the button row.
+- **Line 55:** The edit panel, shown while editing and not changing the link.
+- **Line 56:** Caption field bound to the draft. Pressing Enter is blocked so it cannot submit the surrounding form.
+- **Line 57:** Starts the “Show with” selector label.
+- **Line 58:** Dropdown bound to the draft’s activity.
+- **Line 59:** First option: not tied to one activity.
+- **Line 60:** One option for each activity heading; the heading doubles as the key.
+- **Line 61:** Closes the dropdown.
+- **Line 62:** Closes the label.
+- **Line 63:** Starts the panel’s buttons.
+- **Line 64:** Links offer a Change link button, which opens the checker.
+- **Line 65:** Done closes the panel and sends the draft caption and activity to the parent, which updates the list.
+- **Line 66:** Cancel closes the panel and discards the draft.
+- **Line 67:** Closes the div element.
+- **Line 68:** Closes the edit panel.
+- **Line 69:** When changing the link, shows the checker pre-filled with the current address. A confirmed new link replaces this attachment (a new entry that keeps the activity), then both panels close.
+- **Line 70:** Ends the list item.
+- **Line 71:** Closes the preceding block (function, object, or statement body).
+- **Line 72:** Blank line separates related sections for readability; it performs no operation.
+- **Line 73:** Exports MediaEditor. media is the whole lesson’s list, onChange replaces it, items is the subset to display here, activity is the heading new attachments get, headings lists all activities for the dropdown, and note explains special cases.
+- **Line 74:** Which add panel is open: none, the chooser, upload or link.
+- **Line 75:** True while files are uploading.
+
+### Lines 76–100
+
+```text
+76 |   const [error, setError] = useState('');
+77 |   const full = media.length >= mediaLimits.perLesson;
+78 |   const add = list => onChange([...media, ...list.map(entry => ({ ...entry, activity, clientKey: newKey() }))]);
+79 |
+80 |   async function upload(event) {
+81 |     const files = [...event.target.files];
+82 |     event.target.value = '';
+83 |     if (!files.length) return;
+84 |     setError('');
+85 |     if (media.length + files.length > mediaLimits.perLesson) { setError(`A lesson can have at most ${mediaLimits.perLesson} pictures and videos.`); return; }
+86 |     for (const file of files) {
+87 |       const kind = uploadTypes[file.type];
+88 |       if (!kind) { setError(`“${file.name}” is not a supported file. Use PNG, JPEG, GIF or WebP pictures, or MP4 or WebM videos.`); return; }
+89 |       if (file.size > mediaLimits[kind]) { setError(`“${file.name}” is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.`); return; }
+90 |     }
+91 |     setBusy(true);
+92 |     const added = [];
+93 |     try {
+94 |       for (const file of files) added.push({ ...(await uploadFile(file)), pending: true });
+95 |       add(added);
+96 |       setPanel(null);
+97 |     } catch (failure) {
+98 |       for (const item of added) discardUpload(item);
+99 |       setError(failure.message);
+100 |     } finally { setBusy(false); }
+```
+
+- **Line 76:** Error message for the upload panel.
+- **Line 77:** True when the lesson already holds the maximum number of attachments.
+- **Line 78:** Helper that appends new attachments to the lesson’s list, each tagged with this editor’s activity and a temporary key.
+- **Line 79:** Blank line separates related sections for readability; it performs no operation.
+- **Line 80:** Handles the file chooser: the function runs after the coach picks one or more files.
+- **Line 81:** Copies the chosen files into a normal array.
+- **Line 82:** Clears the input so choosing the same file again still triggers a change.
+- **Line 83:** Nothing chosen means nothing to do.
+- **Line 84:** Clears the old error.
+- **Line 85:** Refuses the whole batch if it would exceed the 12-attachment limit.
+- **Line 86:** Checks every file before uploading any of them.
+- **Line 87:** Looks up the file’s type among the allowed ones.
+- **Line 88:** Unsupported type: explains which types work and stops.
+- **Line 89:** File too large for its kind: explains the limits and suggests a YouTube link for long videos, then stops.
+- **Line 90:** Closes the preceding block (function, object, or statement body).
+- **Line 91:** Shows the uploading state.
+- **Line 92:** Collects files uploaded so far during this batch.
+- **Line 93:** Starts the guarded upload.
+- **Line 94:** Uploads files one at a time, marking each as pending (not yet saved with a lesson). await waits for each server reply.
+- **Line 95:** Adds all uploaded files to the lesson’s list.
+- **Line 96:** Closes the add panel.
+- **Line 97:** Handles an upload failure.
+- **Line 98:** Deletes any files from this batch that did upload, so a failed batch leaves nothing behind.
+- **Line 99:** Shows the failure reason (for example “contents do not match a supported picture or video type”).
+- **Line 100:** Always ends the busy state.
+
+### Lines 101–125
+
+```text
+101 |   }
+102 |   function change(item, patch) {
+103 |     if (patch.replace) {
+104 |       discardUpload(item);
+105 |       onChange(media.map(entry => mediaKey(entry) === mediaKey(item) ? { ...patch.replace, clientKey: newKey(), title: patch.replace.title } : entry));
+106 |       return;
+107 |     }
+108 |     onChange(media.map(entry => mediaKey(entry) === mediaKey(item) ? { ...entry, ...patch } : entry));
+109 |   }
+110 |   function remove(item) {
+111 |     discardUpload(item);
+112 |     onChange(media.filter(entry => mediaKey(entry) !== mediaKey(item)));
+113 |   }
+114 |   return <div className="media-editor">
+115 |     {label && <h4>{label}</h4>}
+116 |     {note && <small>{note}</small>}
+117 |     {items.length > 0 && <ul className="media-list">{items.map(item => <Attachment key={mediaKey(item)} item={item} headings={headings} disabled={disabled} onChange={patch => change(item, patch)} onRemove={() => remove(item)} />)}</ul>}
+118 |     {items.length === 0 && <small>No pictures or videos yet.</small>}
+119 |     {!panel && <button type="button" className="secondary add-media" disabled={disabled || full || busy} onClick={() => { setPanel('choose'); setError(''); }}>{full ? 'Media limit reached' : 'Add Media'}</button>}
+120 |     {panel && <div className="media-panel">
+121 |       <div className="actions" role="group" aria-label="How to add media">
+122 |         <button type="button" className={panel === 'upload' ? '' : 'secondary'} aria-pressed={panel === 'upload'} disabled={busy} onClick={() => { setPanel('upload'); setError(''); }}>Upload picture or video</button>
+123 |         <button type="button" className={panel === 'link' ? '' : 'secondary'} aria-pressed={panel === 'link'} disabled={busy} onClick={() => { setPanel('link'); setError(''); }}>Paste a link</button>
+124 |         <button type="button" className="secondary" disabled={busy} onClick={() => setPanel(null)}>Close</button>
+125 |       </div>
+```
+
+- **Line 101:** Closes the preceding block (function, object, or statement body).
+- **Line 102:** Applies an edit to one attachment.
+- **Line 103:** A replace patch means the link was changed to a new checked link.
+- **Line 104:** If the old attachment was an unsaved upload it is deleted from the server first.
+- **Line 105:** Swaps the old attachment for the new one in the list, giving it a fresh temporary key.
+- **Line 106:** Stops here for the replace case.
+- **Line 107:** Closes the preceding block (function, object, or statement body).
+- **Line 108:** Ordinary edits merge the changed caption or activity into the matching attachment and keep the rest.
+- **Line 109:** Closes the preceding block (function, object, or statement body).
+- **Line 110:** Removes one attachment.
+- **Line 111:** Deletes an unsaved upload on the server immediately; saved attachments are removed when the lesson is saved.
+- **Line 112:** Removes it from the list.
+- **Line 113:** Closes the preceding block (function, object, or statement body).
+- **Line 114:** Starts the editor markup.
+- **Line 115:** Optional heading for this group.
+- **Line 116:** Optional explanatory note.
+- **Line 117:** When there are attachments to show, lists them as Attachment components.
+- **Line 118:** Otherwise says there are none yet.
+- **Line 119:** The Add Media button, shown while no add panel is open. It is disabled when the activity has no usable heading, at the attachment limit, or while uploading.
+- **Line 120:** The add panel.
+- **Line 121:** A group of buttons for choosing how to add media.
+- **Line 122:** Upload button; aria-pressed tells screen readers whether it is the chosen mode.
+- **Line 123:** Paste-a-link button, same idea.
+- **Line 124:** Close button that hides the panel.
+- **Line 125:** Closes the div element.
+
+### Lines 126–138
+
+```text
+126 |       {panel === 'choose' && <small>Choose how to add a picture or video: upload a file from this device, or paste a YouTube or picture link.</small>}
+127 |       {panel === 'upload' && <div className="media-panel-body">
+128 |         <label>Choose files
+129 |           <input type="file" accept={accept} multiple disabled={busy} onChange={upload} />
+130 |           <small>PNG, JPEG, GIF, WebP pictures up to 6 MB. MP4 or WebM videos up to 20 MB. Longer videos: use a YouTube link.</small>
+131 |         </label>
+132 |         {busy && <p role="status">Uploading and checking the file…</p>}
+133 |       </div>}
+134 |       {panel === 'link' && <LinkChecker action="Add to this activity" onCancel={() => setPanel(null)} onVerified={info => { add([{ ...info, origin: 'link' }]); setPanel(null); }} />}
+135 |       {error && <p className="error" role="alert">{error}</p>}
+136 |     </div>}
+137 |   </div>;
+138 | }
+```
+
+- **Line 126:** Before a mode is chosen, a hint explains the two ways to add media.
+- **Line 127:** Upload mode.
+- **Line 128:** Labeled file chooser.
+- **Line 129:** The file input: accept limits the offered types, multiple allows several files, and choosing files calls upload.
+- **Line 130:** Helper text with the size limits.
+- **Line 131:** Closes the label.
+- **Line 132:** While uploading, shows a status message.
+- **Line 133:** Closes upload mode.
+- **Line 134:** Link mode: shows the LinkChecker; when a link is confirmed it is added to the list and the panel closes.
+- **Line 135:** Shows any upload error.
+- **Line 136:** Closes the panel.
+- **Line 137:** Closes the div element and the returned expression.
+- **Line 138:** Closes the preceding block (function, object, or statement body).
+
+## server/media-sniff.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-sniff.js`
+
+Server helper that identifies a file from its first bytes (its “magic number”) instead of trusting the file name or the type the browser claims. Used for uploads and for checking pasted links.
+
+### Lines 1–12
+
+```text
+1 | const startsWith = (buffer, bytes, offset = 0) => bytes.every((byte, index) => buffer[offset + index] === byte);
+2 |
+3 | export function sniffMedia(buffer) {
+4 |   if (!buffer || buffer.length < 12) return null;
+5 |   if (startsWith(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { kind: 'image', mime: 'image/png' };
+6 |   if (startsWith(buffer, [0xff, 0xd8, 0xff])) return { kind: 'image', mime: 'image/jpeg' };
+7 |   if (buffer.subarray(0, 6).toString('latin1') === 'GIF87a' || buffer.subarray(0, 6).toString('latin1') === 'GIF89a') return { kind: 'image', mime: 'image/gif' };
+8 |   if (buffer.subarray(0, 4).toString('latin1') === 'RIFF' && buffer.subarray(8, 12).toString('latin1') === 'WEBP') return { kind: 'image', mime: 'image/webp' };
+9 |   if (buffer.subarray(4, 8).toString('latin1') === 'ftyp') return { kind: 'video', mime: 'video/mp4' };
+10 |   if (startsWith(buffer, [0x1a, 0x45, 0xdf, 0xa3])) return { kind: 'video', mime: 'video/webm' };
+11 |   return null;
+12 | }
+```
+
+- **Line 1:** Defines startsWith: true when every expected byte appears in the buffer at the given offset. every() stops at the first mismatch.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Exports sniffMedia, which returns the kind (image or video) and exact MIME type of a supported file, or null for anything else.
+- **Line 4:** Rejects missing or tiny buffers (under 12 bytes) because they cannot hold a valid signature.
+- **Line 5:** PNG files always begin with the eight bytes 89 50 4E 47 0D 0A 1A 0A.
+- **Line 6:** JPEG files begin with FF D8 FF.
+- **Line 7:** GIF files begin with the text GIF87a or GIF89a; latin1 decoding turns bytes into characters one for one.
+- **Line 8:** WebP files are RIFF containers: the text RIFF at the start and WEBP at byte 8.
+- **Line 9:** MP4 files carry the text ftyp at byte 4.
+- **Line 10:** WebM files begin with the Matroska/EBML marker 1A 45 DF A3.
+- **Line 11:** Anything else, including SVG, HTML and scripts, is not supported and returns null.
+- **Line 12:** Closes the preceding block (function, object, or statement body).
+
+## server/media-verify.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-verify.js`
+
+Checks a pasted link before CoachLab accepts or shows it. YouTube links are confirmed through YouTube’s public oEmbed service; picture and video links are fetched (only the first 64 KB) and identified by their real file contents. All fetching goes through safeFetch, which allows only https, refuses private network addresses (so the check cannot be used to probe the local computer or home network) and re-checks every redirect.
+
+### Lines 1–25
+
+```text
+1 | import https from 'node:https';
+2 | import dns from 'node:dns';
+3 | import net from 'node:net';
+4 | import { sniffMedia } from './media-sniff.js';
+5 | import { youtubeId, mediaLimits } from '../client/src/media.js';
+6 |
+7 | export class MediaLinkError extends Error {}
+8 |
+9 | export function isPublicAddress(address) {
+10 |   if (net.isIPv4(address)) {
+11 |     const [a, b, c] = address.split('.').map(Number);
+12 |     return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)));
+13 |   }
+14 |   if (net.isIPv6(address)) {
+15 |     const lower = address.toLowerCase();
+16 |     const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+17 |     if (mapped) return isPublicAddress(mapped[1]);
+18 |     return !(lower === '::' || lower === '::1' || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith('ff'));
+19 |   }
+20 |   return false;
+21 | }
+22 |
+23 | export function publicLookup(hostname, options, callback) {
+24 |   dns.lookup(hostname, { ...options, all: true }, (error, addresses) => {
+25 |     if (error) return callback(error);
+```
+
+- **Line 1:** Imports Node’s https module for secure web requests.
+- **Line 2:** Imports the DNS (name lookup) module so addresses can be inspected before connecting.
+- **Line 3:** Imports net, which can tell IPv4 and IPv6 addresses apart.
+- **Line 4:** Imports the file-type sniffer.
+- **Line 5:** Imports the YouTube id parser and shared limits (the same file the browser uses).
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** Defines MediaLinkError, a plain Error subclass meaning “this link cannot be used”. Its message is written for coaches and is safe to show.
+- **Line 8:** Blank line separates related sections for readability; it performs no operation.
+- **Line 9:** Exports isPublicAddress, which decides whether an IP address is on the public internet.
+- **Line 10:** Handles IPv4 addresses like 8.8.8.8.
+- **Line 11:** Splits the address into numbers; a, b and c are the first three.
+- **Line 12:** Returns false (not public) for: 0.x, 10.x, 127.x (this computer), 224 and above (multicast and reserved), 100.64–100.127 (shared carrier space), 169.254.x (link-local, includes cloud metadata), 172.16–172.31, 192.168.x (home networks), 192.0.0.x and 198.18–198.19. The leading ! turns the “is private” test into “is public”.
+- **Line 13:** Closes the preceding block (function, object, or statement body).
+- **Line 14:** Handles IPv6 addresses.
+- **Line 15:** Lowercases the address for comparison.
+- **Line 16:** Detects IPv4-mapped IPv6 addresses such as ::ffff:127.0.0.1, which would otherwise hide a private IPv4 address.
+- **Line 17:** If it is a mapped address, judges the embedded IPv4 address instead.
+- **Line 18:** Returns false for the unspecified address, loopback ::1, unique-local fc00::/7, link-local fe80::/10 and multicast ff00::/8.
+- **Line 19:** Closes the preceding block (function, object, or statement body).
+- **Line 20:** Anything that is not a valid IP address is treated as not public.
+- **Line 21:** Closes the preceding block (function, object, or statement body).
+- **Line 22:** Blank line separates related sections for readability; it performs no operation.
+- **Line 23:** Exports publicLookup, a replacement for the normal name lookup that Node calls just before connecting.
+- **Line 24:** Looks up every address for the host name.
+- **Line 25:** Passes lookup failures on.
+
+### Lines 26–50
+
+```text
+26 |     if (!addresses.length || addresses.some(entry => !isPublicAddress(entry.address))) return callback(new MediaLinkError('The link points to a private or unsupported network address.'));
+27 |     const wantsAll = options && options.all;
+28 |     return wantsAll ? callback(null, addresses) : callback(null, addresses[0].address, addresses[0].family);
+29 |   });
+30 | }
+31 |
+32 | function requestOnce(url, { method, headers, maxBytes, timeout, lookup }) {
+33 |   return new Promise((resolve, reject) => {
+34 |     const request = https.request(url, { method, headers, lookup, timeout, agent: false }, response => {
+35 |       const chunks = [];
+36 |       let bytes = 0;
+37 |       let truncated = false;
+38 |       response.on('data', chunk => {
+39 |         bytes += chunk.length;
+40 |         if (bytes > maxBytes) {
+41 |           chunks.push(chunk.subarray(0, Math.max(0, chunk.length - (bytes - maxBytes))));
+42 |           truncated = true;
+43 |           response.destroy();
+44 |           return;
+45 |         }
+46 |         chunks.push(chunk);
+47 |       });
+48 |       const finish = () => resolve({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks), truncated });
+49 |       response.on('end', finish);
+50 |       response.on('close', finish);
+```
+
+- **Line 26:** If there are no addresses, or any of them is private, refuses the connection with a MediaLinkError. Checking at connection time also defeats names that point to private addresses.
+- **Line 27:** Node may ask for all addresses or just one; this remembers which.
+- **Line 28:** Answers in the format Node asked for.
+- **Line 29:** Closes the callback body and the function call that received it.
+- **Line 30:** Closes the preceding block (function, object, or statement body).
+- **Line 31:** Blank line separates related sections for readability; it performs no operation.
+- **Line 32:** Defines requestOnce, which performs one https request and collects at most maxBytes of the answer.
+- **Line 33:** Wraps the request in a Promise so callers can await it.
+- **Line 34:** Starts the request with the safe lookup, a timeout and no connection reuse; the callback receives the response.
+- **Line 35:** Holds the received pieces.
+- **Line 36:** Counts bytes received.
+- **Line 37:** Records whether the answer was cut off.
+- **Line 38:** Runs for every piece of data that arrives.
+- **Line 39:** Adds the piece size to the count.
+- **Line 40:** If the limit is passed…
+- **Line 41:** …keeps only the part that still fits,
+- **Line 42:** notes the truncation,
+- **Line 43:** and closes the connection so a huge file is never downloaded in full.
+- **Line 44:** Stops processing this piece.
+- **Line 45:** Closes the preceding block (function, object, or statement body).
+- **Line 46:** Otherwise keeps the whole piece.
+- **Line 47:** Closes the callback body and the function call that received it.
+- **Line 48:** Defines the function that finishes the Promise with the status, headers, collected body and truncation flag.
+- **Line 49:** Finishes when the answer ends normally.
+- **Line 50:** Also finishes when the connection closes (for example after truncation); finishing twice is harmless.
+
+### Lines 51–75
+
+```text
+51 |       response.on('error', () => finish());
+52 |     });
+53 |     request.on('timeout', () => request.destroy(new MediaLinkError('The website took too long to answer.')));
+54 |     request.on('error', error => reject(error instanceof MediaLinkError ? error : new MediaLinkError('The website could not be reached.')));
+55 |     request.end();
+56 |   });
+57 | }
+58 |
+59 | export async function safeFetch(value, { method = 'GET', headers = {}, maxBytes = 65536, timeout = 8000, lookup = publicLookup, request = requestOnce } = {}) {
+60 |   let url;
+61 |   for (let hop = 0; hop < 4; hop++) {
+62 |     try { url = new URL(hop === 0 ? value : url.location); } catch { throw new MediaLinkError('That is not a valid web address.'); }
+63 |     if (url.protocol !== 'https:') throw new MediaLinkError('Links must start with https:// so they stay private and secure.');
+64 |     if (url.port && url.port !== '443') throw new MediaLinkError('Only standard secure web addresses are allowed.');
+65 |     if (url.username || url.password) throw new MediaLinkError('Links containing a user name or password are not allowed.');
+66 |     const result = await request(url, { method, headers: { 'user-agent': 'CoachLab-link-check/1.0', ...headers }, maxBytes, timeout, lookup });
+67 |     if ([301, 302, 303, 307, 308].includes(result.status) && result.headers.location) {
+68 |       url = { location: new URL(result.headers.location, url).href };
+69 |       continue;
+70 |     }
+71 |     return { ...result, url: url.href };
+72 |   }
+73 |   throw new MediaLinkError('The link redirects too many times.');
+74 | }
+75 |
+```
+
+- **Line 51:** Finishes with whatever arrived if the stream fails midway.
+- **Line 52:** Closes the callback body and the function call that received it.
+- **Line 53:** On timeout, cancels the request with a friendly error.
+- **Line 54:** On any network error rejects with a MediaLinkError (keeping our own errors, replacing technical ones with a neutral sentence).
+- **Line 55:** Sends the request.
+- **Line 56:** Closes the callback body and the function call that received it.
+- **Line 57:** Closes the preceding block (function, object, or statement body).
+- **Line 58:** Blank line separates related sections for readability; it performs no operation.
+- **Line 59:** Exports safeFetch, the only function that touches the network for link checks. Options choose the method, headers, size limit, timeout and (for tests) the lookup and request functions.
+- **Line 60:** Holds the current address.
+- **Line 61:** Allows the first request plus up to three redirects.
+- **Line 62:** Parses the first address, or the redirect target on later rounds; an invalid address becomes a friendly error.
+- **Line 63:** Only https is allowed, on every hop.
+- **Line 64:** Only the standard port 443 is allowed, so the check cannot be pointed at other services.
+- **Line 65:** Addresses with embedded credentials are refused.
+- **Line 66:** Performs the request, identifying CoachLab in the user-agent header.
+- **Line 67:** Redirect status codes with a Location header are followed.
+- **Line 68:** Resolves the redirect against the current address and stores it for the next loop; every hop therefore passes all of the checks above again.
+- **Line 69:** Goes round the loop again.
+- **Line 70:** Closes the preceding block (function, object, or statement body).
+- **Line 71:** Returns the answer plus the final address.
+- **Line 72:** Closes the preceding block (function, object, or statement body).
+- **Line 73:** After too many redirects, gives up with an error.
+- **Line 74:** Closes the preceding block (function, object, or statement body).
+- **Line 75:** Blank line separates related sections for readability; it performs no operation.
+
+### Lines 76–100
+
+```text
+76 | const cleanTitle = text => String(text || '').replace(/\s+/g, ' ').trim().slice(0, mediaLimits.title);
+77 |
+78 | export async function verifyLink(input, { fetcher = safeFetch } = {}) {
+79 |   const raw = String(input ?? '').trim();
+80 |   if (!raw) throw new MediaLinkError('Paste a link first.');
+81 |   if (raw.length > mediaLimits.url) throw new MediaLinkError('That link is too long.');
+82 |   let parsed;
+83 |   try { parsed = new URL(raw); } catch { throw new MediaLinkError('That is not a valid web address.'); }
+84 |   const id = youtubeId(raw);
+85 |   if (id) {
+86 |     const watch = `https://www.youtube.com/watch?v=${id}`;
+87 |     const result = await fetcher(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`, { maxBytes: 32768 });
+88 |     if (result.status === 404 || result.status === 400) throw new MediaLinkError('YouTube says this video does not exist or is private.');
+89 |     if (result.status === 401 || result.status === 403) throw new MediaLinkError('The owner of this YouTube video does not allow embedding. Choose another video.');
+90 |     if (result.status !== 200) throw new MediaLinkError('YouTube could not confirm this video right now. Try again later.');
+91 |     let info;
+92 |     try { info = JSON.parse(result.body.toString('utf8')); } catch { throw new MediaLinkError('YouTube returned an unreadable answer.'); }
+93 |     return { kind: 'youtube', url: watch, title: cleanTitle(info.title), credit: cleanTitle(info.author_name ? `YouTube — ${info.author_name}` : 'YouTube'), source_page: watch };
+94 |   }
+95 |   if (parsed.protocol !== 'https:') throw new MediaLinkError('Links must start with https:// so they stay private and secure.');
+96 |   const result = await fetcher(raw, { headers: { range: 'bytes=0-65535', accept: 'image/*,video/*;q=0.9' }, maxBytes: 65536 });
+97 |   if (![200, 206].includes(result.status)) throw new MediaLinkError(`The website answered with status ${result.status}, so the link cannot be used.`);
+98 |   const detected = sniffMedia(result.body);
+99 |   const declared = String(result.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+100 |   if (!detected) {
+```
+
+- **Line 76:** Helper that tidies a caption: turns anything into text, collapses runs of white space, trims and cuts to the caption limit.
+- **Line 77:** Blank line separates related sections for readability; it performs no operation.
+- **Line 78:** Exports verifyLink, the main check. The optional fetcher lets tests avoid the real network.
+- **Line 79:** Turns the input into trimmed text.
+- **Line 80:** An empty link is refused.
+- **Line 81:** Over-long links are refused.
+- **Line 82:** Will hold the parsed address.
+- **Line 83:** Parses it, or reports that it is not a web address.
+- **Line 84:** Looks for a YouTube video id.
+- **Line 85:** The YouTube branch.
+- **Line 86:** Builds the standard watch address from the id. Only this rebuilt address is stored and fetched, never the text the coach pasted.
+- **Line 87:** Asks YouTube’s oEmbed service about that video. The request goes to a fixed YouTube address.
+- **Line 88:** A 404 or 400 means the video does not exist or is private.
+- **Line 89:** A 401 or 403 means the owner has disabled embedding.
+- **Line 90:** Any other non-200 answer means YouTube cannot confirm it now.
+- **Line 91:** Will hold the parsed answer.
+- **Line 92:** Parses the JSON answer or reports an unreadable reply.
+- **Line 93:** Returns the confirmed details: kind youtube, the clean address, YouTube’s title, a credit naming the channel, and the watch page as the source page.
+- **Line 94:** Closes the preceding block (function, object, or statement body).
+- **Line 95:** Non-YouTube links must use https.
+- **Line 96:** Fetches only the first 64 KB of the file (asking politely with a Range header; servers that ignore it are cut off by the byte limit).
+- **Line 97:** Only 200 and 206 answers count as success; others produce a message with the status number.
+- **Line 98:** Identifies the file from its first bytes.
+- **Line 99:** The type the website claims, used only to give a better error message.
+- **Line 100:** If the bytes are not a supported picture or video…
 
 ### Lines 101–108
 
 ```text
-101 |     throw new Error('PostgreSQL integration failed: ' + (/^[A-Z0-9_]+$/.test(error.code || '') ? error.code : error.name));
-102 |   } finally {
-103 |     await stop();
-104 |     await admin.query('ROLLBACK').catch(() => {});
-105 |     if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
-106 |     await admin.end();
-107 |   }
-108 | });
+101 |     if (declared.startsWith('text/html')) throw new MediaLinkError('This link opens a web page, not a picture or video. Paste the direct picture address or a YouTube link.');
+102 |     throw new MediaLinkError('This link is not a supported picture (PNG, JPEG, GIF, WebP) or video (MP4, WebM).');
+103 |   }
+104 |   const total = Number(String(result.headers['content-range'] || '').split('/')[1] || result.headers['content-length'] || 0);
+105 |   if (total > mediaLimits[detected.kind] * 4) throw new MediaLinkError('That file is very large. Use a smaller file or a YouTube link.');
+106 |   const name = decodeURIComponent(parsed.pathname.split('/').pop() || '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ');
+107 |   return { kind: detected.kind, url: raw, title: cleanTitle(name), credit: '', source_page: '' };
+108 | }
 ```
 
-- **Line 101:** Replaces failures with a safe error name or uppercase error code; database messages and connection strings are not printed.
-- **Line 102:** Begins cleanup that runs whether the guarded operation succeeded or failed.
-- **Line 103:** Stops the current test HTTP server and its Prisma pool.
-- **Line 104:** Ends any unfinished setup transaction during cleanup; an already-ended transaction is harmless here.
-- **Line 105:** Drops only this test's owned random schema and its objects, never public or production; the created flag prevents deleting an unowned schema.
-- **Line 106:** Closes the direct test-administration connection.
-- **Line 107:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 108:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 101:** …and the site claimed HTML, explains that the link is a web page and asks for the direct picture address.
+- **Line 102:** Otherwise lists the supported types.
+- **Line 103:** Closes the preceding block (function, object, or statement body).
+- **Line 104:** Finds the total file size from Content-Range or Content-Length when the site provides it.
+- **Line 105:** Refuses files more than four times larger than the upload limit for their kind, to protect phones and slow connections.
+- **Line 106:** Builds a suggested caption from the last part of the address: removes the extension and turns dashes and underscores into spaces.
+- **Line 107:** Returns the verified kind (from the real contents), the link, the suggested caption and empty credit and source page.
+- **Line 108:** Closes the preceding block (function, object, or statement body).
+
+## server/media-validate.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-validate.js`
+
+Server-side checking of the media list sent with a lesson. It accepts only two kinds of entries: already stored attachments referenced by id (caption and activity may change) and new links (the server will verify them). It never trusts a kind or file contents from the browser.
+
+### Lines 1–25
+
+```text
+1 | import { mediaLimits } from '../client/src/media.js';
+2 |
+3 | const text = (value, limit) => value === undefined || value === null ? '' : typeof value === 'string' && value.length <= limit ? value.trim() : null;
+4 | const linkFields = ['url', 'origin', 'title', 'activity', 'credit', 'source_page'];
+5 | const savedFields = ['id', 'title', 'activity'];
+6 |
+7 | export function validateMediaList(list) {
+8 |   if (!Array.isArray(list)) return { error: 'media must be a list of attachments.' };
+9 |   if (list.length > mediaLimits.perLesson) return { error: `A lesson can have at most ${mediaLimits.perLesson} pictures and videos.` };
+10 |   const media = [];
+11 |   const seen = new Set();
+12 |   for (const item of list) {
+13 |     if (!item || typeof item !== 'object' || Array.isArray(item)) return { error: 'Each attachment must be an object.' };
+14 |     const title = text(item.title, mediaLimits.title);
+15 |     const activity = text(item.activity, mediaLimits.activity);
+16 |     if (title === null || activity === null) return { error: `Attachment titles must be at most ${mediaLimits.title} characters and activities at most ${mediaLimits.activity}.` };
+17 |     if (item.id !== undefined) {
+18 |       if (Object.keys(item).some(key => !savedFields.includes(key))) return { error: 'Saved attachments may only change title and activity.' };
+19 |       if (!Number.isInteger(item.id) || item.id < 1 || item.id > 2147483647 || seen.has(item.id)) return { error: 'Attachment IDs must be unique positive whole numbers.' };
+20 |       seen.add(item.id);
+21 |       media.push({ id: item.id, title, activity });
+22 |       continue;
+23 |     }
+24 |     if (Object.keys(item).some(key => !linkFields.includes(key))) return { error: 'The attachment contains unsupported fields.' };
+25 |     if (typeof item.url !== 'string' || !item.url.trim() || item.url.length > mediaLimits.url) return { error: 'Each new attachment needs a link.' };
+```
+
+- **Line 1:** Imports the shared limits.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Helper that cleans optional text: missing becomes an empty string, a string within the limit is trimmed, and anything else returns null to signal “invalid”.
+- **Line 4:** The only fields a new link entry may contain.
+- **Line 5:** The only fields an existing attachment entry may contain.
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** Exports validateMediaList. It returns either { media } with cleaned entries or { error } with a message.
+- **Line 8:** The media value must be a list.
+- **Line 9:** No more than 12 attachments per lesson.
+- **Line 10:** The cleaned entries are collected here.
+- **Line 11:** A set that remembers ids already used, to reject duplicates.
+- **Line 12:** Checks each entry in turn.
+- **Line 13:** Each entry must be an ordinary object.
+- **Line 14:** Cleans the caption.
+- **Line 15:** Cleans the activity heading.
+- **Line 16:** Rejects over-long captions or headings.
+- **Line 17:** An entry with an id refers to a stored attachment.
+- **Line 18:** Such an entry may only carry id, title and activity; anything else (such as a different file or link) is refused.
+- **Line 19:** The id must be a unique positive whole number that fits a database integer.
+- **Line 20:** Remembers the id.
+- **Line 21:** Keeps the cleaned entry.
+- **Line 22:** Moves on to the next entry.
+- **Line 23:** Closes the preceding block (function, object, or statement body).
+- **Line 24:** New link entries may contain only the listed fields, so a request cannot smuggle in a kind, file data or an id.
+- **Line 25:** A new entry needs a non-empty link within the length limit.
+
+### Lines 26–34
+
+```text
+26 |     if (!['link', 'suggested'].includes(item.origin ?? 'link')) return { error: 'Attachment origin must be link or suggested.' };
+27 |     const credit = text(item.credit, 300);
+28 |     const sourcePage = text(item.source_page, mediaLimits.url);
+29 |     if (credit === null || sourcePage === null) return { error: 'Attachment credit or source page is too long.' };
+30 |     if (sourcePage && !/^https:\/\//i.test(sourcePage)) return { error: 'Attachment source pages must be https links.' };
+31 |     media.push({ url: item.url.trim(), origin: item.origin ?? 'link', title, activity, credit, source_page: sourcePage });
+32 |   }
+33 |   return { media };
+34 | }
+```
+
+- **Line 26:** The origin must be a pasted link or a CoachLab suggestion (uploads always come through the upload route). ?? supplies link when it is missing.
+- **Line 27:** Cleans the credit text (up to 300 characters).
+- **Line 28:** Cleans the source page address.
+- **Line 29:** Rejects an over-long credit or source page.
+- **Line 30:** A source page must be an https link; this keeps javascript: and similar addresses out of the database.
+- **Line 31:** Keeps the cleaned new-link entry.
+- **Line 32:** Closes the preceding block (function, object, or statement body).
+- **Line 33:** Returns the cleaned list.
+- **Line 34:** Closes the preceding block (function, object, or statement body).
+
+## server/media-finder.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-finder.js`
+
+Automatic search for instructional pictures and videos used after the AI writes a lesson draft. It only ever returns addresses that came from a trusted source and that verifyLink has just confirmed: CoachLab’s reviewed catalog, Wikimedia Commons search results and, when a YouTube API key is configured on the server, YouTube search results. It never asks the AI for addresses and never invents one.
+
+### Lines 1–25
+
+```text
+1 | import { mediaCatalog } from '../client/src/lesson-media.js';
+2 | import { youtubeId } from '../client/src/media.js';
+3 | import { verifyLink } from './media-verify.js';
+4 |
+5 | const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'drill', 'drills', 'basic', 'basics', 'how', 'technique', 'exercise']);
+6 | const significant = text => [...new Set(String(text).toLowerCase().match(/[a-z0-9]{3,}/g) || [])].filter(word => !stopWords.has(word));
+7 | const strip = html => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\s+/g, ' ').trim();
+8 | const relevant = (query, text, share) => {
+9 |   const words = significant(query);
+10 |   if (!words.length) return false;
+11 |   const haystack = text.toLowerCase();
+12 |   return words.filter(word => haystack.includes(word)).length >= Math.max(1, Math.ceil(words.length * share));
+13 | };
+14 | const jsonFrom = async (fetcher, url, headers = {}) => {
+15 |   const response = await fetcher(url, { headers: { 'user-agent': 'CoachLab/1.0 (local coaching lesson planner)', accept: 'application/json', ...headers }, signal: AbortSignal.timeout(8000) });
+16 |   if (!response.ok) throw new Error('search unavailable');
+17 |   return response.json();
+18 | };
+19 |
+20 | export const cleanQueries = queries => (Array.isArray(queries) ? queries : []).filter(query => typeof query === 'string').map(query => query.replace(/\s+/g, ' ').trim()).filter(query => query.length >= 3 && query.length <= 80).slice(0, 2);
+21 |
+22 | export function catalogCandidates(discipline, section, queries) {
+23 |   const text = queries.length ? queries.join(' ') : '';
+24 |   return mediaCatalog.filter(item => item.disciplines.includes(discipline) && item.terms.test(text)).flatMap(item => [
+25 |     { url: item.image, title: item.title, credit: item.credit, source_page: item.source, rank: 0 },
+```
+
+- **Line 1:** Imports the reviewed catalog of demonstrations.
+- **Line 2:** Imports the YouTube id parser.
+- **Line 3:** Imports the link checker.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** A set of very common words ignored when comparing a search phrase with a title.
+- **Line 6:** Defines significant: the distinct lowercase words of three or more letters or digits in a text, minus the ignored words.
+- **Line 7:** Defines strip: removes HTML tags from text returned by Wikimedia, decodes a few common entities and tidies spaces.
+- **Line 8:** Defines relevant: does a text mention enough of the search words?
+- **Line 9:** The search phrase’s significant words.
+- **Line 10:** An empty phrase matches nothing.
+- **Line 11:** The lowercase text to look in.
+- **Line 12:** True when at least the required share (and at least one word) appears, for example two of three words.
+- **Line 13:** Closes the preceding block and ends the statement.
+- **Line 14:** Defines jsonFrom, which fetches a JSON answer from a fixed search service.
+- **Line 15:** Sends the request with an identifying user-agent, asking for JSON, and an 8-second time limit.
+- **Line 16:** A failed answer becomes an error that callers treat as “this source had nothing”.
+- **Line 17:** Returns the parsed JSON.
+- **Line 18:** Closes the preceding block and ends the statement.
+- **Line 19:** Blank line separates related sections for readability; it performs no operation.
+- **Line 20:** Exports cleanQueries: keeps at most two text search phrases of 3–80 characters, with white space tidied.
+- **Line 21:** Blank line separates related sections for readability; it performs no operation.
+- **Line 22:** Exports catalogCandidates: reviewed catalog items for a section.
+- **Line 23:** The catalog is matched on the technique phrases the AI named for the section, not on any passing mention inside the instructions, so a lesson that merely mentions a jab does not receive jab videos. With no phrases there is no catalog match.
+- **Line 24:** Keeps catalog items for this discipline whose technique pattern matches that text, and turns each into candidates.
+- **Line 25:** The catalog picture, with its title, credit and source page. rank 0 means “most trusted”.
+
+### Lines 26–50
+
+```text
+26 |     ...(item.video ? [{ url: `https://www.youtube.com/watch?v=${youtubeId(item.video)}`, title: item.title, credit: item.credit, source_page: item.source, rank: 0 }] : []),
+27 |   ]);
+28 | }
+29 |
+30 | export async function commonsCandidates(query, fetcher = fetch) {
+31 |   const found = [];
+32 |   for (const [filter, mimes] of [['bitmap', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']], ['video', ['video/webm', 'video/mp4']]]) {
+33 |     const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`${query} filetype:${filter}`)}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime%7Cextmetadata&iiurlwidth=800&format=json&formatversion=2`;
+34 |     const data = await jsonFrom(fetcher, url);
+35 |     for (const page of data.query?.pages || []) {
+36 |       const info = page.imageinfo?.[0];
+37 |       if (!info || !mimes.includes(info.mime)) continue;
+38 |       const meta = info.extmetadata || {};
+39 |       const description = strip(meta.ImageDescription?.value);
+40 |       if (!relevant(query, `${page.title} ${description}`, 0.67)) continue;
+41 |       const artist = strip(meta.Artist?.value).slice(0, 100);
+42 |       const license = strip(meta.LicenseShortName?.value).slice(0, 40);
+43 |       found.push({ url: filter === 'bitmap' ? info.thumburl || info.url : info.url, title: page.title.replace(/^File:/, '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' ').slice(0, 120), credit: `Wikimedia Commons${artist ? ` — ${artist}` : ''}${license ? `, ${license}` : ''}`.slice(0, 300), source_page: info.descriptionurl, rank: 2 });
+44 |     }
+45 |   }
+46 |   return found;
+47 | }
+48 |
+49 | export async function youtubeCandidates(query, discipline, key, fetcher = fetch) {
+50 |   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
+```
+
+- **Line 26:** The catalog video (if any), converted to a standard YouTube watch address.
+- **Line 27:** Closes the candidate list.
+- **Line 28:** Closes the preceding block (function, object, or statement body).
+- **Line 29:** Blank line separates related sections for readability; it performs no operation.
+- **Line 30:** Exports commonsCandidates: searches Wikimedia Commons (freely licensed media) for a phrase.
+- **Line 31:** Collects found candidates.
+- **Line 32:** Runs two searches: pictures (bitmap files) and videos, each with the file types CoachLab can display.
+- **Line 33:** Builds the search address for the Commons API: a file-namespace search for the phrase with the file-type filter, asking for the address, type and licence details of each result and a 800-pixel picture version.
+- **Line 34:** Runs the search.
+- **Line 35:** Looks at each result page (missing data is treated as an empty list).
+- **Line 36:** The file details.
+- **Line 37:** Skips results without details or with an unsupported file type such as SVG or Ogg video.
+- **Line 38:** The licence and author details.
+- **Line 39:** The file description text with HTML removed.
+- **Line 40:** Skips results where the title and description mention fewer than two thirds of the search words, which filters out unrelated pictures.
+- **Line 41:** The author’s name, tidied and limited to 100 characters.
+- **Line 42:** The licence name, limited to 40 characters.
+- **Line 43:** Adds a candidate: the 800-pixel picture or the video file address, a readable title made from the file name, a credit line naming Wikimedia Commons, the author and licence, and the Commons description page as source page.
+- **Line 44:** Closes the preceding block (function, object, or statement body).
+- **Line 45:** Closes the preceding block (function, object, or statement body).
+- **Line 46:** Returns the candidates.
+- **Line 47:** Closes the preceding block (function, object, or statement body).
+- **Line 48:** Blank line separates related sections for readability; it performs no operation.
+- **Line 49:** Exports youtubeCandidates, used only when the server has a YouTube API key.
+- **Line 50:** Builds the YouTube search address: embeddable videos only, strict safe search, five results, for the phrase plus the discipline.
+
+### Lines 51–75
+
+```text
+51 |   const data = await jsonFrom(fetcher, url, { 'x-goog-api-key': key });
+52 |   return (data.items || []).filter(item => item.id?.videoId && relevant(query, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+53 | }
+54 |
+55 | export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env } = {}) {
+56 |   const key = (env.YOUTUBE_API_KEY || '').trim();
+57 |   const perSection = await Promise.all(sections.map(async section => {
+58 |     const queries = cleanQueries(section.queries);
+59 |     const candidates = catalogCandidates(discipline, section, queries);
+60 |     for (const query of queries) {
+61 |       const sources = [commonsCandidates(query, fetcher)];
+62 |       if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher));
+63 |       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
+64 |     }
+65 |     candidates.sort((a, b) => a.rank - b.rank);
+66 |     const checked = await Promise.allSettled(candidates.slice(0, 8).map(candidate => verify(candidate.url).then(info => ({ candidate, info }))));
+67 |     return { section, verified: checked.filter(result => result.status === 'fulfilled').map(result => result.value), tried: queries.length > 0 || candidates.length > 0 };
+68 |   }));
+69 |   const used = new Set();
+70 |   const media = [];
+71 |   const notes = [];
+72 |   for (const { section, verified, tried } of perSection) {
+73 |     const picked = { image: 0, video: 0 };
+74 |     for (const { candidate, info } of verified) {
+75 |       const slot = info.kind === 'image' ? 'image' : 'video';
+```
+
+- **Line 51:** Runs the search. The key travels in a request header (never in the address) so it does not appear in logs.
+- **Line 52:** Keeps results with a video id whose title mentions at least half of the search words and turns them into candidates with the channel name as credit.
+- **Line 53:** Closes the preceding block (function, object, or statement body).
+- **Line 54:** Blank line separates related sections for readability; it performs no operation.
+- **Line 55:** Exports findMedia, the whole search. Its optional second argument lets tests supply fake network, verification and environment.
+- **Line 56:** Reads the optional YouTube key from the server environment only.
+- **Line 57:** Handles all sections at the same time.
+- **Line 58:** Cleans the section’s search phrases.
+- **Line 59:** Starts with the reviewed catalog candidates.
+- **Line 60:** For each phrase…
+- **Line 61:** …searches Wikimedia Commons…
+- **Line 62:** …and YouTube when a key exists.
+- **Line 63:** Adds the results of the sources that worked; a source that failed is ignored without stopping the others.
+- **Line 64:** Closes the preceding block (function, object, or statement body).
+- **Line 65:** Orders candidates by trust: catalog first, then YouTube, then Commons.
+- **Line 66:** Verifies the first eight candidates at the same time with verifyLink; each success keeps the candidate together with what the checker confirmed.
+- **Line 67:** Returns the section with only the candidates that passed verification, and whether anything was tried.
+- **Line 68:** Closes the per-section work.
+- **Line 69:** A set of addresses already chosen, to avoid repeats across sections.
+- **Line 70:** The final list.
+- **Line 71:** Friendly notes about sections with nothing found.
+- **Line 72:** Goes through the sections in order.
+- **Line 73:** Counts picked pictures and videos for this section.
+- **Line 74:** Looks at each verified candidate.
+- **Line 75:** Decides whether it is a picture or a video (YouTube counts as video).
+
+### Lines 76–84
+
+```text
+76 |       if (picked[slot] >= 1 || used.has(info.url) || media.length >= 8) continue;
+77 |       picked[slot] += 1;
+78 |       used.add(info.url);
+79 |       media.push({ origin: 'suggested', kind: info.kind, url: info.url, title: (candidate.title || info.title).slice(0, 120), activity: section.name, credit: candidate.credit || info.credit || '', source_page: candidate.source_page || info.source_page || '' });
+80 |     }
+81 |     if (tried && !picked.image && !picked.video) notes.push(`No verified picture or video was found for ${section.name}.`);
+82 |   }
+83 |   return { media, notes };
+84 | }
+```
+
+- **Line 76:** Skips it if the section already has one of that kind, if the address was used already, or if eight items have been chosen.
+- **Line 77:** Counts it.
+- **Line 78:** Remembers its address.
+- **Line 79:** Adds it to the result, labeled “suggested”, with the verified kind and address, a caption, the section it belongs to, the credit and the source page.
+- **Line 80:** Closes the preceding block (function, object, or statement body).
+- **Line 81:** If something was searched but nothing verified, writes a note naming the section.
+- **Line 82:** Closes the preceding block (function, object, or statement body).
+- **Line 83:** Returns the media and the notes.
+- **Line 84:** Closes the preceding block (function, object, or statement body).
+
+## server/media-fixtures.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-fixtures.js`
+
+Tiny fake files shared by the media tests. They contain only the signature bytes and padding, enough for the server’s file-type check.
+
+### Lines 1–2
+
+```text
+1 | export const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+2 | export const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(64)]);
+```
+
+- **Line 1:** Exports png: the eight PNG signature bytes followed by 64 zero bytes.
+- **Line 2:** Exports webm: the four WebM signature bytes followed by 64 zero bytes.
+
+## server/migrations/002_create_lesson_media.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations\002_create_lesson_media.sql`
+
+Second SQLite migration. It adds a table for pictures and videos attached to lessons; the lessons table is not altered, so existing lessons are untouched.
+
+### Lines 1–18
+
+```text
+1 | CREATE TABLE lesson_media (
+2 |   id INTEGER PRIMARY KEY,
+3 |   lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+4 |   position INTEGER NOT NULL DEFAULT 0,
+5 |   kind TEXT NOT NULL CHECK (kind IN ('image', 'video', 'youtube')),
+6 |   origin TEXT NOT NULL CHECK (origin IN ('upload', 'link', 'suggested')),
+7 |   url TEXT,
+8 |   title TEXT NOT NULL DEFAULT '',
+9 |   activity TEXT NOT NULL DEFAULT '',
+10 |   mime TEXT,
+11 |   size_bytes INTEGER,
+12 |   data BLOB,
+13 |   credit TEXT NOT NULL DEFAULT '',
+14 |   source_page TEXT,
+15 |   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+16 |   CHECK ((origin = 'upload' AND data IS NOT NULL AND url IS NULL) OR (origin <> 'upload' AND data IS NULL AND url IS NOT NULL))
+17 | ) STRICT;
+18 | CREATE INDEX lesson_media_lesson_id_idx ON lesson_media (lesson_id);
+```
+
+- **Line 1:** Creates the lesson_media table.
+- **Line 2:** Each attachment gets its own whole-number id.
+- **Line 3:** Links to the lesson it belongs to. It may be empty (NULL) while an uploaded file has not been saved with a lesson yet. ON DELETE CASCADE removes attachments when their lesson is deleted.
+- **Line 4:** Display order within the lesson, starting at zero.
+- **Line 5:** What it is: image, video or youtube. The CHECK refuses any other value.
+- **Line 6:** Where it came from: an upload, a link the coach pasted, or a link CoachLab suggested. Other values are refused.
+- **Line 7:** The web address for links; empty for uploaded files.
+- **Line 8:** Caption shown with the attachment; empty by default.
+- **Line 9:** The heading of the activity the attachment belongs to (for example “Warm-up — 10 minutes”); empty means the whole lesson.
+- **Line 10:** File type of an uploaded file, such as image/png.
+- **Line 11:** Size of an uploaded file in bytes.
+- **Line 12:** The uploaded file itself, stored in the database as a BLOB (binary data) so it travels with the database backups and survives restarts.
+- **Line 13:** Credit or author text for attribution; empty by default.
+- **Line 14:** Link to the page that describes the source or licence.
+- **Line 15:** Creation time as an ISO 8601 text timestamp, filled in by SQLite when the row is created. Orphaned uploads are removed by age.
+- **Line 16:** Table-level rule: an upload must have file data and no link; a link must have a link and no file data. This keeps rows consistent.
+- **Line 17:** Ends the column list. STRICT makes SQLite enforce the declared column types, like the lessons table.
+- **Line 18:** Creates an index so finding a lesson’s attachments stays fast.
+
+## prisma/migrations/20261016000100_create_lesson_media/migration.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\20261016000100_create_lesson_media\migration.sql`
+
+PostgreSQL migration that mirrors the SQLite one: it only adds the lesson_media table and an index. It does not change, copy or delete lessons. It has been applied to the Development database only.
+
+### Lines 1–24
+
+```text
+1 | BEGIN;
+2 | CREATE TABLE "lesson_media" (
+3 |   "id" SERIAL NOT NULL,
+4 |   "lesson_id" INTEGER,
+5 |   "position" INTEGER NOT NULL DEFAULT 0,
+6 |   "kind" TEXT NOT NULL,
+7 |   "origin" TEXT NOT NULL,
+8 |   "url" TEXT,
+9 |   "title" TEXT NOT NULL DEFAULT '',
+10 |   "activity" TEXT NOT NULL DEFAULT '',
+11 |   "mime" TEXT,
+12 |   "size_bytes" INTEGER,
+13 |   "data" BYTEA,
+14 |   "credit" TEXT NOT NULL DEFAULT '',
+15 |   "source_page" TEXT,
+16 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+17 |   CONSTRAINT "lesson_media_pkey" PRIMARY KEY ("id"),
+18 |   CONSTRAINT "lesson_media_lesson_id_fkey" FOREIGN KEY ("lesson_id") REFERENCES "lessons"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+19 |   CONSTRAINT "lesson_media_kind_check" CHECK ("kind" IN ('image', 'video', 'youtube')),
+20 |   CONSTRAINT "lesson_media_origin_check" CHECK ("origin" IN ('upload', 'link', 'suggested')),
+21 |   CONSTRAINT "lesson_media_source_check" CHECK (("origin" = 'upload' AND "data" IS NOT NULL AND "url" IS NULL) OR ("origin" <> 'upload' AND "data" IS NULL AND "url" IS NOT NULL))
+22 | );
+23 | CREATE INDEX "lesson_media_lesson_id_idx" ON "lesson_media"("lesson_id");
+24 | COMMIT;
+```
+
+- **Line 1:** Starts a transaction so the table and index are created together or not at all.
+- **Line 2:** Creates the lesson_media table; quoted names keep exact lowercase spelling.
+- **Line 3:** SERIAL is an automatically increasing whole-number id.
+- **Line 4:** The lesson this attachment belongs to; NULL while an uploaded file is waiting to be saved with a lesson.
+- **Line 5:** Display order within the lesson.
+- **Line 6:** Attachment kind (image, video or youtube), validated by a CHECK below.
+- **Line 7:** Origin (upload, link or suggested), validated by a CHECK below.
+- **Line 8:** Web address for linked media; NULL for uploads.
+- **Line 9:** Caption, empty by default.
+- **Line 10:** Heading of the activity it belongs to; empty means the whole lesson.
+- **Line 11:** File type of an upload.
+- **Line 12:** File size in bytes.
+- **Line 13:** BYTEA is PostgreSQL’s binary type; uploaded files live here.
+- **Line 14:** Credit or author text, empty by default.
+- **Line 15:** Link to the page that explains the source or licence.
+- **Line 16:** Creation time with timezone, defaulting to the moment the row is inserted. Used to purge abandoned uploads.
+- **Line 17:** Declares id as the primary key (unique identifier).
+- **Line 18:** Foreign key to lessons(id). ON DELETE CASCADE deletes attachments when their lesson is deleted; ON UPDATE CASCADE would follow an id change.
+- **Line 19:** Only image, video and youtube are allowed as kind.
+- **Line 20:** Only upload, link and suggested are allowed as origin.
+- **Line 21:** An upload must have data and no url; anything else must have a url and no data.
+- **Line 22:** Closes the parenthesised expression or call and ends the statement.
+- **Line 23:** Index on lesson_id so a lesson’s attachments are found quickly.
+- **Line 24:** Commits the transaction, making the table permanent.
+
+## server/media.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media.test.js`
+
+Fast Node tests for the media rules that need no database and no internet: file signatures, YouTube link parsing, private-address blocking, redirect handling, link verification, attachment-list validation, activity helpers, and the automatic finder. Network access is replaced by small fake functions so the tests are deterministic.
+
+### Lines 1–25
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { sniffMedia } from './media-sniff.js';
+4 | import { youtubeId, renameActivity, mediaPayload, unassignedMedia } from '../client/src/media.js';
+5 | import { isPublicAddress, publicLookup, safeFetch, verifyLink, MediaLinkError } from './media-verify.js';
+6 | import { validateMediaList } from './media-validate.js';
+7 | import { png, webm } from './media-fixtures.js';
+8 | import { findMedia, commonsCandidates, cleanQueries } from './media-finder.js';
+9 |
+10 |
+11 | test('file signatures identify supported pictures and videos and reject everything else', () => {
+12 |   assert.deepEqual(sniffMedia(png), { kind: 'image', mime: 'image/png' });
+13 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)])), { kind: 'image', mime: 'image/jpeg' });
+14 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/gif' });
+15 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/webp' });
+16 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(32)])), { kind: 'video', mime: 'video/mp4' });
+17 |   assert.deepEqual(sniffMedia(webm), { kind: 'video', mime: 'video/webm' });
+18 |   assert.equal(sniffMedia(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
+19 |   assert.equal(sniffMedia(Buffer.from('<!doctype html><html></html>')), null);
+20 |   assert.equal(sniffMedia(Buffer.alloc(4)), null);
+21 |   assert.equal(sniffMedia(null), null);
+22 | });
+23 |
+24 | test('YouTube links in every common form resolve to the same 11 character ID', () => {
+25 |   const id = 'dQw4w9WgXcQ';
+```
+
+- **Line 1:** Imports Node’s built-in test function.
+- **Line 2:** Imports strict assertions.
+- **Line 3:** Imports the file-type sniffer under test.
+- **Line 4:** Imports the shared browser helpers that are tested here.
+- **Line 5:** Imports the link-checking pieces under test.
+- **Line 6:** Imports the attachment-list validator.
+- **Line 7:** Imports the fake PNG and WebM files.
+- **Line 8:** Imports the finder functions.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** Blank line separates related sections for readability; it performs no operation.
+- **Line 11:** Registers the test that real file signatures are recognised and everything else rejected.
+- **Line 12:** A PNG is recognised as an image of type image/png.
+- **Line 13:** A JPEG signature (FF D8 FF E0) plus padding is recognised.
+- **Line 14:** A GIF89a header is recognised.
+- **Line 15:** A RIFF container with WEBP is recognised (\0 is a zero byte).
+- **Line 16:** A file with ftyp at byte 4 is recognised as MP4.
+- **Line 17:** The fake WebM is recognised.
+- **Line 18:** SVG text is rejected, because SVG can contain scripts.
+- **Line 19:** HTML is rejected.
+- **Line 20:** A four-byte buffer is too short and is rejected.
+- **Line 21:** A missing buffer is rejected without an error.
+- **Line 22:** Closes the callback body and the function call that received it.
+- **Line 23:** Blank line separates related sections for readability; it performs no operation.
+- **Line 24:** Registers the YouTube link parsing test.
+- **Line 25:** A sample video id.
+
+### Lines 26–50
+
+```text
+26 |   for (const link of [`https://www.youtube.com/watch?v=${id}`, `https://youtube.com/watch?v=${id}&t=30s`, `https://m.youtube.com/watch?v=${id}`, `https://youtu.be/${id}?si=x`, `https://www.youtube.com/embed/${id}`, `https://www.youtube-nocookie.com/embed/${id}`, `https://www.youtube.com/shorts/${id}`, `  https://www.youtube.com/live/${id}  `]) assert.equal(youtubeId(link), id, link);
+27 |   for (const link of ['https://www.youtube.com/watch?v=short', 'https://example.com/watch?v=' + id, 'https://notyoutube.com/embed/' + id, 'javascript:alert(1)', 'not a link', '', null]) assert.equal(youtubeId(link), null, String(link));
+28 | });
+29 |
+30 | test('private, loopback and link-local network addresses are never public', async () => {
+31 |   for (const address of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'not-an-address']) assert.equal(isPublicAddress(address), false, address);
+32 |   for (const address of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(address), true, address);
+33 |   await new Promise(resolve => publicLookup('localhost', {}, error => { assert.ok(error instanceof MediaLinkError); resolve(); }));
+34 | });
+35 |
+36 | test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
+37 |   const calls = [];
+38 |   const request = async (url, options) => {
+39 |     calls.push(url.href);
+40 |     assert.equal(options.method, 'GET');
+41 |     if (url.pathname === '/start') return { status: 302, headers: { location: '/next' }, body: Buffer.alloc(0) };
+42 |     if (url.pathname === '/to-http') return { status: 302, headers: { location: 'http://example.com/plain' }, body: Buffer.alloc(0) };
+43 |     if (url.pathname === '/loop') return { status: 302, headers: { location: '/loop' }, body: Buffer.alloc(0) };
+44 |     return { status: 200, headers: {}, body: Buffer.from('ok') };
+45 |   };
+46 |   const result = await safeFetch('https://example.com/start', { request });
+47 |   assert.equal(result.url, 'https://example.com/next');
+48 |   assert.deepEqual(calls, ['https://example.com/start', 'https://example.com/next']);
+49 |   for (const bad of ['http://example.com/a', 'ftp://example.com/a', 'https://example.com:8443/a', 'https://user:pass@example.com/a', 'nonsense', 'https://example.com/to-http', 'https://example.com/loop']) await assert.rejects(safeFetch(bad, { request }), MediaLinkError, bad);
+50 | });
+```
+
+- **Line 26:** Eight common link shapes (watch, with extra parameters, mobile, short youtu.be, embed, privacy-enhanced embed, shorts and live, including surrounding spaces) must all give the same id.
+- **Line 27:** Bad links must give null: wrong-length ids, other websites, look-alike host names, a javascript: address, plain text, an empty string and null.
+- **Line 28:** Closes the callback body and the function call that received it.
+- **Line 29:** Blank line separates related sections for readability; it performs no operation.
+- **Line 30:** Registers the private-address test (asynchronous because one check uses a real lookup of localhost).
+- **Line 31:** Loopback, private, link-local (cloud metadata), reserved, IPv6 private and IPv4-mapped private addresses, plus text that is not an address, must all be reported as not public.
+- **Line 32:** Ordinary public addresses, including ones just outside the private ranges, must be reported as public.
+- **Line 33:** Calls the real lookup function with the name localhost and expects it to be refused with a MediaLinkError (localhost resolves to a private address).
+- **Line 34:** Closes the callback body and the function call that received it.
+- **Line 35:** Blank line separates related sections for readability; it performs no operation.
+- **Line 36:** Registers the safeFetch test.
+- **Line 37:** Records the addresses requested.
+- **Line 38:** A fake request function that stands in for the network.
+- **Line 39:** Remembers each requested address.
+- **Line 40:** Checks that a GET request was made.
+- **Line 41:** The /start page redirects to /next.
+- **Line 42:** The /to-http page redirects to an insecure http address.
+- **Line 43:** The /loop page redirects to itself forever.
+- **Line 44:** Every other page answers 200 with a short body.
+- **Line 45:** Closes the preceding block and ends the statement.
+- **Line 46:** Fetches /start through the fake network.
+- **Line 47:** Expects the final address to be the redirect target.
+- **Line 48:** Expects exactly two requests, proving the redirect was followed once.
+- **Line 49:** Expects errors for insecure or non-web schemes, an unusual port, embedded credentials, nonsense text, a redirect to http and an endless redirect loop.
+- **Line 50:** Closes the callback body and the function call that received it.
+
+### Lines 51–75
+
+```text
+51 |
+52 | test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
+53 |   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
+54 |   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
+55 |   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+56 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(404, '') }), /does not exist or is private/);
+57 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(401, '') }), /does not allow embedding/);
+58 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(500, '') }), /could not confirm/);
+59 |   const image = await verifyLink('https://cdn.example.com/photos/Double-leg_setup.png', { fetcher: reply(200, png, { 'content-type': 'image/png' }) });
+60 |   assert.deepEqual(image, { kind: 'image', url: 'https://cdn.example.com/photos/Double-leg_setup.png', title: 'Double leg setup', credit: '', source_page: '' });
+61 |   assert.equal((await verifyLink('https://cdn.example.com/clip.webm', { fetcher: reply(206, webm, { 'content-range': 'bytes 0-67/68' }) })).kind, 'video');
+62 |   await assert.rejects(verifyLink('https://example.com/page', { fetcher: reply(200, '<html></html>', { 'content-type': 'text/html; charset=utf-8' }) }), /web page, not a picture or video/);
+63 |   await assert.rejects(verifyLink('https://example.com/logo.svg', { fetcher: reply(200, '<svg xmlns="http://www.w3.org/2000/svg"/>', { 'content-type': 'image/svg+xml' }) }), /not a supported picture/);
+64 |   await assert.rejects(verifyLink('https://example.com/missing.png', { fetcher: reply(404, 'no') }), /status 404/);
+65 |   await assert.rejects(verifyLink('https://example.com/huge.png', { fetcher: reply(200, png, { 'content-length': String(100 * 1024 * 1024) }) }), /very large/);
+66 |   for (const bad of ['', '   ', 'not a link', 'http://example.com/a.png', 'x'.repeat(2100)]) await assert.rejects(verifyLink(bad, { fetcher: reply(200, png) }), MediaLinkError, bad);
+67 | });
+68 |
+69 | test('attachment lists accept saved IDs and new links only, with bounded text', () => {
+70 |   const good = validateMediaList([{ id: 3, title: ' Jab ', activity: 'Warm-up — 5 minutes' }, { url: ' https://youtu.be/dQw4w9WgXcQ ', title: '', activity: '', origin: 'suggested', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+71 |   assert.deepEqual(good.media, [{ id: 3, title: 'Jab', activity: 'Warm-up — 5 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'suggested', title: '', activity: '', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+72 |   for (const bad of ['x', {}, [null], [{ id: 0 }], [{ id: 1.5 }], [{ id: 1 }, { id: 1 }], [{ id: 1, url: 'https://a.com/x.png' }], [{ url: '' }], [{ url: 'https://a.com/x.png', origin: 'upload' }], [{ url: 'https://a.com/x.png', kind: 'video' }], [{ url: 'https://a.com/x.png', title: 'x'.repeat(121) }], [{ url: 'https://a.com/x.png', source_page: 'javascript:alert(1)' }], Array.from({ length: 13 }, (_, id) => ({ id: id + 1 }))]) assert.ok(validateMediaList(bad).error, JSON.stringify(bad).slice(0, 60));
+73 |   assert.deepEqual(validateMediaList([]).media, []);
+74 | });
+75 |
+```
+
+- **Line 51:** Blank line separates related sections for readability; it performs no operation.
+- **Line 52:** Registers the verifyLink test.
+- **Line 53:** Helper that creates a fake fetcher returning a chosen status, body and headers.
+- **Line 54:** A YouTube link whose fake oEmbed answer is 200 with a title and channel.
+- **Line 55:** Expects the checked result: kind youtube, the clean watch address, the title, the credit naming the channel and the source page.
+- **Line 56:** A 404 must say the video does not exist or is private.
+- **Line 57:** A 401 must say embedding is not allowed.
+- **Line 58:** A 500 must say YouTube cannot confirm the video now.
+- **Line 59:** A PNG link is verified from the file’s bytes.
+- **Line 60:** Expects kind image and a caption made from the file name (“Double leg setup”).
+- **Line 61:** A WebM link answering 206 (partial content) is recognised as a video.
+- **Line 62:** A link that returns an HTML page is refused with the “web page” message.
+- **Line 63:** An SVG picture is refused as unsupported even though the site calls it an image.
+- **Line 64:** A 404 answer is refused and the status is reported.
+- **Line 65:** A file claiming to be 100 MB is refused as very large.
+- **Line 66:** Empty, blank, non-address, insecure and over-long links must be refused with a MediaLinkError.
+- **Line 67:** Closes the callback body and the function call that received it.
+- **Line 68:** Blank line separates related sections for readability; it performs no operation.
+- **Line 69:** Registers the attachment-list validation test.
+- **Line 70:** Validates a good list: one stored attachment with extra spaces in its caption and one new suggested link with spaces around the address.
+- **Line 71:** Expects spaces trimmed and only the allowed fields kept.
+- **Line 72:** Expects errors for many bad lists: not a list, not objects, ids of zero or fractions, duplicate ids, a stored attachment carrying a link, an empty link, an upload origin, a client-supplied kind, an over-long caption, a javascript: source page, and more than 12 attachments.
+- **Line 73:** An empty list is valid.
+- **Line 74:** Closes the callback body and the function call that received it.
+- **Line 75:** Blank line separates related sections for readability; it performs no operation.
+
+### Lines 76–100
+
+```text
+76 | test('activity helpers keep attachments with the right activity when headings change', () => {
+77 |   const media = [{ id: 1, activity: 'Warm-up — 10 minutes' }, { id: 2, activity: 'Drill — 5 minutes' }, { id: 3, activity: '' }];
+78 |   assert.deepEqual(renameActivity(media, 'Warm-up — 10 minutes', 'Warm-up — 12 minutes').map(item => item.activity), ['Warm-up — 12 minutes', 'Drill — 5 minutes', '']);
+79 |   assert.equal(renameActivity(media, '', 'New'), media);
+80 |   assert.deepEqual(unassignedMedia(media, ['Drill — 5 minutes']).map(item => item.id), [1, 3]);
+81 |   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
+82 | });
+83 |
+84 | const commonsReply = pages => async () => Response.json({ query: { pages } });
+85 | const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
+86 |
+87 | test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
+88 |   const results = await commonsCandidates('double leg takedown', commonsReply([page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg.svg', 'image/svg+xml'), page('File:Random_beach.jpg', 'image/jpeg', { ImageDescription: { value: 'Beach' } }), page('File:Clip.ogv', 'video/ogg')]));
+89 |   const images = results.filter(item => item.url.includes('/thumb/'));
+90 |   assert.equal(images.length, 1);
+91 |   assert.equal(images[0].title, 'Double leg takedown');
+92 |   assert.equal(images[0].credit, 'Wikimedia Commons — Jane Coach, CC BY-SA 4.0');
+93 |   assert.match(images[0].source_page, /^https:\/\/commons\.wikimedia\.org\//);
+94 |   await assert.rejects(commonsCandidates('x', async () => new Response('', { status: 500 })));
+95 |   assert.deepEqual(cleanQueries(['  knee   cut  ', 'a', 'x'.repeat(81), 7, 'b'.repeat(5), 'third one']), ['knee cut', 'bbbbb']);
+96 | });
+97 |
+98 | test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
+99 |   const verified = [];
+100 |   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
+```
+
+- **Line 76:** Registers the test for the activity helper functions.
+- **Line 77:** Three sample attachments: for a warm-up, for a drill and one for the whole lesson.
+- **Line 78:** Renaming the warm-up heading moves only the warm-up attachment to the new heading.
+- **Line 79:** Renaming from an empty heading returns the very same list, unchanged.
+- **Line 80:** With only the drill heading existing, the warm-up and whole-lesson attachments are unassigned (ids 1 and 3).
+- **Line 81:** The request payload keeps only the id, caption and activity for a stored attachment and the full link fields for a new one, ignoring the extra url on the stored one.
+- **Line 82:** Closes the callback body and the function call that received it.
+- **Line 83:** Blank line separates related sections for readability; it performs no operation.
+- **Line 84:** Helper that builds a fake Wikimedia answer containing the given pages.
+- **Line 85:** Helper that builds one fake Commons file page with picture and description addresses, a file type, an author containing HTML, a licence and a description.
+- **Line 86:** Blank line separates related sections for readability; it performs no operation.
+- **Line 87:** Registers the Commons search test.
+- **Line 88:** Searches with fake pages: a good JPEG, an SVG, an unrelated beach picture and an Ogg video.
+- **Line 89:** Keeps the picture results (their addresses contain /thumb/).
+- **Line 90:** Exactly one picture should remain.
+- **Line 91:** Its title is made from the file name.
+- **Line 92:** Its credit names Wikimedia Commons, the author (HTML stripped) and the licence.
+- **Line 93:** Its source page is a Commons address.
+- **Line 94:** A failing search service (status 500) makes the function reject.
+- **Line 95:** Search-phrase cleaning keeps two valid phrases, tidies spaces, and drops too short, too long, non-text and extra phrases.
+- **Line 96:** Closes the callback body and the function call that received it.
+- **Line 97:** Blank line separates related sections for readability; it performs no operation.
+- **Line 98:** Registers the finder test.
+- **Line 99:** Records the addresses sent to verification.
+- **Line 100:** A fake verifier that rejects any address containing “broken” and otherwise confirms a kind.
+
+### Lines 101–125
+
+```text
+101 |   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
+102 |   const sections = [
+103 |     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
+104 |     { name: 'Technique teaching', instructions: 'Teach the double leg takedown.', queries: ['double leg takedown'] },
+105 |     { name: 'Progressive drills', instructions: 'Repeat the double leg takedown.', queries: ['double leg takedown'] },
+106 |   ];
+107 |   const result = await findMedia({ discipline: 'Wrestling', sections }, { fetcher, verify, env: {} });
+108 |   assert.ok(result.media.length >= 2);
+109 |   assert.ok(result.media.every(item => item.origin === 'suggested' && ['Technique teaching', 'Progressive drills'].includes(item.activity)));
+110 |   assert.equal(new Set(result.media.map(item => item.url)).size, result.media.length);
+111 |   assert.ok(result.media.every(item => !item.url.includes('broken')));
+112 |   assert.ok(!result.media.some(item => item.activity === 'Warm-up'));
+113 |   assert.ok(result.media.some(item => item.credit.startsWith('Wikimedia Commons') || item.credit.includes('David Avellan')));
+114 |   assert.ok(result.notes.every(note => typeof note === 'string'));
+115 | });
+116 |
+117 | test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
+118 |   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
+119 |   const fetcher = async () => Response.json({ query: { pages: [] } });
+120 |   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
+121 |   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
+122 |   const asked = await findMedia({ discipline: 'Muay Thai', sections: [{ ...passing, queries: ['jab'] }] }, { fetcher, verify, env: {} });
+123 |   assert.ok(asked.media.length >= 1 && asked.media.every(item => item.activity === 'Technique teaching'));
+124 | });
+125 |
+```
+
+- **Line 101:** A fake search service returning one good and one “broken” Commons picture for picture searches and nothing for video searches.
+- **Line 102:** Starts the three test sections.
+- **Line 103:** The warm-up has no search phrases.
+- **Line 104:** The technique section names a double leg takedown.
+- **Line 105:** The drills section names the same technique.
+- **Line 106:** Closes the array and ends the statement.
+- **Line 107:** Runs the finder for Wrestling with no YouTube key.
+- **Line 108:** At least two items must be found.
+- **Line 109:** Every item is marked suggested and belongs to one of the two sections that asked for media.
+- **Line 110:** No address appears twice across the sections.
+- **Line 111:** The unverifiable “broken” address was dropped.
+- **Line 112:** The warm-up received nothing.
+- **Line 113:** At least one item carries a Commons or catalog credit, proving attribution is kept.
+- **Line 114:** The notes are plain sentences.
+- **Line 115:** Closes the callback body and the function call that received it.
+- **Line 116:** Blank line separates related sections for readability; it performs no operation.
+- **Line 117:** Registers the regression test for a mistake found with the real AI: media must match the technique the section asked for.
+- **Line 118:** A fake verifier that accepts everything.
+- **Line 119:** A fake search service that finds nothing, so only the catalog can contribute.
+- **Line 120:** A section whose instructions mention the jab in passing but whose search phrase is a roundhouse kick.
+- **Line 121:** Expects no media at all: the catalog’s jab video must not be attached to a roundhouse kick section.
+- **Line 122:** The same section asking for a jab.
+- **Line 123:** Now media is found and belongs to that section.
+- **Line 124:** Closes the callback body and the function call that received it.
+- **Line 125:** Blank line separates related sections for readability; it performs no operation.
+
+### Lines 126–138
+
+```text
+126 | test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
+127 |   const seen = [];
+128 |   const fetcher = async (url, options) => {
+129 |     seen.push([url, options.headers['x-goog-api-key']]);
+130 |     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
+131 |     return Response.json({ query: { pages: [] } });
+132 |   };
+133 |   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
+134 |   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
+135 |   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
+136 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
+137 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
+138 | });
+```
+
+- **Line 126:** Registers the YouTube-key test.
+- **Line 127:** Records every request’s address and key header.
+- **Line 128:** A fake search service.
+- **Line 129:** Remembers the address and the x-goog-api-key header of each call.
+- **Line 130:** For YouTube it returns two results: an unrelated “pad work” video and a “knee cut half guard pass” video.
+- **Line 131:** Wikimedia searches return nothing.
+- **Line 132:** Closes the preceding block and ends the statement.
+- **Line 133:** A fake verifier that accepts all addresses as YouTube videos.
+- **Line 134:** Runs the finder with a test key in the environment.
+- **Line 135:** The relevant video is returned.
+- **Line 136:** The irrelevant video is not.
+- **Line 137:** The key was sent in the header and never appeared in the web address.
+- **Line 138:** Closes the callback body and the function call that received it.
+
+## server/media-api.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-api.test.js`
+
+End-to-end tests of the media API against a real, temporary SQLite database and a real local HTTP server. Link verification and media searching are replaced by fakes so no internet is needed. They prove uploads, attaching, editing, deleting, persistence after a server restart, safe failures and rate limits.
+
+### Lines 1–25
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { once } from 'node:events';
+4 | import { mkdtempSync, rmSync } from 'node:fs';
+5 | import { tmpdir } from 'node:os';
+6 | import path from 'node:path';
+7 | import Database from 'better-sqlite3';
+8 | import { createApp } from './app.js';
+9 | import { migrate } from './migrations.js';
+10 | import { MediaLinkError } from './media-verify.js';
+11 | import { png, webm } from './media-fixtures.js';
+12 |
+13 | const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+14 | const verifyLink = async url => {
+15 |   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
+16 |   if (url.includes('offline')) throw new Error('private transport detail');
+17 |   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
+18 | };
+19 |
+20 | async function fixture(t, extra = {}) {
+21 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
+22 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+23 |   const state = { filename: path.join(directory, 'test.sqlite') };
+24 |   state.stop = async () => {
+25 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+```
+
+- **Line 1:** Imports Node’s test function.
+- **Line 2:** Imports strict assertions.
+- **Line 3:** Imports once, which waits for an event such as “listening”.
+- **Line 4:** Imports functions that create and remove a temporary folder.
+- **Line 5:** Imports the operating system’s temporary folder location.
+- **Line 6:** Imports path helpers.
+- **Line 7:** Imports the SQLite driver.
+- **Line 8:** Imports the app factory under test.
+- **Line 9:** Imports the SQLite migrations, which now include the media table.
+- **Line 10:** Imports the error type used to simulate a rejected link.
+- **Line 11:** Imports the fake PNG and WebM files.
+- **Line 12:** Blank line separates related sections for readability; it performs no operation.
+- **Line 13:** A sample YouTube watch address used by the fakes.
+- **Line 14:** A fake link verifier that replaces real network checks.
+- **Line 15:** Addresses containing “broken” simulate a link that cannot be used.
+- **Line 16:** Addresses containing “offline” simulate an unexpected failure whose technical message must never reach the user.
+- **Line 17:** Everything else is confirmed: YouTube-looking links as a video, others as a picture.
+- **Line 18:** Closes the preceding block and ends the statement.
+- **Line 19:** Blank line separates related sections for readability; it performs no operation.
+- **Line 20:** Defines the fixture that builds a fresh app for each test; extra options can override fakes.
+- **Line 21:** Creates a temporary folder inside the system temp directory.
+- **Line 22:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
+- **Line 23:** The state object starts with the database file path.
+- **Line 24:** stop closes the server and database.
+- **Line 25:** Closes the HTTP server if it is listening.
+
+### Lines 26–50
+
+```text
+26 |     if (state.database?.open) state.database.close();
+27 |   };
+28 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
+29 |   state.start = async () => {
+30 |     state.database = new Database(state.filename);
+31 |     migrate(state.database);
+32 |     state.server = createApp(state.database, { verifyLink, ...extra }).listen(0, '127.0.0.1');
+33 |     await once(state.server, 'listening');
+34 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
+35 |   };
+36 |   await state.start();
+37 |   state.json = (route, method, body) => fetch(state.url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+38 |   state.upload = (data, type = 'image/png', name = 'Jab-setup.png') => fetch(state.url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name) }, body: data });
+39 |   state.media = async () => (await fetch(state.url + '/api/lesson-media')).json();
+40 |   return state;
+41 | }
+42 |
+43 | test('uploads are checked by content, stored in the database, served with range support and never trusted as pages', async t => {
+44 |   const state = await fixture(t);
+45 |   const response = await state.upload(png);
+46 |   assert.equal(response.status, 201);
+47 |   const saved = await response.json();
+48 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
+49 |   assert.ok(!('data' in saved));
+50 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
+```
+
+- **Line 26:** Closes the database if it is open.
+- **Line 27:** Closes the preceding block and ends the statement.
+- **Line 28:** Registers cleanup after the test: stop everything and delete the temporary folder.
+- **Line 29:** start opens the database and server; tests call stop and start to simulate a restart.
+- **Line 30:** Opens (or reopens) the SQLite file.
+- **Line 31:** Applies migrations (a no-op the second time).
+- **Line 32:** Starts the real app on a random free port on this computer only, with the fake verifier.
+- **Line 33:** Waits until the server is listening.
+- **Line 34:** Remembers the base address.
+- **Line 35:** Closes the preceding block and ends the statement.
+- **Line 36:** Starts the first time.
+- **Line 37:** Helper that sends JSON to a route.
+- **Line 38:** Helper that uploads raw bytes with a declared type and file name.
+- **Line 39:** Helper that lists saved attachments.
+- **Line 40:** Returns the state to the test.
+- **Line 41:** Closes the preceding block (function, object, or statement body).
+- **Line 42:** Blank line separates related sections for readability; it performs no operation.
+- **Line 43:** Registers the upload test.
+- **Line 44:** Creates the fixture.
+- **Line 45:** Uploads the fake PNG.
+- **Line 46:** Expects status 201 (Created).
+- **Line 47:** Reads the reply.
+- **Line 48:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
+- **Line 49:** The reply must not contain the file bytes.
+- **Line 50:** Downloads the file.
+
+### Lines 51–75
+
+```text
+51 |   assert.equal(file.status, 200);
+52 |   assert.equal(file.headers.get('content-type'), 'image/png');
+53 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+54 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
+55 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+56 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
+57 |   assert.equal(partial.status, 206);
+58 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
+59 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
+60 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
+61 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
+62 |   assert.equal(video.kind, 'video');
+63 |   for (const [body, type, status] of [[Buffer.alloc(0), 'image/png', 400], [png, 'text/html', 415], [png, 'video/mp4', 415], [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'image/png', 415], [Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'image/png', 413], [Buffer.concat([webm, Buffer.alloc(21 * 1024 * 1024)]), 'video/webm', 413]]) {
+64 |     const result = await state.upload(body, type);
+65 |     assert.equal(result.status, status, type);
+66 |     assert.equal(typeof (await result.json()).error, 'string');
+67 |   }
+68 |   assert.equal((await fetch(`${state.url}/api/media/99999/file`)).status, 404);
+69 |   assert.deepEqual(await state.media(), []);
+70 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 204);
+71 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
+72 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
+73 | });
+74 |
+75 | test('lessons keep their nine fields while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+```
+
+- **Line 51:** Expects 200.
+- **Line 52:** Expects the verified type.
+- **Line 53:** Expects the nosniff security header.
+- **Line 54:** Expects a Content-Security-Policy containing sandbox.
+- **Line 55:** The downloaded bytes equal the uploaded bytes.
+- **Line 56:** Requests only the first eight bytes.
+- **Line 57:** Expects 206 (Partial Content).
+- **Line 58:** Expects the Content-Range header to describe the slice.
+- **Line 59:** The slice bytes equal the first eight bytes.
+- **Line 60:** A range beyond the end of the file gets 416.
+- **Line 61:** Uploads a WebM video.
+- **Line 62:** Expects it to be classed as a video.
+- **Line 63:** Tries six bad uploads: empty file, wrong declared type, a declared type that does not match the contents, SVG text declared as PNG, a PNG over 6 MB and a WebM over 20 MB, with the expected 400, 415 or 413 statuses.
+- **Line 64:** Sends each bad upload.
+- **Line 65:** Checks the status for that case.
+- **Line 66:** Every refusal carries a text message.
+- **Line 67:** Closes the preceding block (function, object, or statement body).
+- **Line 68:** An unknown file id gives 404.
+- **Line 69:** Unsaved uploads are not listed as lesson attachments.
+- **Line 70:** Deleting an unsaved upload returns 204.
+- **Line 71:** Deleting it again gives 404.
+- **Line 72:** Its file is gone.
+- **Line 73:** Closes the callback body and the function call that received it.
+- **Line 74:** Blank line separates related sections for readability; it performs no operation.
+- **Line 75:** Registers the main lifecycle test.
+
+### Lines 76–100
+
+```text
+76 |   const state = await fixture(t);
+77 |   const upload = await (await state.upload(png)).json();
+78 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
+79 |   const created = await state.json('/api/lessons', 'POST', body);
+80 |   assert.equal(created.status, 201);
+81 |   const lesson = await created.json();
+82 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+83 |   const attached = await state.media();
+84 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
+85 |   assert.equal(attached[1].url, ytLink);
+86 |   assert.equal(attached[1].credit, 'YouTube — Coach');
+87 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
+88 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
+89 |   assert.equal((await state.media()).length, 3);
+90 |   const [first, second, third] = attached;
+91 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
+92 |   assert.equal(edited.status, 200);
+93 |   assert.deepEqual((await state.media()).map(item => [item.id, item.title, item.position]), [[third.id, 'Moved first', 0], [first.id, 'Photo renamed', 1]]);
+94 |   assert.equal((await fetch(`${state.url}/api/media/${second.id}/file`)).status, 404);
+95 |   await state.stop(); await state.start();
+96 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
+97 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
+98 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
+99 |   assert.deepEqual(await state.media(), []);
+100 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
+```
+
+- **Line 76:** Creates the fixture.
+- **Line 77:** Uploads a picture first.
+- **Line 78:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
+- **Line 79:** Creates the lesson.
+- **Line 80:** Expects 201.
+- **Line 81:** Reads the lesson.
+- **Line 82:** The lesson reply still has exactly the original nine fields, so existing clients are unaffected.
+- **Line 83:** Loads the saved attachments.
+- **Line 84:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
+- **Line 85:** The YouTube address was replaced by the clean verified address.
+- **Line 86:** The YouTube credit came from verification.
+- **Line 87:** The suggested picture kept its supplied credit.
+- **Line 88:** Updates the lesson without a media key and expects success.
+- **Line 89:** Leaving media out must keep all three attachments.
+- **Line 90:** Names the three attachments.
+- **Line 91:** Updates with a new list: the third attachment first, the first second, the second dropped.
+- **Line 92:** Expects success.
+- **Line 93:** Expects the new order and edited captions.
+- **Line 94:** The dropped attachment no longer exists.
+- **Line 95:** Stops and restarts the server (and database connection).
+- **Line 96:** The attachments are still there after the restart.
+- **Line 97:** The uploaded file’s bytes are still intact.
+- **Line 98:** Updating with an empty list removes every attachment.
+- **Line 99:** None remain.
+- **Line 100:** Creates a second lesson with one link.
+
+### Lines 101–125
+
+```text
+101 |   assert.equal((await state.media()).length, 1);
+102 |   assert.equal((await fetch(`${state.url}/api/lessons/${again.id}`, { method: 'DELETE' })).status, 204);
+103 |   assert.deepEqual(await state.media(), []);
+104 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lesson_media').get().n, 0);
+105 | });
+106 |
+107 | test('links that fail verification or attachments that do not exist stop the save and leave data unchanged', async t => {
+108 |   const state = await fixture(t);
+109 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Safe', discipline: 'Boxing' })).json();
+110 |   const orphan = await (await state.upload(png)).json();
+111 |   const broken = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/broken.png', title: 'x' }] });
+112 |   assert.equal(broken.status, 400);
+113 |   assert.match((await broken.json()).error, /example\.com could not be used: .*404/);
+114 |   const offline = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/offline.png' }] });
+115 |   assert.equal(offline.status, 400);
+116 |   const message = (await offline.json()).error;
+117 |   assert.match(message, /could not check the link/);
+118 |   assert.ok(!message.includes('private'));
+119 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
+120 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
+121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
+122 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
+123 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
+124 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
+125 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
+```
+
+- **Line 101:** Exactly one attachment exists.
+- **Line 102:** Deletes that lesson.
+- **Line 103:** Its attachments are removed with it.
+- **Line 104:** Checks the table directly: no rows remain.
+- **Line 105:** Closes the callback body and the function call that received it.
+- **Line 106:** Blank line separates related sections for readability; it performs no operation.
+- **Line 107:** Registers the failure test.
+- **Line 108:** Creates the fixture.
+- **Line 109:** Saves a plain lesson.
+- **Line 110:** Uploads an unattached file.
+- **Line 111:** Tries to create a lesson with a link the fake verifier rejects.
+- **Line 112:** Expects 400.
+- **Line 113:** The message names the host and the reason (404).
+- **Line 114:** Tries a link that fails unexpectedly.
+- **Line 115:** Expects 400.
+- **Line 116:** Reads the message.
+- **Line 117:** It says the link could not be checked.
+- **Line 118:** It must not leak the internal failure text.
+- **Line 119:** Referring to an attachment id that does not exist gives 400.
+- **Line 120:** Attaches the unattached upload to a new lesson.
+- **Line 121:** Trying to attach the same upload to a different lesson gives 400.
+- **Line 122:** Only the first lesson owns it.
+- **Line 123:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
+- **Line 124:** Only the two intended lessons exist, so failed saves created nothing.
+- **Line 125:** Updating a lesson that does not exist still gives 404.
+
+### Lines 126–150
+
+```text
+126 | });
+127 |
+128 | test('verify and suggest routes validate input, hide failures and limit searches', async t => {
+129 |   let calls = 0;
+130 |   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
+131 |   const state = await fixture(t, { findMedia });
+132 |   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });
+133 |   assert.equal(ok.status, 200);
+134 |   assert.equal((await ok.json()).kind, 'youtube');
+135 |   const broken = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/broken.png' });
+136 |   assert.equal(broken.status, 400);
+137 |   assert.match((await broken.json()).error, /404/);
+138 |   const offline = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/offline.png' });
+139 |   assert.equal(offline.status, 502);
+140 |   assert.ok(!(await offline.json()).error.includes('private'));
+141 |   assert.equal((await state.json('/api/media/verify', 'POST', { url: 5 })).status, 400);
+142 |   const sections = [{ name: 'Technique teaching', instructions: 'Teach.', queries: ['jab'] }];
+143 |   for (const bad of [{}, { discipline: 'Chess', sections }, { discipline: 'Boxing', sections: 'x' }, { discipline: 'Boxing', sections: [{ name: 1, instructions: '' }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: 'x'.repeat(1501) }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: '', queries: ['x', 'y', 'z', 'w'] }] }]) assert.equal((await state.json('/api/media/suggest', 'POST', bad)).status, 400);
+144 |   const found = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections });
+145 |   assert.equal(found.status, 200);
+146 |   assert.equal((await found.json()).media[0].activity, 'Technique teaching');
+147 |   for (let index = 0; index < 5; index++) await (await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).text();
+148 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
+149 |   assert.equal(calls, 6);
+150 | });
+```
+
+- **Line 126:** Closes the callback body and the function call that received it.
+- **Line 127:** Blank line separates related sections for readability; it performs no operation.
+- **Line 128:** Registers the verify and suggest route test.
+- **Line 129:** Counts how often the fake finder is called.
+- **Line 130:** A fake finder that returns one suggested video for the first section.
+- **Line 131:** Creates the fixture with that fake finder.
+- **Line 132:** Verifies a YouTube link.
+- **Line 133:** Expects 200.
+- **Line 134:** Expects kind youtube.
+- **Line 135:** Verifies a link the fake rejects.
+- **Line 136:** Expects 400.
+- **Line 137:** The message contains the reason.
+- **Line 138:** Verifies a link that fails unexpectedly.
+- **Line 139:** Expects 502.
+- **Line 140:** No internal detail is revealed.
+- **Line 141:** A request whose url is not text gives 400.
+- **Line 142:** A valid sections list for the suggest route.
+- **Line 143:** Six invalid suggest requests (empty, unknown discipline, sections not a list, a non-text section name, instructions over 1500 characters, four search phrases) each give 400.
+- **Line 144:** A valid suggest request.
+- **Line 145:** Expects 200.
+- **Line 146:** The suggestion belongs to the section that asked.
+- **Line 147:** Makes five more searches (six in total within a minute).
+- **Line 148:** The seventh search is refused with 429.
+- **Line 149:** Only the six allowed searches reached the finder.
+- **Line 150:** Closes the callback body and the function call that received it.
+
+### Lines 151–162
+
+```text
+151 |
+152 | test('suggest failures return a friendly message and old unattached uploads are purged', async t => {
+153 |   const state = await fixture(t, { findMedia: async () => { throw new Error('private search detail'); } });
+154 |   const failed = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'A', instructions: '' }] });
+155 |   assert.equal(failed.status, 502);
+156 |   assert.ok(!(await failed.json()).error.includes('private'));
+157 |   const old = await (await state.upload(png)).json();
+158 |   state.database.prepare("UPDATE lesson_media SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?").run(old.id);
+159 |   const fresh = await (await state.upload(png)).json();
+160 |   assert.equal((await fetch(`${state.url}/api/media/${old.id}/file`)).status, 404);
+161 |   assert.equal((await fetch(`${state.url}/api/media/${fresh.id}/file`)).status, 200);
+162 | });
+```
+
+- **Line 151:** Blank line separates related sections for readability; it performs no operation.
+- **Line 152:** Registers the final test: finder failures and orphan cleanup.
+- **Line 153:** Creates a fixture whose finder throws an internal error.
+- **Line 154:** Asks for suggestions.
+- **Line 155:** Expects 502.
+- **Line 156:** The reply hides the internal detail.
+- **Line 157:** Uploads a file.
+- **Line 158:** Pretends it was uploaded in 2020 by editing its timestamp directly in the database.
+- **Line 159:** Uploads another file; every upload triggers cleanup of old unattached files.
+- **Line 160:** The old upload has been purged.
+- **Line 161:** The new upload remains.
+- **Line 162:** Closes the callback body and the function call that received it.
+
+## client/api-proxy.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\api-proxy.js`
+
+Small Vite plugin that forwards every /api request from the development web page to the CoachLab backend. It replaces Vite’s built-in proxy, which was found to stall (never finish) when sending files larger than about 1 MB, which broke larger pictures and videos. This version simply pipes the bytes through.
+
+### Lines 1–23
+
+```text
+1 | import http from 'node:http';
+2 |
+3 | // Vite's built-in proxy stalls on downloads over about 1 MB, so /api is forwarded with plain piped streams instead.
+4 | export function apiProxy(port) {
+5 |   return {
+6 |     name: 'coachlab-api-proxy',
+7 |     configureServer(server) {
+8 |       server.middlewares.use('/api', (request, response) => {
+9 |         const upstream = http.request({ host: '127.0.0.1', port, method: request.method, path: request.originalUrl, headers: { ...request.headers, host: `127.0.0.1:${port}` } }, answer => {
+10 |           response.writeHead(answer.statusCode, answer.headers);
+11 |           answer.pipe(response);
+12 |         });
+13 |         upstream.on('error', () => {
+14 |           if (response.headersSent) return response.destroy();
+15 |           response.writeHead(502, { 'Content-Type': 'application/json' });
+16 |           response.end(JSON.stringify({ error: 'The CoachLab backend is not reachable.' }));
+17 |         });
+18 |         response.on('close', () => upstream.destroy());
+19 |         request.pipe(upstream);
+20 |       });
+21 |     },
+22 |   };
+23 | }
+```
+
+- **Line 1:** Imports Node’s http module for making a plain request to the backend on this computer.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Comment explaining why the plugin exists: the built-in proxy stalls on downloads over about 1 MB.
+- **Line 4:** Exports apiProxy, a function that takes the backend’s port and returns a Vite plugin object.
+- **Line 5:** Starts the plugin object.
+- **Line 6:** A name that appears in Vite’s messages.
+- **Line 7:** configureServer is called by Vite when the development server starts; it receives the server.
+- **Line 8:** Registers a handler for every address starting with /api. request is what the browser sent, response is what will be returned.
+- **Line 9:** Makes the same request to the backend at 127.0.0.1 (this computer only): same method, same path and query, same headers except the host name. The function after it receives the backend’s answer.
+- **Line 10:** Copies the backend’s status code and headers to the browser’s response.
+- **Line 11:** pipe sends the backend’s body to the browser piece by piece, waiting whenever the browser is busy, so large files stream correctly.
+- **Line 12:** Ends the answer callback and the request options.
+- **Line 13:** Handles the case where the backend cannot be reached.
+- **Line 14:** If the answer already started, just closes the connection because the headers cannot be changed.
+- **Line 15:** Otherwise sends status 502 (Bad Gateway) as JSON.
+- **Line 16:** Sends a plain-language message; the page shows it as a connection problem.
+- **Line 17:** Ends the error handler.
+- **Line 18:** If the browser disconnects, cancels the backend request so nothing keeps running.
+- **Line 19:** Streams the browser’s request body (for example an uploaded file) to the backend.
+- **Line 20:** Ends the /api handler.
+- **Line 21:** Ends configureServer, followed by a comma because it is a property.
+- **Line 22:** Ends the plugin object.
+- **Line 23:** Ends the function.

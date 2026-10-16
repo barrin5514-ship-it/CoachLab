@@ -214,3 +214,7 @@ Handoff-only verification: exact walkthrough coverage passed 41 files / 1,620 li
 ## Update 2026-10-16 (Claude continuation)
 
 Claude resumed from commit 7a43695 without rebuilding anything. Browser access works (built-in browser pane). The earlier 5175 failure was a path bug in the ignored helper `tmp/complete-vite.mjs` (URL-encoded spaces), now fixed. Activity-card typing bug fixed, activity-minute totals, search-link media fallback and eager picture loading added; the disposable test schema from this handoff was verified and dropped; the real Development data (2 lessons) and the SQLite/backup hashes are unchanged. Full evidence and remaining limits: LESSON_MANAGER_VERIFICATION.md. Nothing was pushed to GitHub.
+
+## Update 2026-10-16 (instructional media upgrade)
+
+Added the media upgrade on top of the lesson manager: Add Media (upload or checked link) per activity, preview/edit/remove, automatic verified media for AI drafts, persistence in the new additive `lesson_media` table (migration applied to Development only), mobile layout and a Vite proxy replacement. Evidence, limits and a disclosure about when the migration was applied: MEDIA_UPGRADE_VERIFICATION.md. 52/52 tests pass. Not pushed to GitHub.

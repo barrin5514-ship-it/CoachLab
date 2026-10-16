@@ -11,6 +11,9 @@ export default function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
+  const [media, setMedia] = useState([]);
+  const [mediaError, setMediaError] = useState('');
+  const [mediaReload, setMediaReload] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,11 +36,32 @@ export default function App() {
     return () => controller.abort();
   }, [reload]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadMedia() {
+      try {
+        const response = await fetch('/api/lesson-media', { signal: controller.signal });
+        if (!response.ok) throw new Error('Unable to load media.');
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+        setMedia(data);
+        setMediaError('');
+      } catch (failure) {
+        if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+      }
+    }
+    loadMedia();
+    return () => controller.abort();
+  }, [reload, mediaReload]);
+
+  const mediaFor = id => media.filter(item => item.lesson_id === id);
+
   function handleSaved(lesson) {
     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
     setNotice(`Saved “${lesson.title}”.`);
     setFormOpen(false);
     setEditing(null);
+    setMediaReload(value => value + 1);
   }
 
   return (
@@ -47,14 +71,15 @@ export default function App() {
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
       {notice && <p className="success" role="status">{notice}</p>}
-      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
         {loading && <p role="status">Loading lesson plans…</p>}
+        {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-        <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
+        <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
       </section>
     </main>
   );

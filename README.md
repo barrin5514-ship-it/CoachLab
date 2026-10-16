@@ -226,3 +226,15 @@ Run `npm test`, `npm run test:prisma`, `npm run prisma:validate`, and `npm run b
 
 - **Activity minutes:** the lesson form and each card add up the minutes written in activity headings (for example `Warm-up — 10 minutes`) and compare them with the class duration; a mismatch is a hint, never a block.
 - **Verification:** the 2026-10-16 browser and database results are in LESSON_MANAGER_VERIFICATION.md.
+
+## Instructional media (2026-10-16)
+
+Every lesson activity has an **Add Media** button (also in AI draft sections and a whole-lesson area).
+
+- **Upload** PNG, JPEG, GIF or WebP pictures (up to 6 MB) and MP4 or WebM videos (up to 20 MB). The server checks the real file contents. Files are stored in the database (table `lesson_media`), so they survive refresh and restart and are included in database backups.
+- **Paste a link** to a YouTube video or a direct picture/video address. CoachLab checks the link before showing it (YouTube through its public oEmbed service; other links by reading the first 64 KB and recognising the file type). Only https links are accepted and private-network addresses are refused.
+- **Preview, edit, remove**: change the caption, move an attachment to another activity, change a pasted link, or remove it. Changes are saved with the lesson. Attachments are matched to an activity by its first-line heading and follow it when you rename it; give each activity its own heading.
+- **AI lessons** automatically look for pictures and videos for the sections that teach a technique and attach each one to the section that asked for it. Sources are the reviewed catalog, Wikimedia Commons, and optionally YouTube search (set `YOUTUBE_API_KEY` in the ignored `.env`; it never reaches the browser). The AI supplies only search phrases, every address is verified, and nothing is invented. Review and remove anything that does not fit.
+- The API additions are `GET /api/lesson-media`, `POST /api/media/upload`, `GET|DELETE /api/media/:id`, `POST /api/media/verify` and `POST /api/media/suggest`; lesson POST/PUT accept an optional `media` list. `GET /api/lessons` still returns exactly the original nine fields.
+- Development note: `client/api-proxy.js` forwards `/api` from the Vite dev server because Vite 8's built-in proxy stalls on responses over about 1 MB.
+- Results, limits and the one unverified item (YouTube playback in the test browser) are in MEDIA_UPGRADE_VERIFICATION.md.

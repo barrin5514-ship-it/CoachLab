@@ -5,7 +5,7 @@ export function migrate(database) {
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ) STRICT`);
-  const migrations = [{ version: 1, file: '001_create_lessons.sql' }];
+  const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }];
   for (const migration of migrations) {
     database.transaction(() => {
       const applied = database.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(migration.version);

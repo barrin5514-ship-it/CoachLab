@@ -6,7 +6,7 @@ export const draftSchema = {
     ...Object.fromEntries(fields.map(field => [field, string])),
     sections: { type: 'array', minItems: 5, maxItems: 5, items: {
       type: 'object', required: ['name', 'minutes', 'instructions'], additionalProperties: false,
-      properties: { name: string, minutes: { type: 'integer' }, instructions: string },
+      properties: { name: string, minutes: { type: 'integer' }, instructions: string, media_queries: { type: 'array', maxItems: 2, items: string } },
     } },
   },
 };
@@ -18,6 +18,7 @@ Return title (maximum 200 characters), objectives (maximum 1500), techniques, co
 Return exactly five sections in this order: Warm-up, Technique teaching, Progressive drills, Partner exercises, Cooldown.
 Each section has name, integer minutes and instructions (maximum 1500 characters). Minutes must sum exactly to duration_minutes. All sections need positive time except Partner exercises may be zero with a solo alternative.
 When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. Use short newline-separated bullet cues, not long paragraphs. Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
+For sections that teach or drill a nameable technique or exercise, add media_queries: up to two short search phrases (2 to 5 words, maximum 80 characters) naming that technique, for example "knee cut half guard pass". Use an empty list for warm-ups, cooldowns and generic activity. Phrases are search terms only: never include web addresses.
 Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
 
 export async function generateDraft(request, { env = process.env, fetcher = fetch, timeout = 45000 } = {}) {

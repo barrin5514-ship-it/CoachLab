@@ -56,7 +56,7 @@ test('versioned migration, constraints, and persistence across processes', () =>
     assert.equal(reader.status, 0);
     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
     database = new Database(filename);
-    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }]);
+    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   } finally {
     if (database?.open) database.close();

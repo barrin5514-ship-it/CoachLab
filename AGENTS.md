@@ -23,3 +23,5 @@ Current approval (2026-10-15, Complete Development and Testing) supersedes the h
 Emergency handoff (2026-10-15): the user stopped new development in this Codex session. Preserve the current implementation and consult CLAUDE_HANDOFF.md for current verified results and incomplete browser tests. Do not treat the previous completion request as permission for this session to resume feature work during handoff.
 
 Resumed 2026-10-16 in Claude under the user's "Complete Unfinished Development" request: finish and verify the lesson manager, preserve data and backups, never touch production, do not push to GitHub unless explicitly instructed. See LESSON_MANAGER_VERIFICATION.md.
+
+Media upgrade 2026-10-16 (user request "Instructional Media Upgrade"): additive lesson_media table, uploads, verified links and AI media discovery were authorized for implementation and local commits only. Do not push without permission; do not modify Production. See MEDIA_UPGRADE_VERIFICATION.md.

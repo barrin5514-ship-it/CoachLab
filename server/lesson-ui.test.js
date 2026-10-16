@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
+import { groupMedia, headingOf } from '../client/src/media.js';
 
 test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
@@ -20,6 +21,15 @@ test('card text keeps blank lines out of a card and activity minutes are summed 
   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
   assert.equal(activityMinutes(''), 0);
+});
+
+test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
+  const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
+  assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
+  const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
+  const { byBlock, rest } = groupMedia(media, blocks);
+  assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
+  assert.deepEqual(rest.map(item => item.id), [3, 4]);
 });
 
 test('minimal AI requests work for every discipline; optional details remain bounded', () => {

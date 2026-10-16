@@ -19,6 +19,28 @@ model Lesson {
   drills           String   @default("") @db.Text
   coaching_notes   String   @default("") @db.Text
   created_at       DateTime @default(now()) @db.Timestamptz(3)
+  media            LessonMedia[]
 
   @@map("lessons")
+}
+
+model LessonMedia {
+  id          Int      @id @default(autoincrement())
+  lesson_id   Int?
+  position    Int      @default(0)
+  kind        String   @db.Text
+  origin      String   @db.Text
+  url         String?  @db.Text
+  title       String   @default("") @db.Text
+  activity    String   @default("") @db.Text
+  mime        String?  @db.Text
+  size_bytes  Int?
+  data        Bytes?
+  credit      String   @default("") @db.Text
+  source_page String?  @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+  lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@index([lesson_id])
+  @@map("lesson_media")
 }

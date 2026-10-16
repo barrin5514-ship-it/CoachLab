@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
+import MediaEditor from './MediaEditor.jsx';
+import { discardUpload, mediaPayload, newKey } from './media.js';
 import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 
 const initial = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
@@ -7,6 +9,9 @@ export default function AiLessonForm({ onSaved, onCancel }) {
   const [request, setRequest] = useState(initial);
   const [draft, setDraft] = useState(null);
   const [approved, setApproved] = useState(false);
+  const [media, setMediaList] = useState([]);
+  const [finding, setFinding] = useState(false);
+  const [findNote, setFindNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const locked = useRef(false);
@@ -14,12 +19,33 @@ export default function AiLessonForm({ onSaved, onCancel }) {
     setDraft(current => ({ ...current, [key]: value }));
     setApproved(false);
   }
+  function setMedia(next) {
+    setMediaList(next);
+    setApproved(false);
+  }
+  async function findMedia(source) {
+    setFinding(true);
+    setFindNote('');
+    try {
+      const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Media search failed.');
+      setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
+      setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
+    } catch (failure) {
+      setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
+    } finally { setFinding(false); }
+  }
+  function discard() {
+    media.forEach(discardUpload);
+    onCancel();
+  }
   async function submit(event) {
     event.preventDefault();
     if (locked.current) return;
     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
-    const body = draft ? toLesson(draft, request) : request;
+    const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
     locked.current = true;
     setBusy(true);
@@ -35,6 +61,8 @@ export default function AiLessonForm({ onSaved, onCancel }) {
         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
         setDraft(data.draft);
         setApproved(false);
+        setMediaList([]);
+        findMedia(data.draft);
       }
     } catch (failure) {
       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
@@ -68,12 +96,19 @@ export default function AiLessonForm({ onSaved, onCancel }) {
               <h3>{section.name}</h3>
               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
               <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+              <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
             </div>)}
+            <div className="draft-section">
+              <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
+              {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
+              {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
+              {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
+            </div>
             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
           </>}
-          <div className="actions"><button type="submit" disabled={!!draft && !approved}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={onCancel}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
+          <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
         </fieldset>
         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
         {error && <p role="alert" className="error">{error}</p>}

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { png } from './media-fixtures.js';
 import pg from 'pg';
 import { createApp } from './app.js';
 import { prismaLessons } from './lesson-store.js';
@@ -31,7 +32,7 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
   };
   const start = async () => {
     client = createDevelopmentClient(env, schema);
-    server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft) }).listen(0, '127.0.0.1');
+    server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
     await once(server, 'listening');
     url = `http://127.0.0.1:${server.address().port}`;
   };
@@ -47,8 +48,10 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
     created = true;
     await admin.query('BEGIN');
     await admin.query(`SET LOCAL search_path TO "${schema}"`);
-    const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
-    await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+    for (const name of readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
+      const sql = readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8');
+      await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+    }
     await admin.query('COMMIT');
     await start();
     assert.deepEqual(await get(), []);
@@ -75,11 +78,28 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
     const update = await fetch(url + '/api/lessons/' + saved.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
     assert.equal(update.status, 200);
     assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });
+    const upload = await (await fetch(url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-File-Name': 'pg-test.png' }, body: png })).json();
+    const withMedia = await post('/api/lessons', { ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Stored picture', activity: 'Activity one' }, { url: 'https://example.com/pic.png', title: 'Linked picture' }] });
+    assert.equal(withMedia.status, 201);
+    const mediaLesson = await withMedia.json();
+    const mediaRows = async () => (await fetch(url + '/api/lesson-media')).json();
+    assert.deepEqual((await mediaRows()).map(item => [item.origin, item.title, item.lesson_id]), [['upload', 'Stored picture', mediaLesson.id], ['link', 'Linked picture', mediaLesson.id]]);
     const snapshot = await get();
-    assert.equal(snapshot.length, 7);
+    assert.equal(snapshot.length, 8);
     await stop();
     await start();
     assert.deepEqual(await get(), snapshot);
+    assert.deepEqual((await mediaRows()).map(item => item.title), ['Stored picture', 'Linked picture']);
+    assert.deepEqual(Buffer.from(await (await fetch(`${url}/api/media/${upload.id}/file`)).arrayBuffer()), png);
+    assert.equal((await fetch(`${url}/api/media/${upload.id}/file`, { headers: { Range: 'bytes=0-3' } })).status, 206);
+    const kept = await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Renamed picture', activity: '' }] }) });
+    assert.equal(kept.status, 200);
+    assert.deepEqual((await mediaRows()).map(item => item.title), ['Renamed picture']);
+    assert.equal((await post('/api/lessons', { ...changed, media: [{ id: 99999999 }] })).status, 400);
+    assert.equal((await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'DELETE' })).status, 204);
+    assert.deepEqual(await mediaRows(), []);
+    assert.equal((await fetch(`${url}/api/media/${upload.id}/file`)).status, 404);
+    assert.equal((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".lesson_media`)).rows[0].n, 0);
     assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);
     assert.equal((await get()).length, 7);
     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);
