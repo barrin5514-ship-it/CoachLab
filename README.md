@@ -1,13 +1,13 @@
 # CoachLab
 
 A beginner-friendly React and Express project for coaching lesson plans.
-Phase 5 adds a React dashboard and lesson form connected to the Express API and persistent SQLite database.
+React lesson management with manual and AI-assisted plans. Express supports SQLite by default and explicitly selected Neon PostgreSQL for current local development. See Current lesson manager below for the latest workflow.
 
 ## Setup (Windows PowerShell)
 
 Use Node.js 24.19.0 (the verified version) and npm.
 From the CoachLab folder, run `npm ci` after cloning.
-Then run `npm run db:migrate` to create your local database and apply the versioned schema.
+For a fresh SQLite setup, run `npm run db:migrate`. For existing configured PostgreSQL development, generate the client with `npm run prisma:generate`; do not run migrations or resets against an existing database.
 If npm reports UNABLE_TO_VERIFY_LEAF_SIGNATURE, run `$env:NODE_USE_SYSTEM_CA = '1'` in that terminal and retry. This uses Windows trusted certificates without disabling TLS checks.
 
 Open two terminals in the CoachLab folder:
@@ -197,3 +197,29 @@ Remove-Item Env:COACHLAB_RUN_MIGRATION_TESTS, Env:COACHLAB_MIGRATION_SOURCES
 ```
 
 This fixture-specific test requires exactly two and seven source rows, an empty real application table, and the verified development target. It backs up sources outside OneDrive, never writes originals, and never commits test data. Missing opt-in produces a skip, not a pass. Copies remain in the OS temporary directory under coachlab-migration-validation-*; treat them as private local data. Ordinary regression commands remain npm test, npm run test:prisma, npm run prisma:validate and npm run build. Update/Delete remain absent from the application; SQL capability tests do not add these features. Phase 9D still requires approval.
+
+## Current lesson manager (2026-10-15)
+
+Local development now explicitly selects `COACHLAB_DATABASE=postgresql` in ignored `.env`, with `COACHLAB_DB_ENV=development` and the verified Neon settings described below. SQLite remains the code default and rollback copy; there is no automatic fallback. After PostgreSQL writes, never switch to an older SQLite copy without reconciling records. No new table migration is required for lesson editing or deletion.
+
+- **Manual lesson:** title and discipline are required; other fields are optional.
+- **AI draft:** choose discipline, level and duration; generic-information confirmation is required. Objectives, techniques, equipment and detailed preferences are optional. AI recommends missing details. Review all generated content; approval is required before saving, and editing clears approval.
+- **Edit saved lesson:** opens its existing fields, including instructions and notes. Add/remove/reorder activity cards, then Save changes sends PUT for the same ID. Creation date remains unchanged; no duplicate is inserted. Failed saves keep your input.
+- **Delete:** choose Delete lesson, then Confirm delete, or Keep lesson to cancel. Deletion is permanent; use it carefully. This local app has no authentication and must not be exposed publicly.
+- **Coach view:** timed headings, bullet cues and expandable longer explanations/notes. Existing text stays in the database; presentation does not rewrite it.
+- **Media:** a fixed instructor-verified catalog matches discipline plus named technique (jab, Kimura, knee cut, double leg, squat). Open the media section to load pictures, then explicitly load embedded videos. NHS videos open on the publisher's page. This is not unrestricted video search: unlisted techniques show a clear no-match message. Broken images and blocked video embeds retain publisher links. Sources and limitations are in LESSON_MANAGER_VERIFICATION.md. External media is not copied into this repository.
+
+API: GET/POST `/api/lessons`, PUT/DELETE `/api/lessons/:id`. PUT validates the same seven editable fields as creation, leaving ID and creation timestamp untouched. Invalid IDs return 400; absent rows return 404; successful updates return 200 JSON and deletion returns 204. SQL is parameterized; Prisma uses bound parameters. As with many simple local apps, two simultaneous editors of the same lesson use last-save-wins; refresh before editing in another tab.
+
+Current handoff URL: http://127.0.0.1:5174/. From separate PowerShell terminals in this project:
+
+```powershell
+$env:NODE_USE_SYSTEM_CA='1'
+npm run dev:server
+```
+
+```powershell
+npm run dev:client -- --host 127.0.0.1 --port 5174 --strictPort
+```
+
+Run `npm test`, `npm run test:prisma`, `npm run prisma:validate`, and `npm run build`. `npm test` includes UI data helpers; real browser verification is separate. The opt-in `server/postgres-api.test.js` requires fresh Console verification and `COACHLAB_RUN_POSTGRES_TESTS=verified-development`; it creates only a guarded random schema, tests committed CRUD/AI data, drops that test schema, and checks the real lessons table is unchanged. Never enable it against production. Use `NODE_USE_SYSTEM_CA=1` where the local trusted certificate chain is needed; never disable TLS verification.

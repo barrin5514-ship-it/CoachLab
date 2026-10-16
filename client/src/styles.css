@@ -48,3 +48,14 @@ dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .section-heading { align-items: flex-start; gap: 12px; }
   .form-panel, .lesson-card { padding: 20px; }
 }
+
+details { margin: 18px 0; padding: 12px; border: 1px solid #d7e0e4; border-radius: 8px; }
+summary { cursor: pointer; font-weight: 650; }
+h4 { margin: 16px 0 8px; }
+.coaching-block ul { padding-left: 22px; margin-top: 8px; }
+.coaching-block li { margin-bottom: 6px; overflow-wrap: anywhere; }
+.activity-editor { border: 1px solid #d7e0e4; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+.activity-editor .actions { margin-bottom: 16px; }
+.demonstration img, .demonstration iframe { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border: 0; margin: 12px 0; }
+a { color: #176257; text-underline-offset: 3px; }
+button.danger { color: #852b1d; }

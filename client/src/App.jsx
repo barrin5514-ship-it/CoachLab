@@ -10,6 +10,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [reload, setReload] = useState(0);
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,6 +37,7 @@ export default function App() {
     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
     setNotice(`Saved “${lesson.title}”.`);
     setFormOpen(false);
+    setEditing(null);
   }
 
   return (
@@ -45,14 +47,14 @@ export default function App() {
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
       {notice && <p className="success" role="status">{notice}</p>}
-      {formOpen === 'manual' && <LessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
         {loading && <p role="status">Loading lesson plans…</p>}
         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-        <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} />)}</div>
+        <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
       </section>
     </main>
   );

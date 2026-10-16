@@ -11,7 +11,7 @@
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
     "build": "vite build --config client/vite.config.js",
     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js",
+    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js"

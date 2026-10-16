@@ -13,7 +13,7 @@ export function validateRequest(value) {
   if (!disciplines.includes(value.discipline) || !levels.includes(value.skill_level)) return 'Choose a supported discipline and skill level.';
   if (!Number.isInteger(value.duration_minutes) || value.duration_minutes < 15 || value.duration_minutes > 180) return 'Choose 15–180 whole minutes.';
   if (!Number.isInteger(value.students) || value.students < 1 || value.students > 100) return 'Choose 1–100 students.';
-  if (['objective', 'techniques', 'equipment'].some(key => !text(value[key], 500))) return 'Objective, techniques and equipment each require 1–500 characters. Write None if needed.';
+  if (['objective', 'techniques', 'equipment'].some(key => value[key] !== undefined && (typeof value[key] !== 'string' || value[key].length > 500))) return 'Optional instructions must be text up to 500 characters.';
   if (value.privacy_confirmed !== true) return 'Confirm that the request contains no personal or sensitive athlete information.';
   return null;
 }
@@ -35,6 +35,6 @@ export function toLesson(draft, request) {
     title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,
     goal: draft.objectives,
     drills: `Techniques: ${draft.techniques}\n\n${draft.sections.map(section => `${section.name} — ${section.minutes} minutes\n${section.instructions}`).join('\n\n')}`,
-    coaching_notes: `AI-assisted draft reviewed and approved by coach.\nStudents: ${request.students}\nEquipment: ${request.equipment}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
+    coaching_notes: `AI-assisted draft reviewed and approved by coach.\nStudents: ${request.students}\nEquipment: ${request.equipment?.trim() || 'AI recommendations are in Techniques; confirm availability.'}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
   };
 }

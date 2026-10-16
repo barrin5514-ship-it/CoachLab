@@ -17,7 +17,8 @@ const envelope = value => ({ candidates: [{ finishReason: 'STOP', content: { par
 
 test('contract accepts six disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-  for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: ' ' }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
+  for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: null }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
+  assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);
   assert.ok(validateRequest(null));
   assert.equal(validateDraft(draft, request), null);
   for (const change of [{ title: '' }, { safety: '' }, { sections: [] }, { sections: draft.sections.map(section => ({ ...section, minutes: 11 })) }, { sections: [null, ...draft.sections.slice(1)] }]) assert.ok(validateDraft({ ...draft, ...change }, request));

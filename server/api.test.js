@@ -118,3 +118,27 @@ test('fresh database is migrated before app creation without changing the schema
   assert.equal(unknown.status, 404);
   assert.deepEqual(await unknown.json(), { error: 'Route not found.' });
 });
+
+test('update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely', async t => {
+  const state = await fixture(t);
+  const original = await (await post(state, { title: 'Original', discipline: 'Boxing' })).json();
+  const other = await (await post(state, { title: 'Keep this', discipline: 'MMA' })).json();
+  const put = (id, body) => fetch(`${state.url}/api/lessons/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
+  const response = await put(original.id, edited);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });
+  assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);
+  for (const id of ['0', '-1', '1.5', '2147483648', 'abc']) {
+    assert.equal((await put(id, edited)).status, 400);
+    assert.equal((await fetch(`${state.url}/api/lessons/${id}`, { method: 'DELETE' })).status, 400);
+  }
+  assert.equal((await put(2147483647, edited)).status, 404);
+  await state.stop(); await state.start();
+  assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
+  assert.equal(state.database.prepare('SELECT title FROM lessons WHERE id=?').get(original.id).title, 'Edited');
+  assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 204);
+  assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);
+  await state.stop(); await state.start();
+  assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);
+});

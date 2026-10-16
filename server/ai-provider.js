@@ -17,7 +17,7 @@ const instruction = `Create a complete coaching lesson DRAFT requiring qualified
 Return title (maximum 200 characters), objectives (maximum 1500), techniques, common_mistakes, coaching_corrections, modifications, safety (each maximum 1000).
 Return exactly five sections in this order: Warm-up, Technique teaching, Progressive drills, Partner exercises, Cooldown.
 Each section has name, integer minutes and instructions (maximum 1500 characters). Minutes must sum exactly to duration_minutes. All sections need positive time except Partner exercises may be zero with a solo alternative.
-Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
+When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. Use short newline-separated bullet cues, not long paragraphs. Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
 Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
 
 export async function generateDraft(request, { env = process.env, fetcher = fetch, timeout = 45000 } = {}) {

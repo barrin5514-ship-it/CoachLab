@@ -3700,3 +3700,340 @@ Compatibility: current API supports Create/Read only and uses synchronous SQLite
 Containing commit subject: `Validate historical lesson migration in isolated PostgreSQL schema`. Commit and push results are reported after creation; a commit cannot record its own hash. No historical fixture content, SQLite file, credential, dependency change or production configuration is included.
 
 Final review added a safe URL parser so malformed private URLs cannot appear in native parsing errors. A synthetic invalid-URL probe verified rejection before connection and confirmed its sentinel value was absent from output. The final live test rerun passed all 9 reported tests, with schema cleanup and unchanged original/public fingerprints. Reviewed every test/documentation diff and corrected the walkthrough cleanup explanations. No active application code or dependency changed.
+
+## 2026-10-15 — Phase 9D accelerated integration and testing
+
+Previous verified commit: f718ae8e114577d11b89090e7f6e8089af41584e. Work continued across midnight UTC; local date remained October 15.
+
+### Exact user prompt
+
+```text
+COACHLAB — PHASE 9D: ACCELERATED INTEGRATION AND TESTING
+
+OBJECTIVE:
+Get the existing CoachLab application ready for
+hands-on user testing as quickly as safely possible.
+
+TARGET:
+Aim for a usable testing milestone within 60 minutes.
+This is a priority target, not permission to skip safety checks.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+CURRENT STATUS:
+- Phase 9C.1 complete
+- Phase 9C.2 complete
+- Phase 9C.3 complete
+- Migration verification passed
+- SQLite remains active
+- Neon Development schema is ready
+- 35 baseline tests previously passed
+- Historical test lessons must not be imported
+- Last verified commit: f718ae8
+
+IMPORTANT:
+Read AGENTS.md and the Phase 9C.3 verification report.
+
+Do not repeat completed migration investigations.
+
+MILESTONE 1 — WORKING APPLICATION
+
+1. Implement PostgreSQL integration using Prisma.
+2. Preserve the existing SQLite implementation.
+3. Keep SQLite as the default until cutover.
+4. Verify the existing Express API.
+5. Verify React loads correctly.
+6. Verify all six coaching disciplines.
+7. Verify manual lesson creation.
+8. Verify Gemini lesson generation using mocks.
+9. Verify lesson approval and saving.
+10. Verify saved lessons can be retrieved.
+11. Test browser refresh persistence.
+12. Test backend restart persistence.
+
+Use an isolated PostgreSQL test environment first.
+
+Do not modify Neon production.
+
+Do not import historical browser-test lessons.
+
+MILESTONE 2 — CONTROLLED DEVELOPMENT CUTOVER
+
+After integration tests pass:
+
+1. Verify Neon Development branch identity.
+2. Confirm the intended source and destination records.
+3. Back up SQLite and verify backup integrity.
+4. Prevent writes during cutover.
+5. Switch local development to PostgreSQL.
+6. Restart the application.
+7. Verify the selected database.
+8. Verify lesson creation and retrieval.
+9. Verify data survives restart.
+10. Preserve SQLite for rollback.
+
+If validation fails, stop and report the blocker.
+Never silently discard writes or switch databases.
+
+MILESTONE 3 — USER TESTING HANDOFF
+
+As soon as the application is verified:
+
+1. Start the local CoachLab application.
+2. Confirm the frontend is accessible.
+3. Confirm the backend is responding.
+4. Provide the exact local URL.
+5. Explain which features are ready to test.
+6. Explain any features not yet implemented.
+7. Provide a short hands-on testing checklist.
+
+STOP AND REPORT THIS MILESTONE.
+
+Do not continue into unrelated features until
+the user has an opportunity to test CoachLab.
+
+MILESTONE 4 — REMAINING VERIFICATION
+
+After separate approval:
+
+- Complete remaining regression testing.
+- Verify error handling.
+- Complete documentation.
+- Run security audit.
+- Review changes.
+- Commit and push verified changes.
+- Confirm GitHub synchronization.
+- Prepare the next development batches.
+
+STRICT REQUIREMENTS:
+
+- Do not modify production.
+- Do not delete SQLite databases.
+- Do not import historical test records.
+- Do not introduce unrelated features.
+- Do not claim success without actual test results.
+- Do not skip data protection or rollback checks.
+- Do not implement Update/Delete unless separately approved.
+
+PRIORITY:
+Deliver a stable, working CoachLab application
+for hands-on testing before expanding its features.
+
+BEGIN PHASE 9D NOW.
+```
+
+Follow-up user replies, verbatim: `Browser access is available`; `continue`.
+
+### Assistant response and actual results (summary)
+
+Introduced interchangeable SQLite/Prisma lesson stores and awaited Create/Read routes without changing React, API field names or Gemini implementation. Added explicit startup selection, default SQLite and no fallback. PostgreSQL initialization verifies expected database and readable lessons before listening. The Prisma factory accepts only public or guarded random test schemas. Added opt-in PostgreSQL API tests. See PHASE_9D_HANDOFF.md for exact changed paths, backup location and commands.
+
+Actual checks: 30/30 existing SQLite/API/Gemini mock tests; 5/5 Prisma tests with Client generation; React production build (20 modules); changed JavaScript syntax checks passed. New isolated PostgreSQL integration parent test passed all six disciplines, mocked draft generation/no automatic save, edited approval/save, committed reconnect/readback, validation and safe async errors. Browser tests in another isolated schema passed manual creation, draft editing, approval gate, save, refresh and full backend process restart (both records matched). Both disposable schemas were removed; historical databases were untouched.
+
+Fresh authenticated Console confirmed CoachLab Development br-flat-fog-b5t1m0vy and ep-long-bird-b50l2nhb in project rapid-firefly-98778665. Direct authentication matched neondb and pooled role. Backup/restore integrity and full record/migration comparisons passed outside OneDrive; source and destination both zero. Stopped API and reserved port 3001 while holding a read transaction on the original SQLite database. Verified original/backup hashes and unchanged private settings before changing only ignored .env selector to postgresql. No record transfer. Started real backend, created one labeled development verification lesson through React, compared all nine fields against Prisma and again after a full backend process restart. Refreshed browser showed the saved card. Original SQLite hash and zero count remain unchanged. One verification lesson intentionally remains in Development. No production operation and no live Gemini request.
+
+Errors/corrections: browser observation was initially blocked; stopped browser work until the user restored access, then verification succeeded. A database integration invocation was initially rejected by automatic review over possible schema isolation; inspected adapter schema support, proved a nonexistent-schema query failed with that schema in safe error metadata, and added that fail-closed check before test DDL. The reviewed retry passed. A restart invocation later failed because automatic approval review disconnected; no action executed, same reviewed retry succeeded. Browser locator waits occasionally timed out before asynchronous loading completed; subsequent visible dashboard checks confirmed saved records, not a failed save. No fabricated application bug is claimed.
+
+Milestone 3 handoff: application running at http://127.0.0.1:5174/ with real PostgreSQL Development backend. User can try manual Create/Read and existing AI draft/edit/approve/save; live provider quota/availability is untested this phase. Update/Delete and future features remain absent. The elapsed work exceeded the priority target; safety checks were retained. Diff whitespace check passed; .env is ignored and nothing is staged. Full documentation/walkthrough, security audit, final review, commits and push are deferred to separately approved Milestone 4. No new commit hash exists. Do not claim CODE_WALKTHROUGH.md includes the new Phase 9D lines yet.
+
+## 2026-10-15 — Complete Development and Testing, interrupted by emergency handoff
+
+### Exact development prompt
+
+```text
+COACHLAB — COMPLETE DEVELOPMENT AND TESTING
+
+PRIORITY: Finish a fully functional CoachLab tonight.
+
+Repository:
+https://github.com/barrin5514-ship-it/CoachLab.git
+
+Read AGENTS.md, project documentation, and previous phase reports before making changes.
+
+CURRENT STATUS:
+- React frontend and Express backend working.
+- Neon PostgreSQL active in local development.
+- SQLite backup preserved.
+- Phase 9D testing milestone completed.
+- AI lesson generation available.
+- Editing and deleting saved lessons not implemented.
+- Last reported GitHub commit: f718ae8.
+
+OBJECTIVE:
+Complete CoachLab's remaining lesson-management functionality and prepare the application for hands-on testing.
+
+1. AI LESSON GENERATOR
+- Minimize required user input.
+- Allow the AI to recommend objectives, techniques, drills, and equipment.
+- Support all six coaching disciplines.
+- Allow optional detailed instructions.
+- Preserve coach approval before saving.
+- Display useful errors when generation fails.
+
+2. LESSON EDITING
+- Edit AI-generated drafts before saving.
+- Reopen and edit saved lessons.
+- Modify any lesson section.
+- Add, remove, and reorder exercises.
+- Save changes without creating duplicates.
+
+3. LESSON MANAGEMENT
+- Create lessons.
+- View saved lessons.
+- Update lessons.
+- Delete lessons with confirmation.
+- Preserve data across refreshes and restarts.
+
+4. VISUAL LESSON FORMAT
+Replace lengthy paragraphs with:
+- Short bullet points.
+- Clear section headings.
+- Activity durations.
+- Technique demonstrations.
+- Relevant instructional pictures.
+- Relevant instructional videos.
+- Expandable explanations when needed.
+
+Use real, relevant instructional media with verified sources.
+Never invent media URLs.
+Provide graceful fallbacks when media is unavailable.
+
+5. USER EXPERIENCE
+- Make the interface beginner-friendly.
+- Clearly separate AI generation from manual creation.
+- Reduce unnecessary form fields.
+- Make editing obvious.
+- Make lessons easy to follow while coaching.
+
+6. DATABASE AND SECURITY
+- Implement PostgreSQL-compatible updates and deletes.
+- Preserve existing lesson records.
+- Keep SQLite backups unchanged.
+- Never modify Neon production.
+- Never expose credentials.
+- Preserve existing functionality.
+
+7. COMPLETE TESTING
+Verify:
+- AI lesson generation.
+- Manual lesson creation.
+- Editing before saving.
+- Editing after saving.
+- Deleting lessons.
+- All six disciplines.
+- Picture and video functionality.
+- Database persistence.
+- Browser refresh.
+- Backend restart.
+- Error handling.
+- Existing regression tests.
+- Security checks.
+
+Test the actual application in the browser.
+Fix problems and retest.
+
+8. DOCUMENTATION AND GITHUB
+- Update PROMPT_LOG.md.
+- Update CODE_WALKTHROUGH.md.
+- Document changes and test results.
+- Review code before committing.
+- Commit verified changes.
+- Push safe commits to GitHub.
+- Verify GitHub synchronization.
+
+WORKFLOW:
+Complete tasks in logical order without requesting approval between ordinary development steps.
+
+Do not stop after implementing only one feature.
+
+Do not claim a feature works without testing it.
+
+If a critical blocker prevents completion, report exactly what failed and what remains.
+
+FINAL HANDOFF:
+- Launch CoachLab locally.
+- Provide the working URL.
+- Report completed functionality.
+- Report tests passed and failed.
+- Identify anything still unfinished.
+- Provide GitHub commit hashes.
+
+GOAL:
+Deliver a complete, tested, editable, visual AI-powered coaching lesson manager tonight.
+
+BEGIN DEVELOPMENT.
+```
+
+Follow-up user message verbatim: `continue`.
+Browser-access follow-up replies verbatim: `done`, then `It is still blocked`.
+
+### Assistant work and response summary
+
+Inspected AGENTS, phase handoff/report, source, documentation and dirty Git state inherited from Phase 9D. Added SQLite and Prisma update/delete store methods, validated PUT/DELETE routes, saved-edit form mode, deletion confirmation UI, activity cards and pure ordering helpers. Made AI preference text optional with recommendations in the server prompt, preserving privacy confirmation and approval. Added read-only visual formatting and a fixed instructor-source media catalog (Grapplearts, Evolve MMA, David Avellan, NHS). URLs came from actual publisher pages/HTML rather than model guesses. Browser media playback is not claimed verified. No new dependency or schema migration.
+
+Files changed are enumerated in CLAUDE_HANDOFF.md. Updated README, AGENTS, placeholder environment configuration and line-by-line walkthrough. Exact walkthrough checker passed 41 files / 1,620 lines; a final semantic/readability review remains useful. The planned LESSON_MANAGER_VERIFICATION.md was not created before the stop; README's reference to it remains a documented gap.
+
+Actual results: initial sandbox baseline 6 pass/24 fail (localhost EACCES); authorized baseline rerun 30/30 pass. After CRUD changes 31/31 pass, plus separate helper suite 3/3. Final combined npm test 34/34 pass. Prisma suite 5/5 pass; schema validation, generation/compilation and latest React build (24 modules) pass. Isolated live PostgreSQL API parent test passed CRUD, all disciplines, mocked approval, same-ID/timestamp update, delete/reconnect persistence and safe GET/POST errors; real public snapshot unchanged and that test's random schema cleaned. Security/syntax/bundle scan passed 57 candidate files before handoff docs; configured private values absent. Audit first failed certificate validation, then passed with zero vulnerabilities using trusted system CAs without disabling TLS. One actual generic BJJ request through Gemini succeeded with five sections totaling 60 minutes and blank optional preferences; unsaved result stays ignored locally, not in the database.
+
+Fresh Neon Console confirmed Development br-flat-fog-b5t1m0vy / ep-long-bird-b50l2nhb in project rapid-firefly-98778665. A private row snapshot outside OneDrive was read back and verified. After the real backend restart all fields of both existing public lessons were unchanged; original SQLite and backup/restore hashes unchanged. No production change and no historical test import. Main app restarted with explicit PostgreSQL on port 3001; frontend remained on 5174.
+
+New dashboard controls and formatting were observed in the main browser. Full current edit/delete/activity/media browser tests did NOT run: isolated frontend 5175 was blocked by policy, even after the user's first access confirmation; the user then confirmed it remained blocked. Later main-tab refresh failed because its old tab no longer belonged to the session. Latest ambient URL showing 5175 is not test evidence. Test-only frontend/backend and its empty-at-preparation random schema remain for continuation; no cleanup was performed after the emergency stop.
+
+Genuine errors/corrections: attempted nonexistent shared/ai.js before following the actual shared file; an interrupted tool operation did not write the intended files, confirmed via inspection before resuming; automatic approval review disconnected twice before a PostgreSQL run, then a reviewed retry passed; temporary walkthrough script had template-string escaping errors, corrected before successful generation; final diff found an extra blank EOF line in the walkthrough, trimmed during documentation-only handoff. No invented application bug or failed UI test is reported as fixed.
+
+No commit or push had occurred before the emergency request. This implementation is an automated-tested checkpoint with explicit browser gaps, not a completed end-to-end release.
+
+## 2026-10-15 — Emergency handoff to Claude
+
+### Exact user prompt
+
+```text
+COACHLAB — EMERGENCY HANDOFF TO CLAUDE
+
+STOP all new development.
+
+Due to repeated connection failures, prepare a complete handoff so Claude can continue without losing progress.
+
+1. Review the current repository and Git status.
+2. Identify all completed features and unfinished work.
+3. List modified, uncommitted, and untracked files.
+4. Document errors, blockers, and connection interruptions.
+5. Record all tests run and their actual results.
+6. Identify the exact task interrupted and the next steps.
+7. Document PostgreSQL configuration and database state without exposing credentials.
+8. Preserve all existing data and SQLite backups.
+9. Do not modify production or reset databases.
+10. Create CLAUDE_HANDOFF.md containing:
+    - Project architecture
+    - Completed work
+    - Pending tasks
+    - Current bugs
+    - Relevant file paths
+    - Database configuration
+    - Test results
+    - Commands to run the application
+    - Prioritized instructions for Claude
+
+Update PROMPT_LOG.md with the current development progress.
+
+Run safe verification checks.
+
+Commit verified completed work if safe, but do not include secrets or unrelated changes.
+
+Do not discard unfinished modifications.
+
+Do not start additional development.
+
+FINAL RESPONSE:
+Provide the handoff file location, latest commit, Git status, and exact instructions for Claude to resume.
+
+PRIORITY:
+Preserve all progress. Claude must continue from the current state, not rebuild CoachLab.
+```
+
+### Handoff response and preservation
+
+Stopped feature development immediately. Reviewed Git inventory, source diffs and existing verification evidence. Created CLAUDE_HANDOFF.md with architecture, exact paths, code/test status, blockers, process/port details, private backup locations (no contents or credentials), leftover isolated schema, test commands and prioritized continuation instructions. Appended the current prompts/results here and the stop boundary to AGENTS.md. No application source changed after the stop. No data/schema cleanup, production operations, reset or discarded edits. A preservation commit is planned after documentation/secret checks under subject `Checkpoint lesson manager and Claude handoff; browser verification pending`. Its hash will be reported after creation rather than fabricated inside its own commit. No GitHub push during this emergency handoff; Claude should inspect remote state before the next authorized push.
+
+Handoff safe checks completed: walkthrough verification passed 41 files / 1,620 lines; candidate-file credential/ignored-path/JavaScript-syntax/frontend-bundle scan passed 58 files; configured key/URL/password scan passed; git diff --check passed after trimming the extra blank EOF line. These checks did not change application data or claim browser coverage.
