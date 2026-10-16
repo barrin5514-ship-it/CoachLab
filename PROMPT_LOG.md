@@ -4037,3 +4037,76 @@ Preserve all progress. Claude must continue from the current state, not rebuild 
 Stopped feature development immediately. Reviewed Git inventory, source diffs and existing verification evidence. Created CLAUDE_HANDOFF.md with architecture, exact paths, code/test status, blockers, process/port details, private backup locations (no contents or credentials), leftover isolated schema, test commands and prioritized continuation instructions. Appended the current prompts/results here and the stop boundary to AGENTS.md. No application source changed after the stop. No data/schema cleanup, production operations, reset or discarded edits. A preservation commit is planned after documentation/secret checks under subject `Checkpoint lesson manager and Claude handoff; browser verification pending`. Its hash will be reported after creation rather than fabricated inside its own commit. No GitHub push during this emergency handoff; Claude should inspect remote state before the next authorized push.
 
 Handoff safe checks completed: walkthrough verification passed 41 files / 1,620 lines; candidate-file credential/ignored-path/JavaScript-syntax/frontend-bundle scan passed 58 files; configured key/URL/password scan passed; git diff --check passed after trimming the extra blank EOF line. These checks did not change application data or claim browser coverage.
+
+## 2026-10-16 — Claude takes over and completes development
+
+### Exact user prompt
+
+```text
+COACHLAB — COMPLETE UNFINISHED DEVELOPMENT
+
+You are taking over CoachLab from Codex.
+
+1. Locate the existing CoachLab project on this Windows laptop.
+
+2. Read:
+   - CLAUDE_HANDOFF.md
+   - AGENTS.md
+   - PROMPT_LOG.md
+   - Project documentation
+
+3. Inspect Git status and locate commit 7a43695.
+   Preserve all existing changes.
+
+4. Continue exactly where Codex stopped.
+   Do not rebuild completed features.
+
+5. Finish all remaining functionality:
+   - AI lesson generation with minimal required inputs
+   - Support all six coaching disciplines
+   - Edit lessons before and after saving
+   - Create, save, update, and delete lessons
+   - Short bullet-point lesson formats
+   - Pictures and instructional videos
+   - Lesson timestamps and durations
+   - Database persistence
+   - Clear error handling
+   - Beginner-friendly interface
+
+6. Test the entire application:
+   - Frontend and backend
+   - All lesson management features
+   - All six disciplines
+   - PostgreSQL development database
+   - Browser functionality
+   - Persistence after refresh and restart
+   - Existing regression tests
+
+7. Fix discovered issues and retest.
+
+8. Preserve existing data and SQLite backups.
+   Never modify Neon production.
+   Never expose credentials.
+
+9. Update documentation and commit verified changes.
+   Do not push to GitHub unless explicitly instructed.
+
+10. Launch CoachLab locally and provide its working URL.
+
+IMPORTANT:
+Complete the remaining development autonomously.
+Do not stop after completing one feature.
+Do not request approval for routine coding steps.
+Do not claim completion without verification.
+If blocked, report the specific blocker and unfinished work.
+
+GOAL:
+Finish CoachLab using the existing local project,
+preserving everything Codex already completed.
+
+BEGIN.
+```
+
+### Response and outcome
+
+Located the project, confirmed a clean tree at 7a43695 (one commit ahead of origin/main), read the handoff documents, ran the baseline (34/34 tests) and then tested the real UI in the built-in browser for the first time. Found and fixed: Codex's isolated Vite helper served the wrong folder (blank page), activity-card blank-line/cursor bug, unreliable lazy pictures. Added activity-minute totals and unreviewed search links for lessons outside the media catalog. Verified create, refresh, edit-after-save (same ID/timestamp), AI draft edit/approval/save, all six disciplines, rate-limit and offline error messages, restart persistence, delete with cancel/confirm, mobile width, and one real Gemini draft (discarded). Ran npm test 35/35, test:prisma 5/5, prisma:validate, build, and the opt-in PostgreSQL API test. Dropped only the disposable test schema; the 2 real Development lessons and the SQLite/backup hashes were unchanged. Video playback could not be demonstrated in the test browser. No push. Details: LESSON_MANAGER_VERIFICATION.md. Genuine AI mistakes: none beyond two mis-timed interactions with a lagging screenshot and an initial assumption that the SQLite folder was at %LOCALAPPDATA% (it is in Codex's virtualized package profile), both discovered by inspection and corrected without affecting data.

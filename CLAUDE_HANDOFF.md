@@ -210,3 +210,7 @@ Untracked project files:
 This handoff additionally creates `CLAUDE_HANDOFF.md` and appends current progress/prompts to `PROMPT_LOG.md`. No source code was changed after the emergency stop.
 
 Handoff-only verification: exact walkthrough coverage passed 41 files / 1,620 lines; credential/path/syntax/bundle scan passed 58 files; configured-private-value scan and diff whitespace check passed. No new application tests, feature changes or database operations were performed after the emergency stop.
+
+## Update 2026-10-16 (Claude continuation)
+
+Claude resumed from commit 7a43695 without rebuilding anything. Browser access works (built-in browser pane). The earlier 5175 failure was a path bug in the ignored helper `tmp/complete-vite.mjs` (URL-encoded spaces), now fixed. Activity-card typing bug fixed, activity-minute totals, search-link media fallback and eager picture loading added; the disposable test schema from this handoff was verified and dropped; the real Development data (2 lessons) and the SQLite/backup hashes are unchanged. Full evidence and remaining limits: LESSON_MANAGER_VERIFICATION.md. Nothing was pushed to GitHub.

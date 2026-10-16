@@ -1668,145 +1668,148 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 ```text
 1 | import React, { useRef, useState } from 'react';
 2 | import ActivityEditor from './ActivityEditor.jsx';
-3 |
-4 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-5 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
-6 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
-7 |
-8 | export default function LessonForm({ onSaved, onCancel, lesson }) {
-9 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
-10 |   const [saving, setSaving] = useState(false);
-11 |   const [error, setError] = useState('');
-12 |   const submitting = useRef(false);
-13 |
-14 |   function change(event) {
-15 |     const { name, value } = event.target;
-16 |     setValues(current => ({ ...current, [name]: value }));
-17 |   }
-18 |
-19 |   async function submit(event) {
-20 |     event.preventDefault();
-21 |     if (submitting.current) return;
-22 |     setError('');
-23 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
-24 |     submitting.current = true;
-25 |     setSaving(true);
+3 | import { activityMinutes } from './activities.js';
+4 |
+5 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+6 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+7 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
+8 |
+9 | export default function LessonForm({ onSaved, onCancel, lesson }) {
+10 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
+11 |   const [saving, setSaving] = useState(false);
+12 |   const [error, setError] = useState('');
+13 |   const submitting = useRef(false);
+14 |
+15 |   function change(event) {
+16 |     const { name, value } = event.target;
+17 |     setValues(current => ({ ...current, [name]: value }));
+18 |   }
+19 |
+20 |   async function submit(event) {
+21 |     event.preventDefault();
+22 |     if (submitting.current) return;
+23 |     setError('');
+24 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+25 |     submitting.current = true;
 ```
 
 - **Line 1:** Imports React plus useRef for a persistent immediate lock and useState for renderable values.
 - **Line 2:** Imports ActivityEditor from './ActivityEditor.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Blank line separates related sections for readability; it performs no operation.
-- **Line 4:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
-- **Line 5:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
-- **Line 6:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
-- **Line 7:** Blank line separates related sections for readability; it performs no operation.
-- **Line 8:** Defines a form receiving success/cancel callbacks and an optional existing record. Presence of lesson selects update mode.
-- **Line 9:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
-- **Line 10:** Initializes the saving flag to false.
-- **Line 11:** Initializes the form error message to empty text.
-- **Line 12:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
-- **Line 13:** Blank line separates related sections for readability; it performs no operation.
-- **Line 14:** Begins the shared input-change handler with the browser/React event parameter.
-- **Line 15:** Destructures the changed control's name and string value from event.target.
-- **Line 16:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
-- **Line 17:** Closes submit.
-- **Line 18:** Blank line separates related sections for readability; it performs no operation.
-- **Line 19:** Declares the async form-submit handler.
-- **Line 20:** Prevents ordinary browser form navigation so React can perform the request.
-- **Line 21:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
-- **Line 22:** Clears any earlier error for this save attempt.
-- **Line 23:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
-- **Line 24:** Locks submission synchronously.
-- **Line 25:** Sets saving state so controls disable and progress feedback renders.
+- **Line 3:** Imports activityMinutes so the form can show how many minutes the activity cards add up to.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
+- **Line 6:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
+- **Line 7:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
+- **Line 8:** Blank line separates related sections for readability; it performs no operation.
+- **Line 9:** Defines a form receiving success/cancel callbacks and an optional existing record. Presence of lesson selects update mode.
+- **Line 10:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
+- **Line 11:** Initializes the saving flag to false.
+- **Line 12:** Initializes the form error message to empty text.
+- **Line 13:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
+- **Line 14:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Begins the shared input-change handler with the browser/React event parameter.
+- **Line 16:** Destructures the changed control's name and string value from event.target.
+- **Line 17:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
+- **Line 18:** Closes submit.
+- **Line 19:** Blank line separates related sections for readability; it performs no operation.
+- **Line 20:** Declares the async form-submit handler.
+- **Line 21:** Prevents ordinary browser form navigation so React can perform the request.
+- **Line 22:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 23:** Clears any earlier error for this save attempt.
+- **Line 24:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 25:** Locks submission synchronously.
 
 ### Lines 26–50
 
 ```text
-26 |     try {
-27 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
-28 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-29 |       const data = await response.json();
-30 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
-31 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
-32 |       onSaved(data);
-33 |     } catch (failure) {
-34 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
-35 |     } finally {
-36 |       submitting.current = false;
-37 |       setSaving(false);
-38 |     }
-39 |   }
-40 |
-41 |   return (
-42 |     <section className="form-panel" aria-labelledby="new-heading">
-43 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
-44 |       <p>Title and discipline are required. Add the details that help you coach.</p>
-45 |       <form onSubmit={submit}>
-46 |         <fieldset disabled={saving}>
-47 |           <legend className="sr-only">Lesson details</legend>
-48 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
-49 |           <div className="form-row">
-50 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+26 |     setSaving(true);
+27 |     try {
+28 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
+29 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+30 |       const data = await response.json();
+31 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
+32 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
+33 |       onSaved(data);
+34 |     } catch (failure) {
+35 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
+36 |     } finally {
+37 |       submitting.current = false;
+38 |       setSaving(false);
+39 |     }
+40 |   }
+41 |
+42 |   return (
+43 |     <section className="form-panel" aria-labelledby="new-heading">
+44 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+45 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+46 |       <form onSubmit={submit}>
+47 |         <fieldset disabled={saving}>
+48 |           <legend className="sr-only">Lesson details</legend>
+49 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
+50 |           <div className="form-row">
 ```
 
-- **Line 26:** Starts a try block around request/parsing/confirmation.
-- **Line 27:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
-- **Line 28:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
-- **Line 29:** Parses the response body as JSON, awaiting completion.
-- **Line 30:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
-- **Line 31:** Requires an integer returned ID before treating the lesson as confirmed.
-- **Line 32:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
-- **Line 33:** Closes try and catches request or response failures.
-- **Line 34:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
-- **Line 35:** Begins finally, which always executes after the attempt.
-- **Line 36:** Releases the immediate lock.
-- **Line 37:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
-- **Line 38:** Closes finally.
-- **Line 39:** Closes submit.
-- **Line 40:** Blank line separates related sections for readability; it performs no operation.
-- **Line 41:** Begins returning the JSX form tree.
-- **Line 42:** Opens a styled section and connects its accessible name to new-heading.
-- **Line 43:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
-- **Line 44:** Explains required fields in a paragraph.
-- **Line 45:** Opens a form and binds submit to its submit event; native constraints run before this handler.
-- **Line 46:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
-- **Line 47:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
-- **Line 48:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
-- **Line 49:** Opens the responsive row for the three compact controls.
-- **Line 50:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 26:** Sets saving state so controls disable and progress feedback renders.
+- **Line 27:** Starts a try block around request/parsing/confirmation.
+- **Line 28:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
+- **Line 29:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
+- **Line 30:** Parses the response body as JSON, awaiting completion.
+- **Line 31:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
+- **Line 32:** Requires an integer returned ID before treating the lesson as confirmed.
+- **Line 33:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
+- **Line 34:** Closes try and catches request or response failures.
+- **Line 35:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
+- **Line 36:** Begins finally, which always executes after the attempt.
+- **Line 37:** Releases the immediate lock.
+- **Line 38:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
+- **Line 39:** Closes finally.
+- **Line 40:** Closes submit.
+- **Line 41:** Blank line separates related sections for readability; it performs no operation.
+- **Line 42:** Begins returning the JSX form tree.
+- **Line 43:** Opens a styled section and connects its accessible name to new-heading.
+- **Line 44:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
+- **Line 45:** Explains required fields in a paragraph.
+- **Line 46:** Opens a form and binds submit to its submit event; native constraints run before this handler.
+- **Line 47:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
+- **Line 48:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
+- **Line 49:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
+- **Line 50:** Opens the responsive row for the three compact controls.
 
-### Lines 51–63
+### Lines 51–65
 
 ```text
-51 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
-52 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
-53 |           </div>
-54 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
-55 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} />
-56 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={onCancel}>Cancel</button></div>
-57 |         </fieldset>
-58 |         {saving && <p role="status">Saving your lesson…</p>}
-59 |         {error && <p className="error" role="alert">{error}</p>}
-60 |       </form>
-61 |     </section>
-62 |   );
-63 | }
+51 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+52 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+53 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+54 |           </div>
+55 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+56 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} />
+57 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+58 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={onCancel}>Cancel</button></div>
+59 |         </fieldset>
+60 |         {saving && <p role="status">Saving your lesson…</p>}
+61 |         {error && <p className="error" role="alert">{error}</p>}
+62 |       </form>
+63 |     </section>
+64 |   );
+65 | }
 ```
 
-- **Line 51:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
-- **Line 52:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
-- **Line 53:** Closes the responsive row.
-- **Line 54:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
-- **Line 55:** Gives drill text to the reusable editor; its callback merges changed drills into state without discarding other fields.
-- **Line 56:** Labels the submit action Saving, Save changes or Save lesson according to state; Cancel calls the parent without submitting.
-- **Line 57:** Closes the fieldset.
-- **Line 58:** Conditionally displays an accessible saving status via &&.
-- **Line 59:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
-- **Line 60:** Closes the form.
-- **Line 61:** Closes the section.
-- **Line 62:** Closes the JSX return expression and statement.
-- **Line 63:** Closes the component function.
-
+- **Line 51:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 52:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 53:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 54:** Closes the responsive row.
+- **Line 55:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 56:** Gives drill text to the reusable editor; its callback merges changed drills into state without discarding other fields.
+- **Line 57:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
+- **Line 58:** Labels the submit action Saving, Save changes or Save lesson according to state; Cancel calls the parent without submitting.
+- **Line 59:** Closes the fieldset.
+- **Line 60:** Conditionally displays an accessible saving status via &&.
+- **Line 61:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
+- **Line 62:** Closes the form.
+- **Line 63:** Closes the section.
+- **Line 64:** Closes the JSX return expression and statement.
+- **Line 65:** Closes the component function.
 
 ## client/src/LessonCard.jsx
 
@@ -1819,95 +1822,96 @@ Browser display for one saved record. It formats existing text, exposes edit and
 ```text
 1 | import React, { useState } from 'react';
 2 | import LessonMedia from './LessonMedia.jsx';
-3 |
-4 | export function CoachingText({ text }) {
-5 |   if (!text) return <p>Not added</p>;
-6 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-7 |     const lines = block.split('\n').filter(Boolean);
-8 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-9 |     return <section className="coaching-block" key={index}>
-10 |       {heading && <h4>{lines[0]}</h4>}
-11 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-12 |     </section>;
-13 |   })}</>;
-14 | }
-15 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled }) {
-16 |   const [confirming, setConfirming] = useState(false);
-17 |   const [busy, setBusy] = useState(false);
-18 |   const [error, setError] = useState('');
-19 |   async function remove() {
-20 |     if (busy) return;
-21 |     setBusy(true); setError('');
-22 |     try {
-23 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
-24 |       if (response.status !== 204 && response.status !== 404) throw new Error();
-25 |       onDeleted();
+3 | import { activityMinutes } from './activities.js';
+4 |
+5 | export function CoachingText({ text }) {
+6 |   if (!text) return <p>Not added</p>;
+7 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+8 |     const lines = block.split('\n').filter(Boolean);
+9 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+10 |     return <section className="coaching-block" key={index}>
+11 |       {heading && <h4>{lines[0]}</h4>}
+12 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+13 |     </section>;
+14 |   })}</>;
+15 | }
+16 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled }) {
+17 |   const [confirming, setConfirming] = useState(false);
+18 |   const [busy, setBusy] = useState(false);
+19 |   const [error, setError] = useState('');
+20 |   async function remove() {
+21 |     if (busy) return;
+22 |     setBusy(true); setError('');
+23 |     try {
+24 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+25 |       if (response.status !== 204 && response.status !== 404) throw new Error();
 ```
 
 - **Line 1:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 2:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Blank line separates related sections for readability; it performs no operation.
-- **Line 4:** Defines the read-only coaching text formatter. It changes presentation, not saved database text.
-- **Line 5:** Renders a short placeholder when a text field is empty.
-- **Line 6:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 7:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 8:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 9:** Starts one formatted block, using its position as the React key.
-- **Line 10:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 11:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 12:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 13:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 14:** Closes the LessonCard function.
-- **Line 15:** Defines one saved-lesson card. Props supply the record, edit/delete-completed callbacks and whether another form prevents actions.
-- **Line 16:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 17:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
-- **Line 18:** Stores a safe user-facing failure message, initially empty.
-- **Line 19:** Defines the asynchronous deletion action, called only by the confirmation button.
-- **Line 20:** Ignores another action while a deletion request is in progress.
-- **Line 21:** Disables repeat actions and clears the previous error before making the request.
-- **Line 22:** Starts a guarded block whose failures are handled by the following catch or finally clause.
-- **Line 23:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
-- **Line 24:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
-- **Line 25:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 3:** Imports activityMinutes so each saved lesson card can display the total of its activity minutes.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Defines the read-only coaching text formatter. It changes presentation, not saved database text.
+- **Line 6:** Renders a short placeholder when a text field is empty.
+- **Line 7:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 8:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 9:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 10:** Starts one formatted block, using its position as the React key.
+- **Line 11:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 12:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 13:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 14:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 15:** Closes the LessonCard function.
+- **Line 16:** Defines one saved-lesson card. Props supply the record, edit/delete-completed callbacks and whether another form prevents actions.
+- **Line 17:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 18:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
+- **Line 19:** Stores a safe user-facing failure message, initially empty.
+- **Line 20:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 21:** Ignores another action while a deletion request is in progress.
+- **Line 22:** Disables repeat actions and clears the previous error before making the request.
+- **Line 23:** Starts a guarded block whose failures are handled by the following catch or finally clause.
+- **Line 24:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 25:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
 
-### Lines 26–41
+### Lines 26–42
 
 ```text
-26 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-27 |     finally { setBusy(false); }
-28 |   }
-29 |   return <article className="lesson-card">
-30 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
-31 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}</p>
-32 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-33 |     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} />
-34 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
-35 |     <LessonMedia lesson={lesson} />
-36 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-37 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-38 |     {error && <p className="error" role="alert">{error}</p>}
-39 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-40 |   </article>;
-41 | }
+26 |       onDeleted();
+27 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+28 |     finally { setBusy(false); }
+29 |   }
+30 |   return <article className="lesson-card">
+31 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
+32 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+33 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+34 |     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} />
+35 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+36 |     <LessonMedia lesson={lesson} />
+37 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+38 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+39 |     {error && <p className="error" role="alert">{error}</p>}
+40 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+41 |   </article>;
+42 | }
 ```
 
-- **Line 26:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 27:** Always releases the busy state after success or failure.
-- **Line 28:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 29:** Begins the semantic saved-lesson article with its visual card style.
-- **Line 30:** Displays the discipline badge and lesson title using escaped React expressions.
-- **Line 31:** Displays skill level and duration, using an explicit placeholder when duration is null and a template string for minute values.
-- **Line 32:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 33:** Displays drill and teaching text through the same formatter, retaining timed headings when present.
-- **Line 34:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
-- **Line 35:** Passes the record to the reviewed-media lookup component.
-- **Line 36:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 37:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 38:** Displays the stored error as an accessible alert only when it is nonempty.
-- **Line 39:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 40:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 41:** Closes the LessonCard function.
-
+- **Line 26:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 27:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 28:** Always releases the busy state after success or failure.
+- **Line 29:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 30:** Begins the semantic saved-lesson article with its visual card style.
+- **Line 31:** Displays the discipline badge and lesson title using escaped React expressions.
+- **Line 32:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 33:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 34:** Displays drill and teaching text through the same formatter, retaining timed headings when present.
+- **Line 35:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
+- **Line 36:** Passes the record to the reviewed-media lookup component.
+- **Line 37:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 38:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 39:** Displays the stored error as an accessible alert only when it is nonempty.
+- **Line 40:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 41:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 42:** Closes the LessonCard function.
 
 ## client/src/lesson-draft.js
 
@@ -3556,54 +3560,87 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Browser component shared by LessonForm and AiLessonForm. It edits the existing drills/instructions text as ordered cards; no schema change or network request is involved.
 
-### Lines 1–21
+### Lines 1–25
 
 ```text
-1 | import React from 'react';
+1 | import React, { useEffect, useRef, useState } from 'react';
 2 |
-3 | import { activityBlocks, moveActivity } from './activities.js';
+3 | import { activityBlocks, joinActivities, moveActivity } from './activities.js';
 4 |
 5 | export default function ActivityEditor({ value, onChange, label = 'Exercises and activities', limit = 10000 }) {
-6 |   const items = activityBlocks(value);
-7 |   function update(next) { onChange(next.join('\n\n')); }
-8 |   return <section className="activity-editor" aria-label={label}>
-9 |     <h3>{label}</h3><p>Each card is an activity or section. Include a heading, minutes, and one coaching cue per line.</p>
-10 |     {items.map((item, index) => <div className="draft-section" key={index}>
-11 |       <label>{label} {index + 1}<textarea rows="4" maxLength={limit} value={item} onChange={event => update(items.map((text, position) => position === index ? event.target.value : text))} /></label>
-12 |       <div className="actions">
-13 |         <button type="button" className="secondary" disabled={index === 0} onClick={() => update(moveActivity(items, index, -1))}>Move up {index + 1}</button>
-14 |         <button type="button" className="secondary" disabled={index === items.length - 1} onClick={() => update(moveActivity(items, index, 1))}>Move down {index + 1}</button>
-15 |         <button type="button" className="secondary" onClick={() => update(items.filter((_, position) => position !== index))}>Remove activity {index + 1}</button>
-16 |       </div>
-17 |     </div>)}
-18 |     <button type="button" className="secondary" onClick={() => update([...items, 'New activity — add minutes\nAdd coaching cues here.'])}>Add activity</button>
-19 |     <small>{value.length} / {limit} characters</small>
-20 |   </section>;
-21 | }
+6 |   const nextId = useRef(0);
+7 |   const makeCards = text => activityBlocks(text).map(item => ({ id: nextId.current++, text: item }));
+8 |   const [cards, setCards] = useState(() => makeCards(value));
+9 |
+10 |   useEffect(() => {
+11 |     if (value !== joinActivities(cards.map(card => card.text))) setCards(makeCards(value));
+12 |   }, [value]);
+13 |
+14 |   function update(next) {
+15 |     setCards(next);
+16 |     onChange(joinActivities(next.map(card => card.text)));
+17 |   }
+18 |   function swap(index, direction) {
+19 |     const order = moveActivity(cards.map((_, position) => position), index, direction);
+20 |     update(order.map(position => cards[position]));
+21 |   }
+22 |   return <section className="activity-editor" aria-label={label}>
+23 |     <h3>{label}</h3><p>Each card is one activity. Put a heading with its minutes on the first line, for example “Warm-up — 10 minutes”, then one coaching cue per line. Use Add activity for a new card.</p>
+24 |     {cards.map((card, index) => <div className="draft-section" key={card.id}>
+25 |       <label>{label} {index + 1}<textarea rows="4" maxLength={limit} value={card.text} onChange={event => update(cards.map(item => item.id === card.id ? { ...item, text: event.target.value } : item))} /></label>
 ```
 
-- **Line 1:** Imports React from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 2:** Blank line separating related statements; it has no runtime effect.
-- **Line 3:** Imports { activityBlocks, moveActivity } from './activities.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 4:** Blank line separating related statements; it has no runtime effect.
-- **Line 5:** Defines the reusable browser editor. Destructuring reads its text, change callback, accessible label and character limit from props; defaults apply when a parent omits them.
-- **Line 6:** Splits the stored instruction text into editable activity cards, without writing to the database.
-- **Line 7:** Joins cards with two newline characters and calls the parent callback; the parent owns the actual form state.
-- **Line 8:** Begins a semantic section with a CSS class and an accessible name supplied by the label prop.
-- **Line 9:** Displays the editor heading and explains how to put durations and coaching cues in each activity.
-- **Line 10:** Maps each activity to a card; item is its text, index is its zero-based position, and key identifies its rendered position.
-- **Line 11:** Shows a one-based card number and a controlled textarea. Its change callback replaces only the matching entry; rows sets height and maxLength limits that individual text box.
-- **Line 12:** Opens the flex-layout group containing activity control buttons.
-- **Line 13:** Moves this card one position earlier; the first card is disabled. type=button prevents accidental form submission.
-- **Line 14:** Moves this card one position later, disabling the last card; the parent receives a new ordered text value.
-- **Line 15:** Removes this unsaved activity by retaining entries with a different position. The underscore means the unused text argument; this does not delete a saved lesson.
-- **Line 16:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 17:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 18:** Copies the existing array and appends an editable activity template. The spread syntax preserves all earlier entries.
-- **Line 19:** Displays the combined character count and limit; backend validation remains authoritative for the complete saved text.
-- **Line 20:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 21:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 1:** Imports React plus three hooks: useEffect re-synchronizes cards with outside text, useRef keeps a counter that survives renders, and useState stores the card list.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** Imports the text-splitting helper, the new joinActivities helper that rebuilds one string, and moveActivity that reorders an array. Braces mark named imports.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Defines and exports the editor component. Destructuring reads the stored text, the change callback, an accessible label and a character limit; the default values apply when a parent omits them.
+- **Line 6:** Creates a ref holding a number that gives every card a permanent id. Changing a ref does not redraw the page, so ids stay stable.
+- **Line 7:** Defines a helper that splits saved text into activity blocks and wraps each one as an object with a new unique id and its text; the ++ takes the next number.
+- **Line 8:** Stores the cards as component state. The function form of useState runs makeCards only once, for the first render.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** Starts an effect that runs after rendering whenever the dependency list at the end changes.
+- **Line 11:** If the text from the parent no longer equals what the local cards would produce, another part of the program (such as opening a different lesson) changed it, so the cards are rebuilt. Typing never triggers this because the cards produced that text.
+- **Line 12:** Ends the effect; the array [value] tells React to re-run it only when the parent text changes.
+- **Line 13:** Blank line separates related sections for readability; it performs no operation.
+- **Line 14:** Defines update, the single function used for every card change.
+- **Line 15:** Saves the new card list in local state so unsaved details such as a blank line inside a card are kept while the coach types.
+- **Line 16:** Tells the parent the new combined text. joinActivities removes blank lines inside cards and puts one blank line between cards.
+- **Line 17:** Closes the update function.
+- **Line 18:** Defines swap, which moves one card up or down.
+- **Line 19:** Reuses moveActivity on a list of positions (0, 1, 2 ...) rather than on the text, so the cards keep their ids when reordered. The underscore names an unused value.
+- **Line 20:** Rebuilds the card list from the reordered positions and saves it through update.
+- **Line 21:** Closes the swap function.
+- **Line 22:** Returns the editor markup, starting a labeled section element that screen readers announce with the supplied label.
+- **Line 23:** Shows the heading and beginner instructions: heading with minutes on the first line, one cue per line, and Add activity for new cards. The quotation marks are ordinary text inside JSX.
+- **Line 24:** Loops over the cards and draws one block per card. The key is the permanent card id, so React keeps the same textarea (and cursor focus) when other cards change, move or disappear.
+- **Line 25:** Draws the labeled textarea for one card. Its value comes from the card and each keystroke replaces only that card’s text, found by id, before calling update.
 
+### Lines 26–35
+
+```text
+26 |       <div className="actions">
+27 |         <button type="button" className="secondary" disabled={index === 0} onClick={() => swap(index, -1)}>Move up {index + 1}</button>
+28 |         <button type="button" className="secondary" disabled={index === cards.length - 1} onClick={() => swap(index, 1)}>Move down {index + 1}</button>
+29 |         <button type="button" className="secondary" onClick={() => update(cards.filter(item => item.id !== card.id))}>Remove activity {index + 1}</button>
+30 |       </div>
+31 |     </div>)}
+32 |     <button type="button" className="secondary" onClick={() => update([...cards, { id: nextId.current++, text: 'New activity — add minutes\nAdd coaching cues here.' }])}>Add activity</button>
+33 |     <small>{value.length} / {limit} characters</small>
+34 |   </section>;
+35 | }
+```
+
+- **Line 26:** Opens the row that holds this card’s buttons.
+- **Line 27:** Move up button; it is disabled for the first card and calls swap with -1. The visible number tells screen-reader users which card it affects.
+- **Line 28:** Move down button; it is disabled for the last card and calls swap with 1.
+- **Line 29:** Remove button; it keeps every card whose id differs from this one and saves the shorter list.
+- **Line 30:** Closes the row of buttons.
+- **Line 31:** Closes the card block and the loop expression.
+- **Line 32:** Add activity button; it appends a new card with a unique id and a starter heading and cue to the existing cards.
+- **Line 33:** Shows how many characters the combined text uses compared with the limit.
+- **Line 34:** Closes the section element and the returned JSX expression.
+- **Line 35:** Closes the component function.
 
 ## client/src/LessonMedia.jsx
 
@@ -3611,7 +3648,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Browser components invoked by LessonCard. They load only catalogued publisher media after expansion, with attribution and fallbacks.
 
-### Lines 1–24
+### Lines 1–25
 
 ```text
 1 | import React, { useState } from 'react';
@@ -3622,7 +3659,7 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 6 |   const [showVideo, setShowVideo] = useState(false);
 7 |   return <section className="demonstration">
 8 |     <h4>{item.title}</h4>
-9 |     {!imageFailed ? <img loading="lazy" src={item.image} alt={item.title + ' reference picture'} onError={() => setImageFailed(true)} referrerPolicy="no-referrer" /> : <p>Picture unavailable. Open the instructor source below.</p>}
+9 |     {!imageFailed ? <img src={item.image} alt={item.title + ' reference picture'} onError={() => setImageFailed(true)} referrerPolicy="no-referrer" /> : <p>Picture unavailable. Open the instructor source below.</p>}
 10 |     <small>Picture and instruction: {item.credit}. Match the demonstration to your class and have a qualified coach review it.</small>
 11 |     {item.video && <button className="secondary" type="button" onClick={() => setShowVideo(value => !value)}>{showVideo ? 'Hide video' : 'Load instructional video'}</button>}
 12 |     {showVideo && <iframe title={item.title} src={item.video} allow="fullscreen; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}
@@ -3633,11 +3670,12 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 17 | export default function LessonMedia({ lesson }) {
 18 |   const [open, setOpen] = useState(false);
 19 |   const items = lessonMedia(lesson);
-20 |   return <details onToggle={event => setOpen(event.currentTarget.open)}>
-21 |     <summary>Instructional pictures and videos</summary>
-22 |     {open && (items.length ? items.map(item => <Demonstration key={item.source} item={item} />) : <p>No verified matching media in the current reference catalog. Use a qualified coach’s demonstration; no links have been invented for this lesson.</p>)}
-23 |   </details>;
-24 | }
+20 |   const query = encodeURIComponent(`${lesson.discipline} ${lesson.title} technique`);
+21 |   return <details onToggle={event => setOpen(event.currentTarget.open)}>
+22 |     <summary>Instructional pictures and videos</summary>
+23 |     {open && (items.length ? items.map(item => <Demonstration key={item.source} item={item} />) : <p>No reviewed demonstration in CoachLab’s reference catalog matches this lesson yet. No links have been invented for it.</p>)}
+24 |     {open && <p className="search-links">Find more: <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer">search instructional videos</a> · <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer">search pictures</a>. Search results are not reviewed by CoachLab; have a qualified coach check them before teaching.</p>}
+25 |   </details>;
 ```
 
 - **Line 1:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
@@ -3648,7 +3686,7 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 - **Line 6:** Starts with video loading disabled. State changes only when the viewer presses the load/hide button.
 - **Line 7:** Begins the styled reference section.
 - **Line 8:** Displays the verified reference title as plain text, not executable HTML.
-- **Line 9:** Conditionally renders a lazy external image with alternative text, no referrer, and an error callback; on failure it replaces the picture with a useful message.
+- **Line 9:** Shows the reference picture with descriptive alt text, no referrer sent, and the fallback sentence if loading fails. The browser lazy-loading attribute was removed because the picture is already only rendered after the coach opens the section, and lazy loading did not start reliably in the test browser.
 - **Line 10:** Credits the publisher and reminds the coach to review the demonstration's relevance.
 - **Line 11:** Only embeddable references get a load/hide button. Clicking inverts showVideo; type=button prevents form submission.
 - **Line 12:** Creates the external player only after a click, with an accessible title, fullscreen/encrypted-media/picture-in-picture permissions and limited cross-origin referrer information.
@@ -3659,12 +3697,20 @@ Browser components invoked by LessonCard. They load only catalogued publisher me
 - **Line 17:** Exports the lesson's media disclosure component, receiving its lesson data as a prop.
 - **Line 18:** Tracks whether the native details disclosure is expanded, initially false.
 - **Line 19:** Looks up matching catalog entries locally; unrelated demonstrations are excluded.
-- **Line 20:** Uses the native disclosure's toggle event to mirror its current open state into React.
-- **Line 21:** Provides the keyboard-operable label for opening the media disclosure.
-- **Line 22:** Loads matching demonstration components only while expanded, using source URLs as stable keys; no match displays an honest fallback rather than fabricated media.
-- **Line 23:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 24:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 20:** Builds a URL-safe search phrase from the discipline and lesson title; encodeURIComponent escapes spaces and symbols.
+- **Line 21:** Uses the native disclosure's toggle event to mirror its current open state into React.
+- **Line 22:** Provides the keyboard-operable label for opening the media disclosure.
+- **Line 23:** When opened, shows each matching reviewed demonstration, or a sentence saying that none matches yet and that no links were invented.
+- **Line 24:** When opened, always shows two search links (videos and pictures) for lessons the catalog does not cover. They open in a new tab with noopener protection, and the note says CoachLab has not reviewed those results.
+- **Line 25:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
 
+### Lines 26–26
+
+```text
+26 | }
+```
+
+- **Line 26:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## client/src/activities.js
 
@@ -3672,26 +3718,39 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Pure browser-data helpers imported by ActivityEditor and tested by Node. They preserve text within each card and reorder copies of arrays.
 
-### Lines 1–7
+### Lines 1–14
 
 ```text
 1 | export const activityBlocks = value => value ? value.split(/\n\s*\n/) : [];
-2 | export function moveActivity(items, index, direction) {
-3 |   const next = [...items], target = index + direction;
-4 |   if (target < 0 || target >= next.length) return next;
-5 |   [next[index], next[target]] = [next[target], next[index]];
-6 |   return next;
-7 | }
+2 | export const joinActivities = items => items.map(text => text.replace(/\n\s*\n+/g, '\n')).join('\n\n');
+3 | export function moveActivity(items, index, direction) {
+4 |   const next = [...items], target = index + direction;
+5 |   if (target < 0 || target >= next.length) return next;
+6 |   [next[index], next[target]] = [next[target], next[index]];
+7 |   return next;
+8 | }
+9 | export function activityMinutes(value) {
+10 |   return activityBlocks(value).reduce((sum, block) => {
+11 |     const match = block.split('\n')[0].match(/\b(\d{1,3})\s*(?:minutes?|mins?)\b/i);
+12 |     return sum + (match ? Number(match[1]) : 0);
+13 |   }, 0);
+14 | }
 ```
 
 - **Line 1:** Exports a small arrow function: nonempty text is split at blank lines using a regular expression; empty text becomes an empty array. Single newlines remain coaching cues within a card.
-- **Line 2:** Exports a pure reorder helper receiving an array, source index, and direction (-1 or 1).
-- **Line 3:** Copies the array so the caller's original is unchanged, and calculates the destination index.
-- **Line 4:** Returns the unchanged copy if moving would go before the first or after the last item.
-- **Line 5:** Array destructuring swaps the source and destination entries without losing either value.
-- **Line 6:** Returns the reordered copy to the caller.
-- **Line 7:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-
+- **Line 2:** Exports joinActivities, which turns a list of card texts back into one stored string. Each card’s internal blank lines are replaced by a single line break so a card can never split into two when it is reloaded; cards are then joined with one blank line.
+- **Line 3:** Exports a pure reorder helper receiving an array, source index, and direction (-1 or 1).
+- **Line 4:** Copies the array so the caller's original is unchanged, and calculates the destination index.
+- **Line 5:** Returns the unchanged copy if moving would go before the first or after the last item.
+- **Line 6:** Array destructuring swaps the source and destination entries without losing either value.
+- **Line 7:** Returns the reordered copy to the caller.
+- **Line 8:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 9:** Exports activityMinutes, which adds up the minutes announced in the heading (first line) of each activity block.
+- **Line 10:** Starts from the activity blocks and reduces them to one number; sum is the running total and block is the current activity.
+- **Line 11:** Looks only at the first line of the block for a whole number of up to three digits followed by minute, minutes, min or mins (case ignored). match is null when there is no such heading.
+- **Line 12:** Adds the found minutes to the running total, or zero when the heading has no minutes.
+- **Line 13:** Ends the reduce call; the final 0 is the starting total.
+- **Line 14:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## client/src/lesson-media.js
 
@@ -3818,7 +3877,7 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 ```text
 1 | import test from 'node:test';
 2 | import assert from 'node:assert/strict';
-3 | import { activityBlocks, moveActivity } from '../client/src/activities.js';
+3 | import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 4 | import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 5 | import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
 6 |
@@ -3833,19 +3892,19 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 15 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
 16 | });
 17 |
-18 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
-19 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
-20 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-21 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
-22 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
+18 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
+19 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
+20 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
+21 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
+22 |   assert.equal(activityMinutes(''), 0);
 23 | });
 24 |
-25 | test('media matches both discipline and technique with an empty safe fallback', () => {
+25 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
 ```
 
 - **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 2:** Imports assert from 'node:assert/strict'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports { activityBlocks, moveActivity } from '../client/src/activities.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 3:** Imports the two new helpers beside the existing ones so the tests can exercise them.
 - **Line 4:** Imports { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 5:** Imports { disciplines, validateRequest } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 6:** Blank line separating related statements; it has no runtime effect.
@@ -3860,31 +3919,44 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 - **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 - **Line 16:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 - **Line 17:** Blank line separating related statements; it has no runtime effect.
-- **Line 18:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 19:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
-- **Line 20:** Checks every supported discipline accepts the minimal request without a validation error.
-- **Line 21:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 22:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 18:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
+- **Line 19:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
+- **Line 20:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
+- **Line 21:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
+- **Line 22:** Checks that empty text adds up to zero.
 - **Line 23:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 - **Line 24:** Blank line separating related statements; it has no runtime effect.
-- **Line 25:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 25:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
 
-### Lines 26–30
+### Lines 26–37
 
 ```text
-26 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
-27 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
-28 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
-29 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+26 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
+27 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
+28 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
+29 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
 30 | });
+31 |
+32 | test('media matches both discipline and technique with an empty safe fallback', () => {
+33 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
+34 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
+35 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
+36 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+37 | });
 ```
 
-- **Line 26:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
-- **Line 27:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 28:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 29:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
+- **Line 26:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
+- **Line 27:** Checks every supported discipline accepts the minimal request without a validation error.
+- **Line 28:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 29:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 - **Line 30:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-
+- **Line 31:** Blank line separating related statements; it has no runtime effect.
+- **Line 32:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 33:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
+- **Line 34:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 35:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 36:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
+- **Line 37:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/postgres-api.test.js
 

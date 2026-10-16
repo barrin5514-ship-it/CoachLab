@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import LessonMedia from './LessonMedia.jsx';
+import { activityMinutes } from './activities.js';
 
 export function CoachingText({ text }) {
   if (!text) return <p>Not added</p>;
@@ -28,7 +29,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, disabled }) {
   }
   return <article className="lesson-card">
     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
-    <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}</p>
+    <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
     <h4>Training goal</h4><CoachingText text={lesson.goal} />
     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} />
     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>

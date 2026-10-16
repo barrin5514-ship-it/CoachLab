@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
+import { activityMinutes } from './activities.js';
 
 const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
 const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
@@ -53,6 +54,7 @@ export default function LessonForm({ onSaved, onCancel, lesson }) {
           </div>
           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} />
+          {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={onCancel}>Cancel</button></div>
         </fieldset>
         {saving && <p role="status">Saving your lesson…</p>}

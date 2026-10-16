@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activityBlocks, moveActivity } from '../client/src/activities.js';
+import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
 
@@ -13,6 +13,13 @@ test('activity editing preserves cues and supports removal, insertion and bounde
   assert.deepEqual(items, activityBlocks(original));
   assert.deepEqual(activityBlocks(''), []);
   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
+});
+
+test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
+  assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
+  assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
+  assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
+  assert.equal(activityMinutes(''), 0);
 });
 
 test('minimal AI requests work for every discipline; optional details remain bounded', () => {
