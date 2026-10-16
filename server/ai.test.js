@@ -7,6 +7,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { createApp } from './app.js';
 import { migrate } from './migrations.js';
+import { testOptions, authedFetch as fetch } from './test-auth.js';
 import { generateDraft } from './ai-provider.js';
 import { disciplines, sections, details, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
 
@@ -68,7 +69,7 @@ test('AI API generates without saving; approved mapped lesson persists; limits a
     if (mode === 'slow') await new Promise(resolve => { release = resolve; });
     return structuredClone(draft);
   };
-  const server = createApp(database, { provider, now: () => time }).listen(0, '127.0.0.1');
+  const server = createApp(database, { provider, now: () => time, ...testOptions }).listen(0, '127.0.0.1');
   t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); rmSync(directory, { recursive: true, force: true }); });
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;

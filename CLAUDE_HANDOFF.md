@@ -222,3 +222,7 @@ Added the media upgrade on top of the lesson manager: Add Media (upload or check
 ## Update 2026-10-16 (media attachment saving fix)
 
 Fixed ways an attachment could be lost on save (Enter in a media field submitted the lesson form; half-added media dropped; stale attachment list on Edit; non-functional list updates), added a sticky save confirmation that re-reads the stored count, and backend error logging. See MEDIA_SAVE_FIX_REPORT.md. 53/53 tests pass. Not pushed.
+
+## Update 2026-10-16 (login and accounts)
+
+Better Auth login, per-coach ownership of lessons and media, protected API and the claim-lessons process were added; the additive migration is applied to Development only (backup at C:UsersarriCoachLab-backups). Real lessons are unowned and hidden until claimed. See AUTH_SECURITY_REPORT.md. 68/68 tests pass. Not pushed.

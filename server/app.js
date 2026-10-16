@@ -14,7 +14,7 @@ const hostOf = value => { try { return new URL(value).hostname; } catch { return
 
 function sendFile(request, response, file) {
   const data = Buffer.from(file.data);
-  response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, max-age=31536000, immutable', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+  response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
   const range = request.headers.range;
   if (!range) return response.status(200).send(data);
   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -27,7 +27,15 @@ function sendFile(request, response, file) {
 export function createApp(database, options = {}) {
   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
+  const { auth, allowedOrigins = [] } = options;
+  if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
   const app = express();
+  app.disable('x-powered-by');
+  app.use('/api', (request, response, next) => {
+    response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+    next();
+  });
+  if (auth.handler) app.all('/api/auth/*splat', auth.handler);
   app.use(express.json({ limit: '32kb' }));
   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
   let suggestions = [];
@@ -74,28 +82,40 @@ export function createApp(database, options = {}) {
   app.get('/api/health', (request, response) => {
     response.json({ status: 'ok', service: 'CoachLab API' });
   });
-  app.get('/api/lessons', async (request, response) => {
-    response.json(await lessons.list());
+  app.get('/api/auth-config', (request, response) => {
+    response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
   });
-  app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(lesson, media))));
+  app.use('/api', async (request, response, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
+      return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
+    }
+    const user = await auth.getUser(request);
+    if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
+    request.user = user;
+    next();
+  });
+  app.get('/api/lessons', async (request, response) => {
+    response.json(await lessons.list(request.user.id));
+  });
+  app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
   app.param('id', (request, response, next, value) => {
     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
     request.lessonId = Number(value);
     next();
   });
   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-    const saved = await lessons.update(request.lessonId, lesson, media);
+    const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
     return response.json(saved);
   }));
   app.delete('/api/lessons/:id', async (request, response) => {
-    if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+    if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
     response.status(204).end();
   });
 
   app.get('/api/lesson-media', async (request, response) => {
     if (!lessons.media) return response.json([]);
-    response.json(await lessons.media.list());
+    response.json(await lessons.media.list(request.user.id));
   });
   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
@@ -114,15 +134,15 @@ export function createApp(database, options = {}) {
     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-    response.status(201).json(await lessons.media.addUpload({ kind: detected.kind, mime: detected.mime, title, data }));
+    response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
   });
   app.get('/api/media/:id/file', async (request, response) => {
-    const file = lessons.media ? await lessons.media.getFile(request.lessonId) : null;
+    const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
     if (!file) return response.status(404).json({ error: 'Media file not found.' });
     sendFile(request, response, file);
   });
   app.delete('/api/media/:id', async (request, response) => {
-    if (!lessons.media || !await lessons.media.removeOrphan(request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+    if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
     response.status(204).end();
   });
   app.post('/api/media/verify', async (request, response) => {

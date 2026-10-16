@@ -96,3 +96,22 @@ button.danger { color: #852b1d; }
 .notice-bar.warning { background: #fff7e6; color: #5c3b00; border: 1px solid #e6c98c; }
 .notice-bar button { flex-shrink: 0; padding: 6px 12px; }
 .media-added { margin: 8px 0; padding: 8px 12px; }
+.account-line { margin: 8px 0 0; font-size: 0.9rem; color: #52666e; overflow-wrap: anywhere; }
+button.link { background: none; border: 0; padding: 0; min-height: 0; color: #176257; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+button.link:hover:not(:disabled) { background: none; color: #104b42; }
+.auth-screen { max-width: 480px; padding-top: 32px; }
+.auth-card { background: white; border: 1px solid #d7e0e4; border-top: 4px solid #176257; border-radius: 12px; padding: 28px; }
+.auth-card h1 { font-size: 2.4rem; }
+.auth-card h2 { margin: 16px 0; font-size: 1.3rem; }
+.auth-card form button[type=submit], .auth-card > button.secondary { width: 100%; }
+.auth-card .success, .auth-card .error { margin: 0 0 16px; }
+.password-field { margin-bottom: 8px; }
+.show-password { margin: 6px 0 16px; font-weight: 400; }
+.auth-divider { display: flex; align-items: center; gap: 12px; color: #52666e; margin: 20px 0 12px; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-top: 1px solid #d7e0e4; }
+.auth-links { margin: 18px 0 0; text-align: center; }
+@media (max-width: 700px) {
+  .auth-screen { padding: 12px 12px 32px; }
+  .auth-card { padding: 20px; }
+  .notice-bar { flex-direction: column; align-items: stretch; }
+}

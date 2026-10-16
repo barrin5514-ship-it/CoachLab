@@ -11,14 +11,16 @@
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
     "build": "vite build --config client/vite.config.js",
     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js",
+    "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
-    "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js"
+    "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js",
+    "claim-lessons": "node --env-file-if-exists=.env server/claim-lessons.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
+    "better-auth": "1.7.10",
     "better-sqlite3": "13.0.3",
     "express": "5.3.0",
     "pg": "8.23.1",

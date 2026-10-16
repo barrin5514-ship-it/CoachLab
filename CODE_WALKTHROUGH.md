@@ -1,6 +1,6 @@
 # CoachLab code walkthrough
 
-Source walkthrough updated for the instructional media upgrade on 2026-10-16 (on top of the lesson-manager implementation). Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser test limitations are reported separately in LESSON_MANAGER_VERIFICATION.md and MEDIA_UPGRADE_VERIFICATION.md.
+Source walkthrough updated for the login and accounts work on 2026-10-16 (on top of the lesson manager and media upgrade). Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser results are reported in AUTH_SECURITY_REPORT.md.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
@@ -15,6 +15,8 @@ AI generation sends generic class parameters to POST /api/ai/lesson-draft. The E
 LessonCard turns saved text into headings, cues and expandable details without rewriting records. LessonMedia matches a fixed source-reviewed catalog locally and loads publisher media only on disclosure/playback actions. Missing matches, images or embeds retain explanatory text/source links. No automatic media search or model-generated URL is trusted.
 
 Media: every activity card in LessonForm (and every section of an AI draft) shows an Add Media button. MediaEditor lets a coach upload a picture or video (POST /api/media/upload; the server checks the real file bytes and stores them in the lesson_media table) or paste a link (POST /api/media/verify; the server fetches the link safely and confirms it is a real picture, video or YouTube video). Nothing is attached to a lesson until Save: the form sends the list in the lesson's POST or PUT body, the server verifies any new links again, and the store attaches everything in the same database transaction as the lesson. Attachments find their activity through its heading line, so they follow it when it is renamed. After an AI draft is generated, the browser calls POST /api/media/suggest; media-finder.js combines the reviewed catalog, Wikimedia Commons and (if a server-side key exists) YouTube search, verifies every address and returns only verified items for the section that asked. App loads GET /api/lesson-media and gives each LessonCard its own attachments. Uploaded files are served by GET /api/media/:id/file with byte-range support. client/api-proxy.js forwards /api from the Vite development server because Vite's built-in proxy stalls on files over about 1 MB.
+
+Accounts: main.jsx now mounts Gate, which asks GET /api/auth/get-session whether the browser has a valid session and shows either AuthScreen (sign in, create account, forgot password, choose new password) or the dashboard App. The login routes under /api/auth are served by the Better Auth library (server/auth.js): passwords are hashed with scrypt, sessions live in the database and are carried by an HttpOnly SameSite=Lax cookie, sign-in is rate limited per address and per account, and password reset links are single-use and expire after an hour (until an email provider exists they are printed in the backend window by mailer.js). Every other /api route passes through one gate in app.js that requires a valid session and, for changes, an allowed Origin; the signed-in coach's id is passed to the stores, which filter every query by owner_id, so another coach's lessons and media answer 404. Lessons created before accounts have no owner and are invisible to everyone until the operator runs npm run claim-lessons (claim.js), which defaults to a dry run, writes a verified backup, and only touches unowned lessons.
 
 Prisma generation emits ignored TypeScript and compiled ESM. Remote migrations are not part of application startup or these lesson-manager changes. Existing table constraints remain in effect. Isolated PostgreSQL tests use explicit random schemas; ordinary npm test uses disposable SQLite plus pure browser-data helpers.
 
@@ -69,18 +71,18 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 ```text
 1 | import React from 'react';
 2 | import { createRoot } from 'react-dom/client';
-3 | import App from './App.jsx';
+3 | import Gate from './Gate.jsx';
 4 | import './styles.css';
 5 |
-6 | createRoot(document.getElementById('root')).render(<App />);
+6 | createRoot(document.getElementById('root')).render(<Gate />);
 ```
 
 - **Line 1:** Imports React as a default import from the installed react package; JSX is compiled to React calls by this setup.
 - **Line 2:** Imports the named createRoot function from React DOM, which connects React to browser elements.
-- **Line 3:** Imports the default App component from the neighboring App.jsx file; ./ means this directory.
+- **Line 3:** Imports Gate, the new top-level component that decides between the login screens and the dashboard.
 - **Line 4:** Imports the stylesheet for its effect on page styling, without assigning a JavaScript variable.
 - **Line 5:** Blank line separates related sections for readability; it performs no operation.
-- **Line 6:** Finds the HTML element whose ID is root, creates a React root there, and renders App. The self-closing &lt;App /&gt; tag creates the component; parentheses call functions, dots access methods, and the semicolon ends the statement.
+- **Line 6:** Mounts Gate instead of App, so nothing in the dashboard is drawn until a session exists.
 
 ## client/src/App.jsx
 
@@ -97,7 +99,7 @@ Browser application state and dashboard. It loads lessons and their attachments 
 4 | import AiLessonForm from './AiLessonForm.jsx';
 5 | import { fetchMedia } from './media.js';
 6 |
-7 | export default function App() {
+7 | export default function App({ user, onLogOut }) {
 8 |   const [lessons, setLessons] = useState([]);
 9 |   const [loading, setLoading] = useState(true);
 10 |   const [error, setError] = useState('');
@@ -124,7 +126,7 @@ Browser application state and dashboard. It loads lessons and their attachments 
 - **Line 4:** Imports the new browser component for requesting, reviewing and approving an AI draft.
 - **Line 5:** Imports the shared function that loads attachments.
 - **Line 6:** Blank line separates related sections; it performs no operation.
-- **Line 7:** Exports the App component as this module's default; braces begin its function body.
+- **Line 7:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
 - **Line 8:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
 - **Line 9:** Stores whether a list request is running; true initially displays loading feedback.
 - **Line 10:** Stores the list error message; empty text means no error.
@@ -282,14 +284,14 @@ Browser application state and dashboard. It loads lessons and their attachments 
 96 |   return (
 97 |     <main>
 98 |       <header className="hero">
-99 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
+99 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
 100 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
 ```
 
 - **Line 76:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
 - **Line 77:** Starts the final message text.
 - **Line 78:** Starts as a success tone.
-- **Line 79:** Starts the guarded re-check.
+- **Line 79:** Starts the guarded step.
 - **Line 80:** Asks the server what attachments are really stored now.
 - **Line 81:** Replaces the page’s attachment list with that fresh copy.
 - **Line 82:** Clears any earlier media error.
@@ -297,7 +299,7 @@ Browser application state and dashboard. It loads lessons and their attachments 
 - **Line 84:** If the form did not send a media list, only mentions the count when there is one.
 - **Line 85:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
 - **Line 86:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 87:** If the re-check itself failed…
+- **Line 87:** If the attachments could not be loaded…
 - **Line 88:** …uses a warning tone,
 - **Line 89:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
 - **Line 90:** …and shows the retry banner.
@@ -309,7 +311,7 @@ Browser application state and dashboard. It loads lessons and their attachments 
 - **Line 96:** Begins returning a parenthesized JSX tree.
 - **Line 97:** Opens the semantic main content element.
 - **Line 98:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 99:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
+- **Line 99:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
 - **Line 100:** The New Lesson and AI draft buttons now clear the message with null.
 
 ### Lines 101–115
@@ -522,7 +524,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 74:** Places the play triangle across the whole button, centered with CSS grid, large and white with a shadow so it is visible on any thumbnail.
 - **Line 75:** Adds padding to the caption area and allows long words or addresses to wrap.
 
-### Lines 76–98
+### Lines 76–100
 
 ```text
 76 | .media-item figcaption small { margin-top: 2px; }
@@ -548,6 +550,8 @@ Current implementation; connections and behavior are explained alongside every s
 96 | .notice-bar.warning { background: #fff7e6; color: #5c3b00; border: 1px solid #e6c98c; }
 97 | .notice-bar button { flex-shrink: 0; padding: 6px 12px; }
 98 | .media-added { margin: 8px 0; padding: 8px 12px; }
+99 | .account-line { margin: 8px 0 0; font-size: 0.9rem; color: #52666e; overflow-wrap: anywhere; }
+100 | button.link { background: none; border: 0; padding: 0; min-height: 0; color: #176257; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 ```
 
 - **Line 76:** Adds a little space between caption lines.
@@ -573,6 +577,48 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 96:** Yellow-brown colours for a warning message.
 - **Line 97:** Keeps the Dismiss button from shrinking and makes it a little smaller.
 - **Line 98:** Gives the “Added …” confirmation inside an activity a compact size and small margins.
+- **Line 99:** Styles the “Signed in as …” line in the page header: small, grey, and allowed to wrap long email addresses.
+- **Line 100:** Makes a button look like a text link (no background or border, underlined, green). It is used for Log out, Forgot password and Create an account.
+
+### Lines 101–117
+
+```text
+101 | button.link:hover:not(:disabled) { background: none; color: #104b42; }
+102 | .auth-screen { max-width: 480px; padding-top: 32px; }
+103 | .auth-card { background: white; border: 1px solid #d7e0e4; border-top: 4px solid #176257; border-radius: 12px; padding: 28px; }
+104 | .auth-card h1 { font-size: 2.4rem; }
+105 | .auth-card h2 { margin: 16px 0; font-size: 1.3rem; }
+106 | .auth-card form button[type=submit], .auth-card > button.secondary { width: 100%; }
+107 | .auth-card .success, .auth-card .error { margin: 0 0 16px; }
+108 | .password-field { margin-bottom: 8px; }
+109 | .show-password { margin: 6px 0 16px; font-weight: 400; }
+110 | .auth-divider { display: flex; align-items: center; gap: 12px; color: #52666e; margin: 20px 0 12px; }
+111 | .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-top: 1px solid #d7e0e4; }
+112 | .auth-links { margin: 18px 0 0; text-align: center; }
+113 | @media (max-width: 700px) {
+114 |   .auth-screen { padding: 12px 12px 32px; }
+115 |   .auth-card { padding: 20px; }
+116 |   .notice-bar { flex-direction: column; align-items: stretch; }
+117 | }
+```
+
+- **Line 101:** Keeps link-style buttons from getting the normal button hover background.
+- **Line 102:** Narrows the login page to a comfortable 480 pixels and moves it down a little.
+- **Line 103:** Draws the login card: white, bordered, rounded, with a green top edge like the other panels.
+- **Line 104:** Sets the size of the CoachLab title on the login card.
+- **Line 105:** Sets the size and spacing of the card heading (Sign in, Create account …).
+- **Line 106:** Makes the main action buttons full width, which is easier to tap on phones.
+- **Line 107:** Adds space under success and error messages in the card.
+- **Line 108:** Adds a little space under a password field.
+- **Line 109:** Styles the Show password checkbox label: normal weight and a small margin.
+- **Line 110:** Lays out the “or” divider as a row, with space around it.
+- **Line 111:** Draws the thin lines on both sides of the word “or” using generated content that grows to fill the row.
+- **Line 112:** Centers the small links at the bottom of the card.
+- **Line 113:** Starts a media query applying the enclosed overrides when the viewport is at most 700 CSS pixels wide.
+- **Line 114:** Inside the phone-width rules: gives the login page smaller side padding.
+- **Line 115:** Gives the login card slightly smaller padding.
+- **Line 116:** Stacks the save message bar’s text above its Dismiss button on phones.
+- **Line 117:** Closes the media-query block.
 
 ## client/vite.config.js
 
@@ -650,7 +696,7 @@ Executed when server/index.js imports it. It exports the path used by database.j
 - **Line 11:** Blank line separates related sections for readability; it performs no operation.
 - **Line 12:** Resolves and normalizes the path, splits it into folder parts using path.sep, and uses some to check whether any part matches. part =&gt; is an arrow predicate. The regex starts at the beginning (^), matches onedrive followed by whitespace (\s) or end ($), groups alternatives with (?:...|...), and ignores case with i. It is a folder-name heuristic, not detection of arbitrary sync roots or filesystem links.
 - **Line 13:** Rejects a matching OneDrive folder with an Error before the server starts.
-- **Line 14:** Closes the OneDrive validation block.
+- **Line 14:** Closes the absolute-path validation block.
 
 ## server/index.js
 
@@ -665,93 +711,120 @@ Local backend entry point selecting SQLite by default or explicit PostgreSQL Dev
 2 | import { openDatabase } from './database.js';
 3 | import { migrate } from './migrations.js';
 4 | import { prismaLessons } from './lesson-store.js';
-5 |
-6 | let close = async () => {};
-7 | try {
-8 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
-9 |   let lessons;
-10 |   if (selected === 'sqlite') {
-11 |     const database = openDatabase();
-12 |     close = async () => database.close();
-13 |     migrate(database);
-14 |     lessons = database;
-15 |   } else if (selected === 'postgresql') {
-16 |     const { createDevelopmentClient } = await import('./prisma-development.js');
-17 |     const client = createDevelopmentClient();
-18 |     close = () => client.$disconnect();
-19 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
-20 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
-21 |     await client.lesson.count();
-22 |     lessons = prismaLessons(client);
-23 |   } else {
-24 |     throw new Error('Unsupported database selection.');
-25 |   }
+5 | import { createAuth } from './auth.js';
+6 | import { consoleMailer } from './mailer.js';
+7 |
+8 | let close = async () => {};
+9 | try {
+10 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
+11 |   let lessons;
+12 |   let auth;
+13 |   const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
+14 |   const sameMachine = publicUrl.replace('//127.0.0.1', '//localhost');
+15 |   const allowedOrigins = [...new Set((process.env.COACHLAB_ALLOWED_ORIGINS || publicUrl).split(',').map(origin => origin.trim()).filter(Boolean).concat(process.env.COACHLAB_ALLOWED_ORIGINS ? [] : [sameMachine]))];
+16 |   const authSettings = { secret: process.env.BETTER_AUTH_SECRET, baseURL: publicUrl, trustedOrigins: allowedOrigins, mailer: consoleMailer(), env: process.env };
+17 |   if (selected === 'sqlite') {
+18 |     const database = openDatabase();
+19 |     close = async () => database.close();
+20 |     migrate(database);
+21 |     auth = createAuth({ ...authSettings, database });
+22 |     await auth.prepare();
+23 |     lessons = database;
+24 |   } else if (selected === 'postgresql') {
+25 |     const { createDevelopmentClient } = await import('./prisma-development.js');
 ```
 
 - **Line 1:** Imports the factory that constructs Express routes using an open database.
 - **Line 2:** Imports the existing database opener; its configuration still keeps the file outside OneDrive.
 - **Line 3:** Imports the existing versioned migration function; no new schema is introduced.
 - **Line 4:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 5:** Blank line separates related sections for readability; it performs no operation.
-- **Line 6:** Initializes a harmless async cleanup function; startup replaces it after opening the selected database.
-- **Line 7:** Opens a try block for startup work that can throw.
-- **Line 8:** Reads the explicit server-only selector, defaulting to SQLite only when absent/empty; it does not catch failures and fall back.
-- **Line 9:** Declares the store or SQLite connection that startup will pass to createApp.
-- **Line 10:** Begins the explicitly selected SQLite startup branch.
-- **Line 11:** Opens the configured external SQLite database only in the explicitly selected SQLite branch.
-- **Line 12:** Defines shutdown cleanup for the opened SQLite connection.
-- **Line 13:** Applies outstanding versioned SQLite migrations in that branch; PostgreSQL startup never calls this function.
-- **Line 14:** Supplies the SQLite connection; createApp adapts it to the shared lesson store.
-- **Line 15:** Chooses PostgreSQL only for this exact selector value.
-- **Line 16:** Loads the generated-client wrapper only when PostgreSQL is selected, so default SQLite startup does not need it.
-- **Line 17:** Constructs the client after checking the development environment, expected pooled host/database and TLS settings.
-- **Line 18:** Defines shutdown cleanup for Prisma's connection pool.
-- **Line 19:** Runs a fixed read-only query to authenticate the actual current database name before accepting HTTP traffic.
-- **Line 20:** Fails startup if the authenticated database differs from the explicitly expected database.
-- **Line 21:** Checks that the selected lessons table is reachable before the application starts listening.
-- **Line 22:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
-- **Line 23:** Closes the preceding choice and starts the alternative branch.
-- **Line 24:** Rejects unknown selectors rather than silently choosing another database.
-- **Line 25:** Closes the signal-registration loop.
+- **Line 5:** Imports the function that builds the login system.
+- **Line 6:** Imports the console mailer, which prints reset links in the backend window until a real email provider is configured.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** Initializes a harmless async cleanup function; startup replaces it after opening the selected database.
+- **Line 9:** Opens a try block for startup work that can throw.
+- **Line 10:** Reads the explicit server-only selector, defaulting to SQLite only when absent/empty; it does not catch failures and fall back.
+- **Line 11:** Declares the store or SQLite connection that startup will pass to createApp.
+- **Line 12:** Declares the variable that will hold the login system.
+- **Line 13:** Reads the public website address from the environment (default is the local development address) and removes trailing slashes.
+- **Line 14:** Makes the localhost twin of that address, so visiting http://localhost:5174 works as well as http://127.0.0.1:5174.
+- **Line 15:** Builds the list of browser origins allowed to send changes: either the list in COACHLAB_ALLOWED_ORIGINS or the public address plus its localhost twin; Set removes duplicates.
+- **Line 16:** Collects the login settings in one object: the secret, the base address, trusted origins, the mailer and the environment (for optional Google keys).
+- **Line 17:** Begins the explicitly selected SQLite startup branch.
+- **Line 18:** Opens the configured external SQLite database only in the explicitly selected SQLite branch.
+- **Line 19:** Defines shutdown cleanup for the opened SQLite connection.
+- **Line 20:** Applies outstanding versioned SQLite migrations in that branch; PostgreSQL startup never calls this function.
+- **Line 21:** In SQLite mode, builds the login system on the same SQLite database.
+- **Line 22:** Creates the login tables in SQLite if they are missing (PostgreSQL gets them from the reviewed migration instead).
+- **Line 23:** Supplies the SQLite connection; createApp adapts it to the shared lesson store.
+- **Line 24:** Chooses PostgreSQL only for this exact selector value.
+- **Line 25:** Loads the generated-client wrapper only when PostgreSQL is selected, so default SQLite startup does not need it.
 
-### Lines 26–41
+### Lines 26–50
 
 ```text
-26 |   const server = createApp(lessons).listen(3001, '127.0.0.1', () => {
-27 |     console.log(`CoachLab API listening at http://127.0.0.1:3001; database=${selected}`);
-28 |   });
-29 |   server.on('error', async () => {
-30 |     await close();
-31 |     console.error('Could not start CoachLab API. Check whether port 3001 is already in use.');
-32 |     process.exitCode = 1;
-33 |   });
-34 |   for (const signal of ['SIGINT', 'SIGTERM']) {
-35 |     process.once(signal, () => server.close(async () => { await close(); }));
-36 |   }
-37 | } catch {
-38 |   await close().catch(() => {});
-39 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
-40 |   process.exitCode = 1;
-41 | }
+26 |     const client = createDevelopmentClient();
+27 |     close = () => client.$disconnect();
+28 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
+29 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
+30 |     await client.lesson.count();
+31 |     auth = createAuth({ ...authSettings, prisma: client });
+32 |     lessons = prismaLessons(client);
+33 |   } else {
+34 |     throw new Error('Unsupported database selection.');
+35 |   }
+36 |   const server = createApp(lessons, { auth, allowedOrigins }).listen(3001, '127.0.0.1', () => {
+37 |     console.log(`CoachLab API listening at http://127.0.0.1:3001; database=${selected}`);
+38 |   });
+39 |   server.on('error', async () => {
+40 |     await close();
+41 |     console.error('Could not start CoachLab API. Check whether port 3001 is already in use.');
+42 |     process.exitCode = 1;
+43 |   });
+44 |   for (const signal of ['SIGINT', 'SIGTERM']) {
+45 |     process.once(signal, () => server.close(async () => { await close(); }));
+46 |   }
+47 | } catch (error) {
+48 |   await close().catch(() => {});
+49 |   if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
+50 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
 ```
 
-- **Line 26:** Starts the real Express app on local-only port 3001 with the selected database implementation.
-- **Line 27:** Prints only the local URL and database type, never credentials or full database URLs.
-- **Line 28:** Closes the error callback and event registration.
-- **Line 29:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
-- **Line 30:** Waits for the selected connection or pool to close before reporting listener failure.
-- **Line 31:** Prints a safe explanation suggesting a port conflict; no internal error object is printed.
-- **Line 32:** Sets Node's exit status to failure; this does not forcibly terminate the outer development watch process.
-- **Line 33:** Closes the error callback and event registration.
-- **Line 34:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
-- **Line 35:** Handles a termination signal once, first closing the HTTP server and then its database connection.
-- **Line 36:** Closes the signal-registration loop.
-- **Line 37:** Closes try and opens catch without binding the internal error, because the terminal message is intentionally generic.
-- **Line 38:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
-- **Line 39:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
-- **Line 40:** Sets the failure exit status so scripts can detect startup failure.
-- **Line 41:** Closes the catch block.
+- **Line 26:** Constructs the client after checking the development environment, expected pooled host/database and TLS settings.
+- **Line 27:** Defines shutdown cleanup for Prisma's connection pool.
+- **Line 28:** Runs a fixed read-only query to authenticate the actual current database name before accepting HTTP traffic.
+- **Line 29:** Fails startup if the authenticated database differs from the explicitly expected database.
+- **Line 30:** Checks that the selected lessons table is reachable before the application starts listening.
+- **Line 31:** In PostgreSQL mode, builds the login system on the Prisma client, so accounts and lessons live in the same database.
+- **Line 32:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
+- **Line 33:** Closes the preceding choice and starts the alternative branch.
+- **Line 34:** Rejects unknown selectors rather than silently choosing another database.
+- **Line 35:** Closes the signal-registration loop.
+- **Line 36:** Starts the Express app with the login system and allowed origins; the app cannot be created without them.
+- **Line 37:** Prints only the local URL and database type, never credentials or full database URLs.
+- **Line 38:** Closes the error callback and event registration.
+- **Line 39:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
+- **Line 40:** Waits for the selected connection or pool to close before reporting listener failure.
+- **Line 41:** Prints a safe explanation suggesting a port conflict; no internal error object is printed.
+- **Line 42:** Sets Node's exit status to failure; this does not forcibly terminate the outer development watch process.
+- **Line 43:** Closes the error callback and event registration.
+- **Line 44:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
+- **Line 45:** Handles a termination signal once, first closing the HTTP server and then its database connection.
+- **Line 46:** Closes the signal-registration loop.
+- **Line 47:** The startup catch block now keeps the error so it can recognise a missing secret.
+- **Line 48:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
+- **Line 49:** If the secret is missing or too short, prints a clear instruction to set BETTER_AUTH_SECRET. The secret itself is never printed.
+- **Line 50:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
 
+### Lines 51–52
+
+```text
+51 |   process.exitCode = 1;
+52 | }
+```
+
+- **Line 51:** Sets the failure exit status so scripts can detect startup failure.
+- **Line 52:** Closes the catch block.
 
 ## package.json
 
@@ -775,18 +848,18 @@ Current implementation; connections and behavior are explained alongside every s
 11 |     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
 12 |     "build": "vite build --config client/vite.config.js",
 13 |     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js",
+14 |     "test": "node --test server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js",
 15 |     "prisma:validate": "prisma validate",
 16 |     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
-17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js"
-18 |   },
-19 |   "dependencies": {
-20 |     "@prisma/adapter-pg": "7.10.0",
-21 |     "@prisma/client": "7.10.0",
-22 |     "better-sqlite3": "13.0.3",
-23 |     "express": "5.3.0",
-24 |     "pg": "8.23.1",
-25 |     "react": "19.3.0",
+17 |     "test:prisma": "npm run prisma:generate && node --test server/prisma-setup.test.js server/prisma-compatibility.test.js",
+18 |     "claim-lessons": "node --env-file-if-exists=.env server/claim-lessons.js"
+19 |   },
+20 |   "dependencies": {
+21 |     "@prisma/adapter-pg": "7.10.0",
+22 |     "@prisma/client": "7.10.0",
+23 |     "better-auth": "1.7.10",
+24 |     "better-sqlite3": "13.0.3",
+25 |     "express": "5.3.0",
 ```
 
 - **Line 1:** Opens the JSON manifest object.
@@ -802,56 +875,60 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 11:** Runs Express with an optional .env file and Node's source watch/restart mode.
 - **Line 12:** Builds the frontend using the same Vite configuration; this does not run the API or migrate SQLite.
 - **Line 13:** Defines npm run db:migrate: Node reads optional .env and executes server/migrate.js without watch mode.
-- **Line 14:** The npm test script now also runs the new media unit tests and the media API tests. These tests use fakes; they do not contact remote services.
+- **Line 14:** The npm test script now also runs the authentication tests and the claim tests, using in-memory fake mail and a temporary SQLite database (no remote services).
 - **Line 15:** Adds a local schema-validation command using the pinned CLI; no datasource URL is configured.
 - **Line 16:** Generates the Prisma client, then compiles it only if generation succeeds; && links these two required local steps.
-- **Line 17:** Generates and compiles the client, then runs setup and compatibility regression tests; && runs tests only after generation succeeds.
-- **Line 18:** Closes development dependencies; the comma permits the following overrides object.
-- **Line 19:** Opens runtime dependencies.
-- **Line 20:** Pins @prisma/adapter-pg exactly to 7.10.0: PostgreSQL driver bridge for Prisma.
-- **Line 21:** Pins @prisma/client exactly to 7.10.0: Prisma client runtime matching the CLI version.
-- **Line 22:** Pins better-sqlite3 to 13.0.3, providing the SQLite connection and prepared-query API.
-- **Line 23:** Pins Express to 5.3.0.
-- **Line 24:** Pins pg exactly to 8.23.1: PostgreSQL Node driver used by the adapter.
-- **Line 25:** Pins React to 19.3.0.
+- **Line 17:** The existing Prisma test script is unchanged; it appears here because the lines around it moved. It regenerates the Prisma client (now including the account models) before testing.
+- **Line 18:** Adds the claim-lessons script, the safe command for handing lessons that existed before accounts to one registered coach. It reads the ignored .env file when present.
+- **Line 19:** Closes development dependencies; the comma permits the following overrides object.
+- **Line 20:** Opens runtime dependencies.
+- **Line 21:** Pins @prisma/adapter-pg exactly to 7.10.0: PostgreSQL driver bridge for Prisma.
+- **Line 22:** Pins @prisma/client exactly to 7.10.0: Prisma client runtime matching the CLI version.
+- **Line 23:** Adds the authentication library Better Auth at the exact version 1.7.10 (MIT licensed, actively maintained, supports Prisma and SQLite). npm audit reports no vulnerabilities for it.
+- **Line 24:** Pins better-sqlite3 to 13.0.3, providing the SQLite connection and prepared-query API.
+- **Line 25:** Pins Express to 5.3.0.
 
-### Lines 26–41
+### Lines 26–43
 
 ```text
-26 |     "react-dom": "19.3.0"
-27 |   },
-28 |   "devDependencies": {
-29 |     "prisma": "7.10.0",
-30 |     "typescript": "5.9.3",
-31 |     "vite": "8.3.4"
-32 |   },
-33 |   "overrides": {
-34 |     "prisma@7.10.0": {
-35 |       "mysql2": "3.24.6"
-36 |     },
-37 |     "@prisma/config@7.10.0": {
-38 |       "deepmerge-ts": "8.0.2"
-39 |     }
-40 |   }
-41 | }
+26 |     "pg": "8.23.1",
+27 |     "react": "19.3.0",
+28 |     "react-dom": "19.3.0"
+29 |   },
+30 |   "devDependencies": {
+31 |     "prisma": "7.10.0",
+32 |     "typescript": "5.9.3",
+33 |     "vite": "8.3.4"
+34 |   },
+35 |   "overrides": {
+36 |     "prisma@7.10.0": {
+37 |       "mysql2": "3.24.6"
+38 |     },
+39 |     "@prisma/config@7.10.0": {
+40 |       "deepmerge-ts": "8.0.2"
+41 |     }
+42 |   }
+43 | }
 ```
 
-- **Line 26:** Pins React DOM to 19.3.0; no comma follows the object's last property.
-- **Line 27:** Closes development dependencies; the comma permits the following overrides object.
-- **Line 28:** Opens development dependencies.
-- **Line 29:** Pins prisma exactly to 7.10.0: development CLI, without an automatic Prisma 8 upgrade.
-- **Line 30:** Pins typescript exactly to 5.9.3: compiler for generated client only.
-- **Line 31:** Pins Vite to 8.3.4 for serving and building the frontend.
-- **Line 32:** Closes development dependencies; the comma permits the following overrides object.
-- **Line 33:** Opens npm overrides, which replace selected transitive dependency versions.
-- **Line 34:** Limits the following replacement to dependencies of Prisma 7.10.0.
-- **Line 35:** Pins that Prisma package’s mysql2 dependency to tested security release 3.24.6.
-- **Line 36:** Closes the Prisma-specific override; the comma separates the next rule.
-- **Line 37:** Limits the next replacement to @prisma/config version 7.10.0.
-- **Line 38:** Pins its deepmerge-ts dependency to tested security release 8.0.2; Prisma itself stays at 7.10.0.
-- **Line 39:** Closes the config-specific override.
-- **Line 40:** Closes the overrides object.
-- **Line 41:** Closes the complete package manifest.
+- **Line 26:** Pins pg exactly to 8.23.1: PostgreSQL Node driver used by the adapter.
+- **Line 27:** Pins React to 19.3.0.
+- **Line 28:** Pins React DOM to 19.3.0; no comma follows the object's last property.
+- **Line 29:** Closes development dependencies; the comma permits the following overrides object.
+- **Line 30:** Opens development dependencies.
+- **Line 31:** Pins prisma exactly to 7.10.0: development CLI, without an automatic Prisma 8 upgrade.
+- **Line 32:** Pins typescript exactly to 5.9.3: compiler for generated client only.
+- **Line 33:** Pins Vite to 8.3.4 for serving and building the frontend.
+- **Line 34:** Closes development dependencies; the comma permits the following overrides object.
+- **Line 35:** Opens npm overrides, which replace selected transitive dependency versions.
+- **Line 36:** Limits the following replacement to dependencies of Prisma 7.10.0.
+- **Line 37:** Pins that Prisma package’s mysql2 dependency to tested security release 3.24.6.
+- **Line 38:** Closes the Prisma-specific override; the comma separates the next rule.
+- **Line 39:** Limits the next replacement to @prisma/config version 7.10.0.
+- **Line 40:** Pins its deepmerge-ts dependency to tested security release 8.0.2; Prisma itself stays at 7.10.0.
+- **Line 41:** Closes the config-specific override.
+- **Line 42:** Closes the overrides object.
+- **Line 43:** Closes the complete package manifest.
 
 ## .env.example
 
@@ -915,15 +992,33 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 24:** Leaves COACHLAB_PROD_DATABASE_URL blank in this committed template. Reserved for future deployment secrets, not local use.
 - **Line 25:** Leaves COACHLAB_PROD_DIRECT_URL blank in this committed template. Reserved for future deployment secrets, not local use.
 
-### Lines 26–27
+### Lines 26–36
 
 ```text
 26 | # Optional, server only: lets AI lesson drafts also search YouTube for demonstration videos. Without it CoachLab uses its reviewed catalog and Wikimedia Commons.
 27 | YOUTUBE_API_KEY=
+28 | # Required: a long random secret used to sign login sessions. Generate one with: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+29 | BETTER_AUTH_SECRET=
+30 | # Where coaches open CoachLab in their browser (used for sign-in links and cross-site protection).
+31 | COACHLAB_PUBLIC_URL=http://127.0.0.1:5174
+32 | # Optional comma-separated list of extra allowed browser origins. Defaults to COACHLAB_PUBLIC_URL.
+33 | COACHLAB_ALLOWED_ORIGINS=
+34 | # Optional Google sign-in. Both values come from a free Google Cloud OAuth client; leave blank to hide the Google button.
+35 | GOOGLE_CLIENT_ID=
+36 | GOOGLE_CLIENT_SECRET=
 ```
 
 - **Line 26:** Configuration comment: the next setting is optional and server-only; it lets AI lesson drafts also search YouTube for demonstration videos, and without it CoachLab uses its reviewed catalog and Wikimedia Commons.
 - **Line 27:** Placeholder for an optional YouTube Data API key in the ignored .env file. It is empty in this example file, contains no credential and is never sent to the browser.
+- **Line 28:** Configuration comment: the next setting is required. It is a long random secret that signs login sessions, with the command that creates one.
+- **Line 29:** Placeholder for BETTER_AUTH_SECRET in the ignored .env file. It is empty here; the real value never goes into Git, chat or the browser. The server refuses to serve lessons without it.
+- **Line 30:** Configuration comment: the address coaches type into their browser.
+- **Line 31:** The public address of the website; it is used in password-reset links and to recognise genuine requests from CoachLab’s own pages. The default is the local development address.
+- **Line 32:** Configuration comment about an optional list of extra allowed browser addresses.
+- **Line 33:** Optional comma-separated list of allowed browser origins (the scheme, host and port that may send changes). Empty means the public address plus its localhost twin.
+- **Line 34:** Configuration comment: Google sign-in is optional and uses a free Google Cloud OAuth client.
+- **Line 35:** Placeholder for the Google client id. Leave empty to hide the Google button.
+- **Line 36:** Placeholder for the Google client secret. It stays on the server and is never sent to the browser.
 
 ## .gitignore
 
@@ -931,7 +1026,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\.git
 
 Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 
-### Lines 1–15
+### Lines 1–20
 
 ```text
 1 | node_modules/
@@ -949,6 +1044,11 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 13 | *.tmp
 14 | *.temp
 15 | tmp/
+16 | coverage/
+17 | .DS_Store
+18 | Thumbs.db
+19 | server/generated/
+20 | server/generated-runtime/
 ```
 
 - **Line 1:** Ignores node_modules dependency directories at any depth.
@@ -966,17 +1066,6 @@ Phase 9B updates; SQLite scripts and application behavior remain unchanged.
 - **Line 13:** Ignores temporary files ending in .tmp.
 - **Line 14:** Ignores temporary files ending in .temp.
 - **Line 15:** Ignores tmp directories used for temporary work.
-
-### Lines 16–20
-
-```text
-16 | coverage/
-17 | .DS_Store
-18 | Thumbs.db
-19 | server/generated/
-20 | server/generated-runtime/
-```
-
 - **Line 16:** Ignores generated coverage report directories.
 - **Line 17:** Ignores macOS Finder metadata files named .DS_Store.
 - **Line 18:** Ignores Windows thumbnail cache files named Thumbs.db.
@@ -1063,7 +1152,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 5 |     version INTEGER PRIMARY KEY,
 6 |     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 7 |   ) STRICT`);
-8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }];
+8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }, { version: 3, file: '003_add_ownership.sql' }];
 9 |   for (const migration of migrations) {
 10 |     database.transaction(() => {
 11 |       const applied = database.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(migration.version);
@@ -1083,7 +1172,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 - **Line 5:** Defines the tracking version as a unique integer primary key. The comma separates the timestamp column.
 - **Line 6:** Defines a required applied_at UTC timestamp with a default evaluated at insertion, using the same strftime format as lesson timestamps.
 - **Line 7:** Closes the tracking table columns, enables STRICT typing, closes the template string and exec call, and ends the JavaScript statement. Creating this bookkeeping table occurs before each version transaction.
-- **Line 8:** Registers the second SQLite migration (media table) after the first. The loop below applies each version once and records it.
+- **Line 8:** Registers the third SQLite migration (ownership columns) after the first two.
 - **Line 9:** Iterates the descriptors with for...of. const migration holds the current descriptor; braces open the loop.
 - **Line 10:** Creates a transaction wrapper around the arrow callback. The callback's queries will run as one atomic unit when the wrapper is called below.
 - **Line 11:** Prepares a SELECT query with a ? placeholder and binds the current version through get. This keeps data separate from SQL syntax; get returns one row or undefined.
@@ -1207,7 +1296,7 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 38 |     const migrationCode = "import './server/migrate.js';";
 39 |     assert.equal(run(migrationCode, filename).status, 0);
 40 |     database = new Database(filename);
-41 |     assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+41 |     assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id']);
 42 |     const title = "Coach's jab; DROP TABLE lessons; --";
 43 |     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
 44 |     insert.run(title, 'Boxing', 45);
@@ -1234,7 +1323,7 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 38:** Stores child code importing the real migration command module, which runs the migration.
 - **Line 39:** Runs the migration in a fresh Node process against the test file and asserts success.
 - **Line 40:** Opens that file for direct inspection through SQLite.
-- **Line 41:** Reads table metadata with PRAGMA table_info, maps each returned column to its name, and compares the complete ordered list to the ten required columns. deepEqual compares array contents, not just object identity.
+- **Line 41:** The lessons table now has a tenth column, owner_id, added by the ownership migration; the other nine are unchanged.
 - **Line 42:** Creates a title containing an apostrophe and SQL-looking text to verify it is safely stored as data.
 - **Line 43:** Prepares a parameterized INSERT with three ? placeholders for title, discipline, and duration.
 - **Line 44:** Binds the title, Boxing, and 45 to those placeholders and inserts one lesson.
@@ -1256,7 +1345,7 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 56 |     assert.equal(reader.status, 0);
 57 |     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
 58 |     database = new Database(filename);
-59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
+59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
 60 |     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
 61 |   } finally {
 62 |     if (database?.open) database.close();
@@ -1283,7 +1372,7 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 56:** Asserts the reader process exited successfully.
 - **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
 - **Line 58:** Opens that file for direct inspection through SQLite.
-- **Line 59:** Same update for the cross-process migration test: both migrations must be recorded.
+- **Line 59:** The migration history after a restart includes version 3.
 - **Line 60:** Runs SQLite's integrity check and requires the result ok.
 - **Line 61:** Closes try and begins cleanup with finally, which runs even when assertions fail.
 - **Line 62:** Uses optional chaining to check whether a connection exists and is still open, then closes it if needed.
@@ -1319,7 +1408,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 Validates and normalizes the POST body before any write. It returns either an error message or a safe lesson object containing only allowed fields; it never talks to SQLite.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
@@ -1337,6 +1426,16 @@ Validates and normalizes the POST body before any write. It returns either an er
 13 |   const lesson = {};
 14 |   for (const [field, limit] of Object.entries(textLimits)) {
 15 |     const value = body[field] === undefined && field !== 'title' ? '' : body[field];
+16 |     if (typeof value !== 'string' || value.length > limit) {
+17 |       return { error: `${field} must be text with at most ${limit} characters.` };
+18 |     }
+19 |     lesson[field] = value.trim();
+20 |   }
+21 |   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
+22 |   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
+23 |   lesson.discipline = body.discipline;
+24 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
+25 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
 ```
 
 - **Line 1:** Defines the array of six supported discipline strings; const prevents reassignment of the array variable.
@@ -1350,53 +1449,37 @@ Validates and normalizes the POST body before any write. It returns either an er
 - **Line 9:** Closes the body-shape conditional.
 - **Line 10:** Uses some and includes to detect any submitted key not present in the allowed-field array. The arrow callback tests each key.
 - **Line 11:** Returns a safe unsupported-fields error rather than accepting client-supplied IDs or timestamps.
-- **Line 12:** Closes the unsupported-field conditional.
+- **Line 12:** Closes the body-shape conditional.
 - **Line 13:** Creates an empty normalized lesson object; const prevents replacing the binding but allows assigning its properties.
 - **Line 14:** Iterates field/limit pairs from Object.entries. Array destructuring assigns each pair to field and limit.
 - **Line 15:** Defaults omitted optional text to empty text, but leaves missing title undefined so it is rejected. === checks strict equality; && means both conditions; the ternary selects one of two values.
-
-### Lines 16–30
-
-```text
-16 |     if (typeof value !== 'string' || value.length > limit) {
-17 |       return { error: `${field} must be text with at most ${limit} characters.` };
-18 |     }
-19 |     lesson[field] = value.trim();
-20 |   }
-21 |   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
-22 |   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
-23 |   lesson.discipline = body.discipline;
-24 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
-25 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
-26 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
-27 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
-28 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
-29 |   }
-30 |   return { lesson };
-```
-
 - **Line 16:** Rejects non-string input or text longer than its configured limit, before trimming. This prevents whitespace padding from bypassing limits.
 - **Line 17:** Returns a template-string error that inserts the field name and length limit using dollar-sign/braces interpolation; both come from trusted configuration.
 - **Line 18:** Closes the invalid-text conditional.
 - **Line 19:** Stores the trimmed string under the current field name using bracket property access. trim removes surrounding JavaScript whitespace.
-- **Line 20:** Closes the text-field loop.
+- **Line 20:** Closes the body-shape conditional.
 - **Line 21:** Rejects a title that is empty after trimming; returning stops the function.
 - **Line 22:** Requires discipline to exactly match one supported string. Missing, null, or unsupported values fail.
 - **Line 23:** Copies the validated discipline into the normalized object.
 - **Line 24:** Defaults only an omitted skill_level to Beginner. Explicit null is preserved temporarily so the next check rejects it.
 - **Line 25:** Rejects skill levels not present in the allowed array, returning a useful message.
-- **Line 26:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
-- **Line 27:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
-- **Line 28:** Returns a safe duration error message when the condition fails.
-- **Line 29:** Closes the duration conditional.
-- **Line 30:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
 
-### Lines 31–31
+### Lines 26–31
 
 ```text
+26 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
+27 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
+28 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
+29 |   }
+30 |   return { lesson };
 31 | }
 ```
 
+- **Line 26:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
+- **Line 27:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
+- **Line 28:** Returns a safe duration error message when the condition fails.
+- **Line 29:** Closes the body-shape conditional.
+- **Line 30:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
 - **Line 31:** Closes the validateLesson function.
 
 ## server/app.js
@@ -1424,7 +1507,7 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 14 |
 15 | function sendFile(request, response, file) {
 16 |   const data = Buffer.from(file.data);
-17 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, max-age=31536000, immutable', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+17 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
 18 |   const range = request.headers.range;
 19 |   if (!range) return response.status(200).send(data);
 20 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -1451,7 +1534,7 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 - **Line 14:** Blank line separates related sections; it performs no operation.
 - **Line 15:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
 - **Line 16:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
-- **Line 17:** Sets the response headers: the verified file type; nosniff and a sandboxing Content-Security-Policy so a browser never treats an upload as a web page or runs scripts from it; one-year private caching because stored files never change; Accept-Ranges so videos can seek; and inline display.
+- **Line 17:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
 - **Line 18:** Reads the Range header the browser sends when playing or seeking a video.
 - **Line 19:** Without a Range header, sends the whole file with status 200.
 - **Line 20:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
@@ -1468,318 +1551,364 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 27 | export function createApp(database, options = {}) {
 28 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
 29 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
-30 |   const app = express();
-31 |   app.use(express.json({ limit: '32kb' }));
-32 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-33 |   let suggestions = [];
-34 |   let suggesting = false;
-35 |
-36 |   async function verifiedMedia(rawMedia) {
-37 |     const checked = validateMediaList(rawMedia);
-38 |     if (checked.error) return { error: checked.error };
-39 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
-40 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
-41 |     const media = [];
-42 |     for (const [index, result] of results.entries()) {
-43 |       const item = checked.media[index];
-44 |       if (result.status === 'rejected') {
-45 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
-46 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
-47 |       }
-48 |       if (item.id) { media.push(item); continue; }
-49 |       const info = result.value;
-50 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+30 |   const { auth, allowedOrigins = [] } = options;
+31 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
+32 |   const app = express();
+33 |   app.disable('x-powered-by');
+34 |   app.use('/api', (request, response, next) => {
+35 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+36 |     next();
+37 |   });
+38 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
+39 |   app.use(express.json({ limit: '32kb' }));
+40 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+41 |   let suggestions = [];
+42 |   let suggesting = false;
+43 |
+44 |   async function verifiedMedia(rawMedia) {
+45 |     const checked = validateMediaList(rawMedia);
+46 |     if (checked.error) return { error: checked.error };
+47 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+48 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
+49 |     const media = [];
+50 |     for (const [index, result] of results.entries()) {
 ```
 
 - **Line 26:** Blank line separates related sections; it performs no operation.
 - **Line 27:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
 - **Line 28:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
 - **Line 29:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
-- **Line 30:** Creates an Express application object.
-- **Line 31:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
-- **Line 32:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 33:** Remembers the times of recent media searches for rate limiting.
-- **Line 34:** True while a media search is running, so only one runs at a time.
-- **Line 35:** Blank line separates related sections; it performs no operation.
-- **Line 36:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
-- **Line 37:** Validates and cleans the submitted list.
-- **Line 38:** Returns the validation message if it failed.
-- **Line 39:** Stores without media support (such as a test double) refuse media cleanly.
-- **Line 40:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
-- **Line 41:** The verified entries will be collected here.
-- **Line 42:** Walks through the results in order.
-- **Line 43:** The matching submitted entry.
-- **Line 44:** Handles a failed check.
-- **Line 45:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
-- **Line 46:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
-- **Line 47:** Closes the preceding block (function, object, or statement body).
-- **Line 48:** Stored attachments are kept as they are.
-- **Line 49:** The successful check result.
-- **Line 50:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
+- **Line 30:** Reads the login adapter and the list of allowed browser origins from the options.
+- **Line 31:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
+- **Line 32:** Creates an Express application object.
+- **Line 33:** Stops Express from announcing itself in a response header.
+- **Line 34:** For every /api request, adds safety headers before anything else runs.
+- **Line 35:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
+- **Line 36:** Continues from the parameter guard into the matching route handler.
+- **Line 37:** Closes the error callback and registration.
+- **Line 38:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
+- **Line 39:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
+- **Line 40:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 41:** Remembers the times of recent media searches for rate limiting.
+- **Line 42:** True while a media search is running, so only one runs at a time.
+- **Line 43:** Blank line separates related sections; it performs no operation.
+- **Line 44:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 45:** Validates and cleans the submitted list.
+- **Line 46:** Returns the validation message if it failed.
+- **Line 47:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 48:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
+- **Line 49:** The verified entries will be collected here.
+- **Line 50:** Walks through the results in order.
 
 ### Lines 51–75
 
 ```text
-51 |     }
-52 |     return { media };
-53 |   }
-54 |   async function saveWithMedia(request, response, save) {
-55 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-56 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
-57 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
-58 |     const result = validateLesson(hasMedia ? fields : request.body);
-59 |     if (result.error) return response.status(400).json({ error: result.error });
-60 |     let media;
-61 |     if (hasMedia) {
-62 |       const checked = await verifiedMedia(rawMedia);
-63 |       if (checked.error) return response.status(400).json({ error: checked.error });
-64 |       media = checked.media;
-65 |     }
-66 |     try {
-67 |       return await save(result.lesson, media);
-68 |     } catch (error) {
-69 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
-70 |       throw error;
-71 |     }
-72 |   }
-73 |
-74 |   app.get('/api/health', (request, response) => {
-75 |     response.json({ status: 'ok', service: 'CoachLab API' });
+51 |       const item = checked.media[index];
+52 |       if (result.status === 'rejected') {
+53 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+54 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+55 |       }
+56 |       if (item.id) { media.push(item); continue; }
+57 |       const info = result.value;
+58 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+59 |     }
+60 |     return { media };
+61 |   }
+62 |   async function saveWithMedia(request, response, save) {
+63 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+64 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+65 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+66 |     const result = validateLesson(hasMedia ? fields : request.body);
+67 |     if (result.error) return response.status(400).json({ error: result.error });
+68 |     let media;
+69 |     if (hasMedia) {
+70 |       const checked = await verifiedMedia(rawMedia);
+71 |       if (checked.error) return response.status(400).json({ error: checked.error });
+72 |       media = checked.media;
+73 |     }
+74 |     try {
+75 |       return await save(result.lesson, media);
 ```
 
-- **Line 51:** Closes the preceding block (function, object, or statement body).
-- **Line 52:** Returns the verified list.
-- **Line 53:** Closes the preceding block (function, object, or statement body).
-- **Line 54:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
-- **Line 55:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 56:** True when the body is an ordinary object that contains a media key.
-- **Line 57:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
-- **Line 58:** Validates the nine lesson fields exactly as before, without the media key.
-- **Line 59:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 60:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
-- **Line 61:** Only when media was sent.
-- **Line 62:** Validates and verifies it before touching the database.
-- **Line 63:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
-- **Line 64:** Uses the verified list.
-- **Line 65:** Closes the preceding block (function, object, or statement body).
-- **Line 66:** Starts the database step.
-- **Line 67:** Calls the store’s save function (create or update) and returns its response.
-- **Line 68:** Catches store errors.
-- **Line 69:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
-- **Line 70:** Any other error continues to the general safe 500 handler.
-- **Line 71:** Closes the preceding block (function, object, or statement body).
-- **Line 72:** Closes the preceding block (function, object, or statement body).
-- **Line 73:** Blank line separates related sections; it performs no operation.
-- **Line 74:** Registers the existing GET health route with request/response callback parameters.
-- **Line 75:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 51:** The matching submitted entry.
+- **Line 52:** Handles a failed check.
+- **Line 53:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 54:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 55:** Closes the preceding block (function, object, or statement body).
+- **Line 56:** Stored attachments are kept as they are.
+- **Line 57:** The successful check result.
+- **Line 58:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
+- **Line 59:** Closes the preceding block (function, object, or statement body).
+- **Line 60:** Returns the verified list.
+- **Line 61:** Closes the preceding block (function, object, or statement body).
+- **Line 62:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 63:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 64:** True when the body is an ordinary object that contains a media key.
+- **Line 65:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 66:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 67:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 68:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 69:** Only when media was sent.
+- **Line 70:** Validates and verifies it before touching the database.
+- **Line 71:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 72:** Uses the verified list.
+- **Line 73:** Closes the preceding block (function, object, or statement body).
+- **Line 74:** Starts the database step.
+- **Line 75:** Calls the store’s save function (create or update) and returns its response.
 
 ### Lines 76–100
 
 ```text
-76 |   });
-77 |   app.get('/api/lessons', async (request, response) => {
-78 |     response.json(await lessons.list());
-79 |   });
-80 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(lesson, media))));
-81 |   app.param('id', (request, response, next, value) => {
-82 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-83 |     request.lessonId = Number(value);
-84 |     next();
-85 |   });
-86 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-87 |     const saved = await lessons.update(request.lessonId, lesson, media);
-88 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-89 |     return response.json(saved);
-90 |   }));
-91 |   app.delete('/api/lessons/:id', async (request, response) => {
-92 |     if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
-93 |     response.status(204).end();
-94 |   });
-95 |
-96 |   app.get('/api/lesson-media', async (request, response) => {
-97 |     if (!lessons.media) return response.json([]);
-98 |     response.json(await lessons.media.list());
+76 |     } catch (error) {
+77 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+78 |       throw error;
+79 |     }
+80 |   }
+81 |
+82 |   app.get('/api/health', (request, response) => {
+83 |     response.json({ status: 'ok', service: 'CoachLab API' });
+84 |   });
+85 |   app.get('/api/auth-config', (request, response) => {
+86 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
+87 |   });
+88 |   app.use('/api', async (request, response, next) => {
+89 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
+90 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
+91 |     }
+92 |     const user = await auth.getUser(request);
+93 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
+94 |     request.user = user;
+95 |     next();
+96 |   });
+97 |   app.get('/api/lessons', async (request, response) => {
+98 |     response.json(await lessons.list(request.user.id));
 99 |   });
-100 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
+100 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
 ```
 
-- **Line 76:** Closes the error callback and registration.
-- **Line 77:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 78:** Waits for the selected store's rows, then serializes them as JSON.
-- **Line 79:** Closes the error callback and registration.
-- **Line 80:** Creating a lesson now goes through saveWithMedia; the success response is still 201 with the saved lesson, which keeps only its nine fields.
-- **Line 81:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 82:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 83:** Converts the validated URL ID to a number and stores it on this request.
-- **Line 84:** Continues from the parameter guard into the matching route handler.
-- **Line 85:** Closes the error callback and registration.
-- **Line 86:** Updating a lesson goes through saveWithMedia as well.
-- **Line 87:** Asks the store to update the lesson and, if media was sent, its attachments, in one transaction.
-- **Line 88:** A missing lesson still returns 404.
-- **Line 89:** Returns the updated lesson.
-- **Line 90:** Closes the handler and the route.
-- **Line 91:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 92:** Deletes through the selected store; returns 404 when no matching row existed.
-- **Line 93:** Finishes a successful deletion response without a JSON body.
-- **Line 94:** Closes the error callback and registration.
-- **Line 95:** Blank line separates related sections; it performs no operation.
-- **Line 96:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
-- **Line 97:** Stores without media support return an empty list.
-- **Line 98:** Returns the list from the store.
+- **Line 76:** Catches store errors.
+- **Line 77:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 78:** Any other error continues to the general safe 500 handler.
+- **Line 79:** Closes the preceding block (function, object, or statement body).
+- **Line 80:** Closes the preceding block (function, object, or statement body).
+- **Line 81:** Blank line separates related sections; it performs no operation.
+- **Line 82:** Registers the existing GET health route with request/response callback parameters.
+- **Line 83:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 84:** Closes the error callback and registration.
+- **Line 85:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
+- **Line 86:** Answers whether Google sign-in is configured and which mail mode is active.
+- **Line 87:** Closes the error callback and registration.
+- **Line 88:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
+- **Line 89:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
+- **Line 90:** Blocks such a request with 403 and a plain message.
+- **Line 91:** Closes the preceding block (function, object, or statement body).
+- **Line 92:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
+- **Line 93:** No valid session: answers 401 and never reaches the route.
+- **Line 94:** Remembers who is asking, so every route below can only touch that coach’s data.
+- **Line 95:** Continues from the parameter guard into the matching route handler.
+- **Line 96:** Closes the error callback and registration.
+- **Line 97:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 98:** Lists only the signed-in coach’s lessons.
 - **Line 99:** Closes the error callback and registration.
-- **Line 100:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
+- **Line 100:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
 
 ### Lines 101–125
 
 ```text
-101 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
-102 |     next();
-103 |   });
-104 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
-105 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
-106 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-107 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
-108 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-109 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
-110 |     const detected = sniffMedia(data);
-111 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
-112 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
-113 |     let name = '';
-114 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
-115 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
-116 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-117 |     response.status(201).json(await lessons.media.addUpload({ kind: detected.kind, mime: detected.mime, title, data }));
-118 |   });
-119 |   app.get('/api/media/:id/file', async (request, response) => {
-120 |     const file = lessons.media ? await lessons.media.getFile(request.lessonId) : null;
-121 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
-122 |     sendFile(request, response, file);
+101 |   app.param('id', (request, response, next, value) => {
+102 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+103 |     request.lessonId = Number(value);
+104 |     next();
+105 |   });
+106 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+107 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
+108 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
+109 |     return response.json(saved);
+110 |   }));
+111 |   app.delete('/api/lessons/:id', async (request, response) => {
+112 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+113 |     response.status(204).end();
+114 |   });
+115 |
+116 |   app.get('/api/lesson-media', async (request, response) => {
+117 |     if (!lessons.media) return response.json([]);
+118 |     response.json(await lessons.media.list(request.user.id));
+119 |   });
+120 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
+121 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+122 |     next();
 123 |   });
-124 |   app.delete('/api/media/:id', async (request, response) => {
-125 |     if (!lessons.media || !await lessons.media.removeOrphan(request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+124 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+125 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
 ```
 
-- **Line 101:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
-- **Line 102:** Continues from the parameter guard into the matching route handler.
-- **Line 103:** Closes the error callback and registration.
-- **Line 104:** New route: uploads one file. The browser sends the file bytes as the body.
-- **Line 105:** Refuses when the store has no media support.
-- **Line 106:** The type the browser declared, without parameters, in lowercase.
-- **Line 107:** Only the listed picture and video types are accepted (415 otherwise).
-- **Line 108:** The body as a Buffer, or an empty one if nothing usable arrived.
-- **Line 109:** Empty uploads are rejected.
-- **Line 110:** Looks at the file’s real first bytes.
-- **Line 111:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
-- **Line 112:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
-- **Line 113:** Prepares the default caption.
-- **Line 114:** Decodes the file name from the header, ignoring malformed encodings.
-- **Line 115:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
-- **Line 116:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
-- **Line 117:** Stores the file in the database and returns its details with status 201.
-- **Line 118:** Closes the error callback and registration.
-- **Line 119:** New route: sends a stored file to the browser.
-- **Line 120:** Loads the file (the :id parameter was already validated by the app.param rule above).
-- **Line 121:** Unknown file: 404.
-- **Line 122:** Sends it, honoring byte ranges.
+- **Line 101:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 102:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 103:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 104:** Continues from the parameter guard into the matching route handler.
+- **Line 105:** Closes the error callback and registration.
+- **Line 106:** Updating a lesson goes through saveWithMedia as well.
+- **Line 107:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
+- **Line 108:** A missing lesson still returns 404.
+- **Line 109:** Returns the updated lesson.
+- **Line 110:** Closes the handler and the route.
+- **Line 111:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 112:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
+- **Line 113:** Finishes a successful deletion response without a JSON body.
+- **Line 114:** Closes the error callback and registration.
+- **Line 115:** Blank line separates related sections; it performs no operation.
+- **Line 116:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 117:** Stores without media support return an empty list.
+- **Line 118:** Lists only the signed-in coach’s attachments.
+- **Line 119:** Closes the error callback and registration.
+- **Line 120:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
+- **Line 121:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 122:** Continues from the parameter guard into the matching route handler.
 - **Line 123:** Closes the error callback and registration.
-- **Line 124:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
-- **Line 125:** Only uploads that are not attached to any lesson can be deleted this way; anything else returns 404.
+- **Line 124:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 125:** Refuses when the store has no media support.
 
 ### Lines 126–150
 
 ```text
-126 |     response.status(204).end();
-127 |   });
-128 |   app.post('/api/media/verify', async (request, response) => {
-129 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
-130 |     try {
-131 |       response.json(await verifyLink(request.body.url));
-132 |     } catch (error) {
-133 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
-134 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
-135 |     }
-136 |   });
-137 |   app.post('/api/media/suggest', async (request, response) => {
-138 |     const body = request.body;
-139 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
-140 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
-141 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
-142 |     const now = Date.now();
-143 |     suggestions = suggestions.filter(time => now - time < 86400000);
-144 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
-145 |     suggestions.push(now);
-146 |     suggesting = true;
-147 |     try {
-148 |       response.json(await findMedia({ discipline: body.discipline, sections }));
-149 |     } catch {
-150 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
+126 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+127 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+128 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+129 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+130 |     const detected = sniffMedia(data);
+131 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+132 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+133 |     let name = '';
+134 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+135 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+136 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+137 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
+138 |   });
+139 |   app.get('/api/media/:id/file', async (request, response) => {
+140 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
+141 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+142 |     sendFile(request, response, file);
+143 |   });
+144 |   app.delete('/api/media/:id', async (request, response) => {
+145 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+146 |     response.status(204).end();
+147 |   });
+148 |   app.post('/api/media/verify', async (request, response) => {
+149 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
+150 |     try {
 ```
 
-- **Line 126:** Finishes a successful deletion response without a JSON body.
-- **Line 127:** Closes the error callback and registration.
-- **Line 128:** New route: checks one pasted link.
-- **Line 129:** Requires JSON containing a text url.
-- **Line 130:** Starts the database step.
-- **Line 131:** Returns what the checker found.
-- **Line 132:** Catches store errors.
-- **Line 133:** A link that cannot be used returns 400 with the explanation.
-- **Line 134:** Unexpected problems return 502 with a neutral message.
-- **Line 135:** Closes the preceding block (function, object, or statement body).
-- **Line 136:** Closes the error callback and registration.
-- **Line 137:** New route: finds and verifies pictures and videos for an AI draft.
-- **Line 138:** The request body.
-- **Line 139:** The sections list, or null if it is missing.
-- **Line 140:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
-- **Line 141:** Invalid requests get a 400.
-- **Line 142:** The current time.
-- **Line 143:** Forgets searches older than one day.
-- **Line 144:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
-- **Line 145:** Records this search.
-- **Line 146:** Marks a search as running.
-- **Line 147:** Starts the database step.
-- **Line 148:** Runs the finder and returns its verified results.
-- **Line 149:** Any failure is reported without technical details.
-- **Line 150:** A 502 with advice that media can still be added by hand.
+- **Line 126:** The type the browser declared, without parameters, in lowercase.
+- **Line 127:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 128:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 129:** Empty uploads are rejected.
+- **Line 130:** Looks at the file’s real first bytes.
+- **Line 131:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 132:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 133:** Prepares the default caption.
+- **Line 134:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 135:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 136:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 137:** Stores an upload as belonging to the signed-in coach.
+- **Line 138:** Closes the error callback and registration.
+- **Line 139:** New route: sends a stored file to the browser.
+- **Line 140:** Sends a stored file only if it belongs to the signed-in coach.
+- **Line 141:** Unknown file: 404.
+- **Line 142:** Sends it, honoring byte ranges.
+- **Line 143:** Closes the error callback and registration.
+- **Line 144:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 145:** Deletes an unsaved upload only if it belongs to the signed-in coach.
+- **Line 146:** Finishes a successful deletion response without a JSON body.
+- **Line 147:** Closes the error callback and registration.
+- **Line 148:** New route: checks one pasted link.
+- **Line 149:** Requires JSON containing a text url.
+- **Line 150:** Starts the database step.
 
-### Lines 151–167
+### Lines 151–175
 
 ```text
-151 |     } finally {
-152 |       suggesting = false;
-153 |     }
-154 |   });
-155 |
-156 |   registerAiRoute(app, options);
-157 |   app.use((request, response) => {
-158 |     response.status(404).json({ error: 'Route not found.' });
-159 |   });
-160 |   app.use((error, request, response, next) => {
-161 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-162 |     if (status === 500) logError(error);
-163 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-164 |     response.status(status).json({ error: messages[status] });
-165 |   });
-166 |   return app;
-167 | }
+151 |       response.json(await verifyLink(request.body.url));
+152 |     } catch (error) {
+153 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+154 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+155 |     }
+156 |   });
+157 |   app.post('/api/media/suggest', async (request, response) => {
+158 |     const body = request.body;
+159 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+160 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+161 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+162 |     const now = Date.now();
+163 |     suggestions = suggestions.filter(time => now - time < 86400000);
+164 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+165 |     suggestions.push(now);
+166 |     suggesting = true;
+167 |     try {
+168 |       response.json(await findMedia({ discipline: body.discipline, sections }));
+169 |     } catch {
+170 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
+171 |     } finally {
+172 |       suggesting = false;
+173 |     }
+174 |   });
+175 |
 ```
 
-- **Line 151:** Whatever happened, finishes with…
-- **Line 152:** …allowing the next search.
-- **Line 153:** Closes the preceding block (function, object, or statement body).
-- **Line 154:** Closes the error callback and registration.
-- **Line 155:** Blank line separates related sections; it performs no operation.
-- **Line 156:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
-- **Line 157:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 158:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 159:** Closes the error callback and registration.
-- **Line 160:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 161:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 162:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
-- **Line 163:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 164:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 165:** Closes the error callback and registration.
-- **Line 166:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 167:** Closes createApp.
+- **Line 151:** Returns what the checker found.
+- **Line 152:** Catches store errors.
+- **Line 153:** A link that cannot be used returns 400 with the explanation.
+- **Line 154:** Unexpected problems return 502 with a neutral message.
+- **Line 155:** Closes the preceding block (function, object, or statement body).
+- **Line 156:** Closes the error callback and registration.
+- **Line 157:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 158:** The request body.
+- **Line 159:** The sections list, or null if it is missing.
+- **Line 160:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 161:** Invalid requests get a 400.
+- **Line 162:** The current time.
+- **Line 163:** Forgets searches older than one day.
+- **Line 164:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 165:** Records this search.
+- **Line 166:** Marks a search as running.
+- **Line 167:** Starts the database step.
+- **Line 168:** Runs the finder and returns its verified results.
+- **Line 169:** Any failure is reported without technical details.
+- **Line 170:** A 502 with advice that media can still be added by hand.
+- **Line 171:** Whatever happened, finishes with…
+- **Line 172:** …allowing the next search.
+- **Line 173:** Closes the preceding block (function, object, or statement body).
+- **Line 174:** Closes the error callback and registration.
+- **Line 175:** Blank line separates related sections; it performs no operation.
+
+### Lines 176–187
+
+```text
+176 |   registerAiRoute(app, options);
+177 |   app.use((request, response) => {
+178 |     response.status(404).json({ error: 'Route not found.' });
+179 |   });
+180 |   app.use((error, request, response, next) => {
+181 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+182 |     if (status === 500) logError(error);
+183 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+184 |     response.status(status).json({ error: messages[status] });
+185 |   });
+186 |   return app;
+187 | }
+```
+
+- **Line 176:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 177:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 178:** Sends HTTP 404 with a short route-not-found JSON error.
+- **Line 179:** Closes the error callback and registration.
+- **Line 180:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 181:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 182:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
+- **Line 183:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 184:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 185:** Closes the error callback and registration.
+- **Line 186:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 187:** Closes createApp.
 
 ## server/api.test.js
 
@@ -1799,22 +1928,22 @@ Current implementation; connections and behavior are explained alongside every s
 7 | import Database from 'better-sqlite3';
 8 | import { createApp } from './app.js';
 9 | import { migrate } from './migrations.js';
-10 |
-11 | async function fixture(t) {
-12 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-api-'));
-13 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
-14 |   assert.ok(path.basename(directory).startsWith('coachlab-api-'));
-15 |   const state = { filename: path.join(directory, 'test.sqlite') };
-16 |   state.stop = async () => {
-17 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
-18 |     if (state.database?.open) state.database.close();
-19 |   };
-20 |   t.after(async () => {
-21 |     await state.stop();
-22 |     rmSync(directory, { recursive: true, force: true });
-23 |   });
-24 |   state.start = async () => {
-25 |     state.database = new Database(state.filename);
+10 | import { testOptions, authedFetch as fetch } from './test-auth.js';
+11 |
+12 | async function fixture(t) {
+13 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-api-'));
+14 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+15 |   assert.ok(path.basename(directory).startsWith('coachlab-api-'));
+16 |   const state = { filename: path.join(directory, 'test.sqlite') };
+17 |   state.stop = async () => {
+18 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+19 |     if (state.database?.open) state.database.close();
+20 |   };
+21 |   t.after(async () => {
+22 |     await state.stop();
+23 |     rmSync(directory, { recursive: true, force: true });
+24 |   });
+25 |   state.start = async () => {
 ```
 
 - **Line 1:** Imports Node's built-in test function.
@@ -1826,290 +1955,296 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 7:** Imports the existing SQLite driver to open isolated test files.
 - **Line 8:** Imports the real Express app factory, so tests exercise actual routes rather than mocks.
 - **Line 9:** Imports the real migration runner for test database setup.
-- **Line 10:** Blank line separates related sections for readability; it performs no operation.
-- **Line 11:** Declares an asynchronous fixture helper receiving the current test context t.
-- **Line 12:** Creates a unique directory under the system temporary directory using a coachlab-api- prefix.
-- **Line 13:** Checks that the resolved parent is exactly the intended temporary directory before cleanup can recursively remove anything.
-- **Line 14:** Checks the generated basename starts with the intended test prefix.
-- **Line 15:** Creates a state object containing the isolated database filename. Later properties hold its connection, server, and URL.
-- **Line 16:** Assigns an asynchronous stop function to state.
-- **Line 17:** If the server is listening, awaits a Promise resolved by the HTTP server's close callback. Optional chaining tolerates a server that was never created.
-- **Line 18:** Closes the database only if a connection exists and remains open.
-- **Line 19:** Closes the start function assignment.
-- **Line 20:** Registers asynchronous cleanup with t.after, so resources are cleaned even when a test assertion fails.
-- **Line 21:** Waits for the shared stop helper to close the HTTP server and database.
-- **Line 22:** Removes only the previously verified temporary directory and its files. recursive handles contents; force tolerates an already-absent directory.
-- **Line 23:** Closes the cleanup callback and registration.
-- **Line 24:** Assigns an asynchronous start function that can also reopen the same test file later.
-- **Line 25:** Opens the test database file and stores the connection in state.
+- **Line 10:** Imports the same fake signed-in coach helpers.
+- **Line 11:** Blank line separates related sections for readability; it performs no operation.
+- **Line 12:** Declares an asynchronous fixture helper receiving the current test context t.
+- **Line 13:** Creates a unique directory under the system temporary directory using a coachlab-api- prefix.
+- **Line 14:** Checks that the resolved parent is exactly the intended temporary directory before cleanup can recursively remove anything.
+- **Line 15:** Checks the generated basename starts with the intended test prefix.
+- **Line 16:** Creates a state object containing the isolated database filename. Later properties hold its connection, server, and URL.
+- **Line 17:** Assigns an asynchronous stop function to state.
+- **Line 18:** If the server is listening, awaits a Promise resolved by the HTTP server's close callback. Optional chaining tolerates a server that was never created.
+- **Line 19:** Closes the database only if a connection exists and remains open.
+- **Line 20:** Closes the start function assignment.
+- **Line 21:** Registers asynchronous cleanup with t.after, so resources are cleaned even when a test assertion fails.
+- **Line 22:** Waits for the shared stop helper to close the HTTP server and database.
+- **Line 23:** Removes only the previously verified temporary directory and its files. recursive handles contents; force tolerates an already-absent directory.
+- **Line 24:** Closes the cleanup callback and registration.
+- **Line 25:** Assigns an asynchronous start function that can also reopen the same test file later.
 
 ### Lines 26–50
 
 ```text
-26 |     migrate(state.database);
-27 |     state.server = createApp(state.database).listen(0, '127.0.0.1');
-28 |     await once(state.server, 'listening');
-29 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
-30 |   };
-31 |   await state.start();
-32 |   return state;
-33 | }
-34 |
-35 | function post(state, body) {
-36 |   return fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-37 | }
-38 |
-39 | test('GET starts empty and health remains available', async t => {
-40 |   const state = await fixture(t);
-41 |   const response = await fetch(`${state.url}/api/lessons`);
-42 |   assert.equal(response.status, 200);
-43 |   assert.deepEqual(await response.json(), []);
-44 |   const health = await fetch(`${state.url}/api/health`);
-45 |   assert.equal(health.status, 200);
-46 |   assert.deepEqual(await health.json(), { status: 'ok', service: 'CoachLab API' });
-47 | });
-48 |
-49 | test('POST saves actual SQLite data, GET orders it, and reopening preserves it', async t => {
-50 |   const state = await fixture(t);
+26 |     state.database = new Database(state.filename);
+27 |     migrate(state.database);
+28 |     state.server = createApp(state.database, testOptions).listen(0, '127.0.0.1');
+29 |     await once(state.server, 'listening');
+30 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
+31 |   };
+32 |   await state.start();
+33 |   return state;
+34 | }
+35 |
+36 | function post(state, body) {
+37 |   return fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+38 | }
+39 |
+40 | test('GET starts empty and health remains available', async t => {
+41 |   const state = await fixture(t);
+42 |   const response = await fetch(`${state.url}/api/lessons`);
+43 |   assert.equal(response.status, 200);
+44 |   assert.deepEqual(await response.json(), []);
+45 |   const health = await fetch(`${state.url}/api/health`);
+46 |   assert.equal(health.status, 200);
+47 |   assert.deepEqual(await health.json(), { status: 'ok', service: 'CoachLab API' });
+48 | });
+49 |
+50 | test('POST saves actual SQLite data, GET orders it, and reopening preserves it', async t => {
 ```
 
-- **Line 26:** Applies the same migration system used by the normal server before app creation.
-- **Line 27:** Constructs the real API app and listens on loopback port 0, asking the operating system to choose an unused port.
-- **Line 28:** Waits until the server has actually started listening.
-- **Line 29:** Builds the request URL from the assigned port, using template-string interpolation; no fixed development port is occupied.
-- **Line 30:** Closes the start function assignment.
-- **Line 31:** Reopens the same file and starts a new server/app using the fixture's start helper.
-- **Line 32:** Returns the fixture state to the test.
-- **Line 33:** Closes the POST helper.
-- **Line 34:** Blank line separates related sections for readability; it performs no operation.
-- **Line 35:** Declares a helper for making JSON POST requests to a fixture's API.
-- **Line 36:** Calls fetch with POST, a JSON Content-Type header, and a body serialized by JSON.stringify. Template-string interpolation uses the fixture URL; the returned Promise is awaited by callers.
-- **Line 37:** Closes the POST helper.
-- **Line 38:** Blank line separates related sections for readability; it performs no operation.
-- **Line 39:** Defines the empty-list and health test with an asynchronous callback receiving its context.
-- **Line 40:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 41:** Requests the lessons endpoint using GET, the default fetch method.
-- **Line 42:** Asserts the response status is 200.
-- **Line 43:** Parses the response JSON and compares its contents to an empty array.
-- **Line 44:** Requests the existing health endpoint.
-- **Line 45:** Asserts the health response is HTTP 200.
-- **Line 46:** Checks its complete JSON object, preserving the prior status and service values.
-- **Line 47:** Closes the final test callback and registration.
-- **Line 48:** Blank line separates related sections for readability; it performs no operation.
-- **Line 49:** Defines the creation, ordering, and reopen-persistence test.
-- **Line 50:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 26:** Opens the test database file and stores the connection in state.
+- **Line 27:** Applies the same migration system used by the normal server before app creation.
+- **Line 28:** Creates the test app with the fake sign-in options, so every existing lesson API test now runs as a signed-in coach.
+- **Line 29:** Waits until the server has actually started listening.
+- **Line 30:** Builds the request URL from the assigned port, using template-string interpolation; no fixed development port is occupied.
+- **Line 31:** Closes the start function assignment.
+- **Line 32:** Reopens the same file and starts a new server/app using the fixture's start helper.
+- **Line 33:** Returns the fixture state to the test.
+- **Line 34:** Closes the POST helper.
+- **Line 35:** Blank line separates related sections for readability; it performs no operation.
+- **Line 36:** Declares a helper for making JSON POST requests to a fixture's API.
+- **Line 37:** Calls fetch with POST, a JSON Content-Type header, and a body serialized by JSON.stringify. Template-string interpolation uses the fixture URL; the returned Promise is awaited by callers.
+- **Line 38:** Closes the POST helper.
+- **Line 39:** Blank line separates related sections for readability; it performs no operation.
+- **Line 40:** Defines the empty-list and health test with an asynchronous callback receiving its context.
+- **Line 41:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 42:** Requests the lessons endpoint using GET, the default fetch method.
+- **Line 43:** Asserts the response status is 200.
+- **Line 44:** Parses the response JSON and compares its contents to an empty array.
+- **Line 45:** Requests the existing health endpoint.
+- **Line 46:** Asserts the health response is HTTP 200.
+- **Line 47:** Checks its complete JSON object, preserving the prior status and service values.
+- **Line 48:** Closes the final test callback and registration.
+- **Line 49:** Blank line separates related sections for readability; it performs no operation.
+- **Line 50:** Defines the creation, ordering, and reopen-persistence test.
 
 ### Lines 51–75
 
 ```text
-51 |   const input = { title: "  Coach's jab; DROP TABLE lessons; --  ", discipline: 'Boxing', skill_level: 'Intermediate', duration_minutes: 45, goal: 'Accuracy', drills: 'Practice jabs', coaching_notes: 'Keep guard up' };
-52 |   const response = await post(state, input);
-53 |   assert.equal(response.status, 201);
-54 |   const saved = await response.json();
-55 |   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
-56 |   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
-57 |   assert.deepEqual(saved, { ...input, title: input.title.trim(), id: saved.id, created_at: saved.created_at });
-58 |   assert.deepEqual(state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id), saved);
-59 |   const secondResponse = await post(state, { title: 'Second lesson', discipline: 'MMA' });
-60 |   assert.equal(secondResponse.status, 201);
-61 |   const second = await secondResponse.json();
-62 |   assert.equal(second.skill_level, 'Beginner');
-63 |   assert.equal(second.duration_minutes, null);
-64 |   assert.equal(second.goal, '');
-65 |   const expected = [second, saved];
-66 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), expected);
-67 |   await state.stop();
-68 |   await state.start();
+51 |   const state = await fixture(t);
+52 |   const input = { title: "  Coach's jab; DROP TABLE lessons; --  ", discipline: 'Boxing', skill_level: 'Intermediate', duration_minutes: 45, goal: 'Accuracy', drills: 'Practice jabs', coaching_notes: 'Keep guard up' };
+53 |   const response = await post(state, input);
+54 |   assert.equal(response.status, 201);
+55 |   const saved = await response.json();
+56 |   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
+57 |   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
+58 |   assert.deepEqual(saved, { ...input, title: input.title.trim(), id: saved.id, created_at: saved.created_at });
+59 |   const { owner_id: owner, ...stored } = state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id);
+60 |   assert.equal(owner, 'user-a');
+61 |   assert.deepEqual(stored, saved);
+62 |   const secondResponse = await post(state, { title: 'Second lesson', discipline: 'MMA' });
+63 |   assert.equal(secondResponse.status, 201);
+64 |   const second = await secondResponse.json();
+65 |   assert.equal(second.skill_level, 'Beginner');
+66 |   assert.equal(second.duration_minutes, null);
+67 |   assert.equal(second.goal, '');
+68 |   const expected = [second, saved];
 69 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), expected);
-70 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 2);
-71 | });
-72 |
-73 | test('invalid lesson inputs return 400 without saving records', async t => {
-74 |   const state = await fixture(t);
-75 |   const invalid = [{}, { title: '' }, { title: ' \t\n' }, { title: 42 }, { discipline: 'Unknown' }, { discipline: null }, { skill_level: 'Expert' }, { skill_level: null }, { duration_minutes: -1 }, { duration_minutes: 0 }, { duration_minutes: 1.5 }, { duration_minutes: '45' }, { duration_minutes: 1441 }, { goal: null }, { drills: [] }, { coaching_notes: {} }, { id: 123 }];
+70 |   await state.stop();
+71 |   await state.start();
+72 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), expected);
+73 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 2);
+74 | });
+75 |
 ```
 
-- **Line 51:** Defines fake lesson data with every writable field. Its title includes spaces, an apostrophe, and SQL-looking text to check trimming and parameter binding rather than executing input as SQL.
-- **Line 52:** Sends that lesson to POST and waits for its response.
-- **Line 53:** Requires HTTP 201 for successful creation.
-- **Line 54:** Parses the saved lesson from the response body.
-- **Line 55:** Requires a positive integer database-generated ID.
-- **Line 56:** Requires a creation date that parses to a finite timestamp.
-- **Line 57:** Compares all returned fields to the input with a trimmed title plus generated metadata. Spread syntax copies the input, then later properties replace or add fields.
-- **Line 58:** Reads the actual SQLite row using a parameterized ID query and checks it exactly equals the API response; this verifies real storage, not just echoed input.
-- **Line 59:** Posts a second minimal fake lesson to test defaults and ordering.
-- **Line 60:** Requires HTTP 201 for that creation too.
-- **Line 61:** Parses the second saved lesson.
-- **Line 62:** Checks its omitted skill level defaulted to Beginner.
-- **Line 63:** Checks its omitted duration defaulted to null.
-- **Line 64:** Checks its omitted goal defaulted to empty text.
-- **Line 65:** Creates the expected newest-first array of the two saved rows.
-- **Line 66:** Checks that GET still returns exactly the saved ordered records after reopening.
-- **Line 67:** Closes the server and its SQLite connection.
-- **Line 68:** Reopens the same file and starts a new server/app using the fixture's start helper.
+- **Line 51:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 52:** Defines fake lesson data with every writable field. Its title includes spaces, an apostrophe, and SQL-looking text to check trimming and parameter binding rather than executing input as SQL.
+- **Line 53:** Sends that lesson to POST and waits for its response.
+- **Line 54:** Requires HTTP 201 for successful creation.
+- **Line 55:** Parses the saved lesson from the response body.
+- **Line 56:** Requires a positive integer database-generated ID.
+- **Line 57:** Requires a creation date that parses to a finite timestamp.
+- **Line 58:** Compares all returned fields to the input with a trimmed title plus generated metadata. Spread syntax copies the input, then later properties replace or add fields.
+- **Line 59:** The raw database row now also has an owner_id column that the API deliberately hides, so the test separates it from the other fields.
+- **Line 60:** Checks that the lesson was stored with the signed-in coach as its owner.
+- **Line 61:** The remaining nine fields must still equal what the API returned, proving the API shape did not change.
+- **Line 62:** Posts a second minimal fake lesson to test defaults and ordering.
+- **Line 63:** Requires HTTP 201 for that creation too.
+- **Line 64:** Parses the second saved lesson.
+- **Line 65:** Checks its omitted skill level defaulted to Beginner.
+- **Line 66:** Checks its omitted duration defaulted to null.
+- **Line 67:** Checks its omitted goal defaulted to empty text.
+- **Line 68:** Creates the expected newest-first array of the two saved rows.
 - **Line 69:** Checks that GET still returns exactly the saved ordered records after reopening.
-- **Line 70:** Counts actual database rows and requires exactly two; no duplicates were created during migration rerun or restart.
-- **Line 71:** Closes the final test callback and registration.
-- **Line 72:** Blank line separates related sections for readability; it performs no operation.
-- **Line 73:** Defines a parent test for rejected lesson inputs and zero saved rows.
-- **Line 74:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 75:** Defines invalid patches covering missing/empty/whitespace/numeric title, unsupported/null discipline, invalid/null skill, negative/zero/fractional/string/too-large duration, null or wrong-type optional text, and a forbidden ID field.
+- **Line 70:** Closes the server and its SQLite connection.
+- **Line 71:** Reopens the same file and starts a new server/app using the fixture's start helper.
+- **Line 72:** Checks that GET still returns exactly the saved ordered records after reopening.
+- **Line 73:** Counts actual database rows and requires exactly two; no duplicates were created during migration rerun or restart.
+- **Line 74:** Closes the final test callback and registration.
+- **Line 75:** Blank line separates related sections for readability; it performs no operation.
 
 ### Lines 76–100
 
 ```text
-76 |   for (const [index, fields] of invalid.entries()) {
-77 |     await t.test(`invalid case ${index + 1}`, async () => {
-78 |       const base = index === 0 ? {} : { title: 'Valid', discipline: 'Boxing' };
-79 |       const response = await post(state, { ...base, ...fields });
-80 |       assert.equal(response.status, 400);
-81 |       assert.equal(typeof (await response.json()).error, 'string');
-82 |     });
-83 |   }
-84 |   for (const [field, limit] of Object.entries({ title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 })) {
-85 |     const response = await post(state, { title: 'Valid', discipline: 'Boxing', [field]: 'x'.repeat(limit + 1) });
-86 |     assert.equal(response.status, 400);
-87 |     await response.json();
-88 |   }
-89 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 0);
-90 | });
-91 |
-92 | test('malformed JSON, non-object bodies, wrong media type, and oversized bodies fail safely', async t => {
-93 |   const state = await fixture(t);
-94 |   for (const [body, contentType, status] of [['{broken', 'application/json', 400], ['null', 'application/json', 400], ['[]', 'application/json', 400], ['42', 'application/json', 400], ['{}', 'text/plain', 400], [JSON.stringify({ title: 'x'.repeat(40000) }), 'application/json', 413]]) {
-95 |     const response = await fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': contentType }, body });
-96 |     assert.equal(response.status, status);
-97 |     const data = await response.json();
-98 |     assert.deepEqual(Object.keys(data), ['error']);
-99 |     assert.ok(!/SyntaxError|stack|node_modules|SQLITE/.test(data.error));
-100 |   }
+76 | test('invalid lesson inputs return 400 without saving records', async t => {
+77 |   const state = await fixture(t);
+78 |   const invalid = [{}, { title: '' }, { title: ' \t\n' }, { title: 42 }, { discipline: 'Unknown' }, { discipline: null }, { skill_level: 'Expert' }, { skill_level: null }, { duration_minutes: -1 }, { duration_minutes: 0 }, { duration_minutes: 1.5 }, { duration_minutes: '45' }, { duration_minutes: 1441 }, { goal: null }, { drills: [] }, { coaching_notes: {} }, { id: 123 }];
+79 |   for (const [index, fields] of invalid.entries()) {
+80 |     await t.test(`invalid case ${index + 1}`, async () => {
+81 |       const base = index === 0 ? {} : { title: 'Valid', discipline: 'Boxing' };
+82 |       const response = await post(state, { ...base, ...fields });
+83 |       assert.equal(response.status, 400);
+84 |       assert.equal(typeof (await response.json()).error, 'string');
+85 |     });
+86 |   }
+87 |   for (const [field, limit] of Object.entries({ title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 })) {
+88 |     const response = await post(state, { title: 'Valid', discipline: 'Boxing', [field]: 'x'.repeat(limit + 1) });
+89 |     assert.equal(response.status, 400);
+90 |     await response.json();
+91 |   }
+92 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 0);
+93 | });
+94 |
+95 | test('malformed JSON, non-object bodies, wrong media type, and oversized bodies fail safely', async t => {
+96 |   const state = await fixture(t);
+97 |   for (const [body, contentType, status] of [['{broken', 'application/json', 400], ['null', 'application/json', 400], ['[]', 'application/json', 400], ['42', 'application/json', 400], ['{}', 'text/plain', 400], [JSON.stringify({ title: 'x'.repeat(40000) }), 'application/json', 413]]) {
+98 |     const response = await fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': contentType }, body });
+99 |     assert.equal(response.status, status);
+100 |     const data = await response.json();
 ```
 
-- **Line 76:** Iterates each invalid patch with its array index using destructuring of entries().
-- **Line 77:** Creates and awaits a named subtest for the current invalid case, with a human-readable one-based number.
-- **Line 78:** Uses an empty base for the missing-fields case; other cases start from a valid title and discipline so each patch isolates an invalid field.
-- **Line 79:** Merges base and invalid patch with spread syntax and sends the resulting JSON body.
-- **Line 80:** Requires HTTP 400.
-- **Line 81:** Requires the returned error property to be a string without requiring unstable exact wording.
-- **Line 82:** Closes the subtest callback and call.
-- **Line 83:** Closes the response loop.
-- **Line 84:** Iterates every configured text-field limit to exercise an over-limit value independently.
-- **Line 85:** Sends a valid base lesson overridden with a string one unit longer than the field's limit. The computed [field] property chooses which field to replace; repeat generates the string.
-- **Line 86:** Requires HTTP 400 for the excessive field length.
-- **Line 87:** Consumes the JSON response body before the next request.
-- **Line 88:** Closes the response loop.
-- **Line 89:** Confirms no rejected request inserted a database record.
-- **Line 90:** Closes the final test callback and registration.
-- **Line 91:** Blank line separates related sections for readability; it performs no operation.
-- **Line 92:** Defines HTTP parser and body-limit checks with safe public errors.
-- **Line 93:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 94:** Iterates raw body/media-type/expected-status triples: broken JSON, null, array, scalar, wrong media type, and a JSON body above 32 KB. The oversized body is valid JSON so it tests size handling.
-- **Line 95:** Sends each raw body with its specified Content-Type, bypassing the JSON POST helper to allow malformed inputs.
-- **Line 96:** Checks the expected 400 or 413 status.
-- **Line 97:** Parses the safe JSON response.
-- **Line 98:** Requires that the only returned key is error, so no stack or internal detail properties are present.
-- **Line 99:** Rejects common internal error/stack/SQL markers in the public message using a regular expression.
-- **Line 100:** Closes the response loop.
+- **Line 76:** Defines a parent test for rejected lesson inputs and zero saved rows.
+- **Line 77:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 78:** Defines invalid patches covering missing/empty/whitespace/numeric title, unsupported/null discipline, invalid/null skill, negative/zero/fractional/string/too-large duration, null or wrong-type optional text, and a forbidden ID field.
+- **Line 79:** Iterates each invalid patch with its array index using destructuring of entries().
+- **Line 80:** Creates and awaits a named subtest for the current invalid case, with a human-readable one-based number.
+- **Line 81:** Uses an empty base for the missing-fields case; other cases start from a valid title and discipline so each patch isolates an invalid field.
+- **Line 82:** Merges base and invalid patch with spread syntax and sends the resulting JSON body.
+- **Line 83:** Requires HTTP 400.
+- **Line 84:** Requires the returned error property to be a string without requiring unstable exact wording.
+- **Line 85:** Closes the subtest callback and call.
+- **Line 86:** Closes the response loop.
+- **Line 87:** Iterates every configured text-field limit to exercise an over-limit value independently.
+- **Line 88:** Sends a valid base lesson overridden with a string one unit longer than the field's limit. The computed [field] property chooses which field to replace; repeat generates the string.
+- **Line 89:** Requires HTTP 400 for the excessive field length.
+- **Line 90:** Consumes the JSON response body before the next request.
+- **Line 91:** Closes the response loop.
+- **Line 92:** Confirms no rejected request inserted a database record.
+- **Line 93:** Closes the final test callback and registration.
+- **Line 94:** Blank line separates related sections for readability; it performs no operation.
+- **Line 95:** Defines HTTP parser and body-limit checks with safe public errors.
+- **Line 96:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 97:** Iterates raw body/media-type/expected-status triples: broken JSON, null, array, scalar, wrong media type, and a JSON body above 32 KB. The oversized body is valid JSON so it tests size handling.
+- **Line 98:** Sends each raw body with its specified Content-Type, bypassing the JSON POST helper to allow malformed inputs.
+- **Line 99:** Checks the expected 400 or 413 status.
+- **Line 100:** Parses the safe JSON response.
 
 ### Lines 101–125
 
 ```text
-101 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 0);
-102 | });
-103 |
-104 | test('database failures return generic 500 errors for both routes', async t => {
-105 |   const state = await fixture(t);
-106 |   state.database.close();
-107 |   for (const response of [await fetch(`${state.url}/api/lessons`), await post(state, { title: 'Valid', discipline: 'Boxing' })]) {
-108 |     assert.equal(response.status, 500);
-109 |     assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
-110 |   }
-111 | });
-112 |
-113 | test('fresh database is migrated before app creation without changing the schema', async t => {
-114 |   const state = await fixture(t);
-115 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
-116 |   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
-117 |   const unknown = await fetch(`${state.url}/missing`);
-118 |   assert.equal(unknown.status, 404);
-119 |   assert.deepEqual(await unknown.json(), { error: 'Route not found.' });
-120 | });
-121 |
-122 | test('update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely', async t => {
-123 |   const state = await fixture(t);
-124 |   const original = await (await post(state, { title: 'Original', discipline: 'Boxing' })).json();
-125 |   const other = await (await post(state, { title: 'Keep this', discipline: 'MMA' })).json();
+101 |     assert.deepEqual(Object.keys(data), ['error']);
+102 |     assert.ok(!/SyntaxError|stack|node_modules|SQLITE/.test(data.error));
+103 |   }
+104 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 0);
+105 | });
+106 |
+107 | test('database failures return generic 500 errors for both routes', async t => {
+108 |   const state = await fixture(t);
+109 |   state.database.close();
+110 |   for (const response of [await fetch(`${state.url}/api/lessons`), await post(state, { title: 'Valid', discipline: 'Boxing' })]) {
+111 |     assert.equal(response.status, 500);
+112 |     assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
+113 |   }
+114 | });
+115 |
+116 | test('fresh database is migrated before app creation without changing the schema', async t => {
+117 |   const state = await fixture(t);
+118 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
+119 |   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+120 |   const unknown = await fetch(`${state.url}/missing`);
+121 |   assert.equal(unknown.status, 404);
+122 |   assert.deepEqual(await unknown.json(), { error: 'Route not found.' });
+123 | });
+124 |
+125 | test('update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely', async t => {
 ```
 
-- **Line 101:** Confirms no rejected request inserted a database record.
-- **Line 102:** Closes the final test callback and registration.
-- **Line 103:** Blank line separates related sections for readability; it performs no operation.
-- **Line 104:** Defines safe handling of unexpected database failures for both routes.
-- **Line 105:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 106:** Closes SQLite deliberately inside this isolated test to simulate an unavailable database without modifying production code.
-- **Line 107:** Sends GET and a valid POST against the still-running app and iterates the two responses.
-- **Line 108:** Requires HTTP 500 for each database failure.
-- **Line 109:** Requires exactly the generic public error object; closed-connection details are not exposed.
-- **Line 110:** Closes the response loop.
-- **Line 111:** Closes the final test callback and registration.
-- **Line 112:** Blank line separates related sections for readability; it performs no operation.
-- **Line 113:** Defines a fresh-file migration and unknown-route test.
-- **Line 114:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 115:** The migration-history assertion now expects versions 1 and 2, because the media table migration is applied to every fresh SQLite database.
-- **Line 116:** Requires SQLite's integrity check to return ok.
-- **Line 117:** Requests an unknown route.
-- **Line 118:** Requires HTTP 404.
-- **Line 119:** Requires the existing safe route-not-found JSON message.
-- **Line 120:** Closes the final test callback and registration.
-- **Line 121:** Blank line separates related sections for readability; it performs no operation.
-- **Line 122:** Registers this named test with Node: update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 123:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 124:** Creates the synthetic original row and records its ID/timestamp before update tests.
-- **Line 125:** Creates a second synthetic row that must remain untouched when the original is deleted.
+- **Line 101:** Requires that the only returned key is error, so no stack or internal detail properties are present.
+- **Line 102:** Rejects common internal error/stack/SQL markers in the public message using a regular expression.
+- **Line 103:** Closes the response loop.
+- **Line 104:** Confirms no rejected request inserted a database record.
+- **Line 105:** Closes the final test callback and registration.
+- **Line 106:** Blank line separates related sections for readability; it performs no operation.
+- **Line 107:** Defines safe handling of unexpected database failures for both routes.
+- **Line 108:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 109:** Closes SQLite deliberately inside this isolated test to simulate an unavailable database without modifying production code.
+- **Line 110:** Sends GET and a valid POST against the still-running app and iterates the two responses.
+- **Line 111:** Requires HTTP 500 for each database failure.
+- **Line 112:** Requires exactly the generic public error object; closed-connection details are not exposed.
+- **Line 113:** Closes the response loop.
+- **Line 114:** Closes the final test callback and registration.
+- **Line 115:** Blank line separates related sections for readability; it performs no operation.
+- **Line 116:** Defines a fresh-file migration and unknown-route test.
+- **Line 117:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 118:** The migration history now lists version 3 (ownership) as well.
+- **Line 119:** Requires SQLite's integrity check to return ok.
+- **Line 120:** Requests an unknown route.
+- **Line 121:** Requires HTTP 404.
+- **Line 122:** Requires the existing safe route-not-found JSON message.
+- **Line 123:** Closes the final test callback and registration.
+- **Line 124:** Blank line separates related sections for readability; it performs no operation.
+- **Line 125:** Registers this named test with Node: update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
 
-### Lines 126–144
+### Lines 126–147
 
 ```text
-126 |   const put = (id, body) => fetch(`${state.url}/api/lessons/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-127 |   const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
-128 |   const response = await put(original.id, edited);
-129 |   assert.equal(response.status, 200);
-130 |   assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });
-131 |   assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);
-132 |   for (const id of ['0', '-1', '1.5', '2147483648', 'abc']) {
-133 |     assert.equal((await put(id, edited)).status, 400);
-134 |     assert.equal((await fetch(`${state.url}/api/lessons/${id}`, { method: 'DELETE' })).status, 400);
-135 |   }
-136 |   assert.equal((await put(2147483647, edited)).status, 404);
-137 |   await state.stop(); await state.start();
-138 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
-139 |   assert.equal(state.database.prepare('SELECT title FROM lessons WHERE id=?').get(original.id).title, 'Edited');
-140 |   assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 204);
-141 |   assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);
-142 |   await state.stop(); await state.start();
-143 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);
-144 | });
+126 |   const state = await fixture(t);
+127 |   const original = await (await post(state, { title: 'Original', discipline: 'Boxing' })).json();
+128 |   const other = await (await post(state, { title: 'Keep this', discipline: 'MMA' })).json();
+129 |   const put = (id, body) => fetch(`${state.url}/api/lessons/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+130 |   const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
+131 |   const response = await put(original.id, edited);
+132 |   assert.equal(response.status, 200);
+133 |   assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });
+134 |   assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);
+135 |   for (const id of ['0', '-1', '1.5', '2147483648', 'abc']) {
+136 |     assert.equal((await put(id, edited)).status, 400);
+137 |     assert.equal((await fetch(`${state.url}/api/lessons/${id}`, { method: 'DELETE' })).status, 400);
+138 |   }
+139 |   assert.equal((await put(2147483647, edited)).status, 404);
+140 |   await state.stop(); await state.start();
+141 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
+142 |   assert.equal(state.database.prepare('SELECT title FROM lessons WHERE id=?').get(original.id).title, 'Edited');
+143 |   assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 204);
+144 |   assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);
+145 |   await state.stop(); await state.start();
+146 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);
+147 | });
 ```
 
-- **Line 126:** Defines the test helper for JSON PUT requests to a particular lesson ID.
-- **Line 127:** Defines replacement values for every editable field, including reordered activity text, without changing identity metadata.
-- **Line 128:** Sends the update for the original synthetic row and captures its response.
-- **Line 129:** Asserts the response status is 200.
-- **Line 130:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 131:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 132:** Tries invalid zero, negative, fractional, out-of-range and nonnumeric IDs to prove validation rejects them before writes.
-- **Line 133:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(id, edited)).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 134:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${id}`, { method: 'DELETE' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 135:** Closes the response loop.
-- **Line 136:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(2147483647, edited)).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 137:** Closes and reopens the disposable SQLite database and API, proving data is stored beyond the connection lifetime.
-- **Line 138:** Checks the stated expectation using Node strict assertions: `assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 139:** Checks the stated expectation using Node strict assertions: `assert.equal(state.database.prepare('SELECT title FROM lessons WHERE id=?').get(original.id).title, 'Edited');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 140:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 141:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 142:** Closes and reopens the disposable SQLite database and API, proving data is stored beyond the connection lifetime.
-- **Line 143:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 144:** Closes the final test callback and registration.
+- **Line 126:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 127:** Creates the synthetic original row and records its ID/timestamp before update tests.
+- **Line 128:** Creates a second synthetic row that must remain untouched when the original is deleted.
+- **Line 129:** Defines the test helper for JSON PUT requests to a particular lesson ID.
+- **Line 130:** Defines replacement values for every editable field, including reordered activity text, without changing identity metadata.
+- **Line 131:** Sends the update for the original synthetic row and captures its response.
+- **Line 132:** Asserts the response status is 200.
+- **Line 133:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 134:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 135:** Tries invalid zero, negative, fractional, out-of-range and nonnumeric IDs to prove validation rejects them before writes.
+- **Line 136:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(id, edited)).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 137:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${id}`, { method: 'DELETE' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 138:** Closes the response loop.
+- **Line 139:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(2147483647, edited)).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 140:** Closes and reopens the disposable SQLite database and API, proving data is stored beyond the connection lifetime.
+- **Line 141:** Checks the stated expectation using Node strict assertions: `assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 142:** Checks the stated expectation using Node strict assertions: `assert.equal(state.database.prepare('SELECT title FROM lessons WHERE id=?').get(original.id).title, 'Edited');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 143:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 144:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 145:** Closes and reopens the disposable SQLite database and API, proving data is stored beyond the connection lifetime.
+- **Line 146:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 147:** Closes the final test callback and registration.
 
 ## client/src/LessonForm.jsx
 
@@ -2505,7 +2640,6 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 39:** Closes the returned object and return statement.
 - **Line 40:** Closes toLesson.
 
-
 ## server/ai-provider.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\ai-provider.js`
@@ -2652,7 +2786,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 Registers POST /api/ai/lesson-draft with input/output validation and in-memory request limits. It has no database dependency. App injects test providers only through function arguments.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | import { validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
@@ -2670,6 +2804,16 @@ Registers POST /api/ai/lesson-draft with input/output validation and in-memory r
 13 |     attempts = attempts.filter(start => time - start < 86400000);
 14 |     if (busy || attempts.length >= 20 || attempts.filter(start => time - start < 60000).length >= 3) return response.status(429).json({ error: 'AI request limit reached. Try later; manual lessons still work.' });
 15 |     attempts.push(time);
+16 |     busy = true;
+17 |     try {
+18 |       const draft = await provider(request.body);
+19 |       if (validateDraft(draft, request.body)) throw new AiError(502, 'AI returned an incomplete lesson or incorrect duration. Please try again.');
+20 |       const lesson = toLesson(draft, request.body);
+21 |       if (validateLesson(lesson).error || Buffer.byteLength(JSON.stringify(lesson)) > 32000) throw new AiError(502, 'AI lesson is too large to save. Try a simpler request.');
+22 |       response.json({ draft });
+23 |     } catch (failure) {
+24 |       response.status(failure instanceof AiError ? failure.status : 502).json({ error: failure instanceof AiError ? failure.message : 'AI generation failed. Manual lessons still work.' });
+25 |     } finally {
 ```
 
 - **Line 1:** Imports shared request/draft validators and the existing-lesson formatter from the pure client module; this file still runs only on the server.
@@ -2687,26 +2831,6 @@ Registers POST /api/ai/lesson-draft with input/output validation and in-memory r
 - **Line 13:** Keeps only attempts within the preceding 86400000ms, a rolling 24 hours.
 - **Line 14:** Rejects overlapping generation, 20 attempts per rolling day, or three per rolling minute with status 429; these application limits are separate from Google's quota.
 - **Line 15:** Records this accepted attempt, including attempts that later fail upstream.
-
-### Lines 16–29
-
-```text
-16 |     busy = true;
-17 |     try {
-18 |       const draft = await provider(request.body);
-19 |       if (validateDraft(draft, request.body)) throw new AiError(502, 'AI returned an incomplete lesson or incorrect duration. Please try again.');
-20 |       const lesson = toLesson(draft, request.body);
-21 |       if (validateLesson(lesson).error || Buffer.byteLength(JSON.stringify(lesson)) > 32000) throw new AiError(502, 'AI lesson is too large to save. Try a simpler request.');
-22 |       response.json({ draft });
-23 |     } catch (failure) {
-24 |       response.status(failure instanceof AiError ? failure.status : 502).json({ error: failure instanceof AiError ? failure.message : 'AI generation failed. Manual lessons still work.' });
-25 |     } finally {
-26 |       busy = false;
-27 |     }
-28 |   });
-29 | }
-```
-
 - **Line 16:** Marks generation busy before awaiting the provider.
 - **Line 17:** Opens the guarded generation block.
 - **Line 18:** Waits for a generated draft from the configured adapter or test replacement.
@@ -2717,6 +2841,16 @@ Registers POST /api/ai/lesson-draft with input/output validation and in-memory r
 - **Line 23:** Catches generation and validation errors.
 - **Line 24:** Returns known safe AiError status/messages, otherwise generic 502 feedback. Never serializes raw provider exceptions.
 - **Line 25:** Starts cleanup regardless of success or failure.
+
+### Lines 26–29
+
+```text
+26 |       busy = false;
+27 |     }
+28 |   });
+29 | }
+```
+
 - **Line 26:** Releases the busy flag for later requests.
 - **Line 27:** Closes the cleanup block.
 - **Line 28:** Closes the asynchronous route callback and app.post call.
@@ -3034,22 +3168,22 @@ Current implementation; connections and behavior are explained alongside every s
 7 | import Database from 'better-sqlite3';
 8 | import { createApp } from './app.js';
 9 | import { migrate } from './migrations.js';
-10 | import { generateDraft } from './ai-provider.js';
-11 | import { disciplines, sections, details, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
-12 |
-13 | const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Kimura fundamentals', techniques: 'Kimura grip', equipment: 'Mats', privacy_confirmed: true };
-14 | const draft = { title: 'Mock Kimura lesson', objectives: 'Practice controlled positioning.', ...Object.fromEntries(details.map(key => [key, 'Mock coaching guidance for testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: '1. Demonstrate slowly.\n2. Rehearse under coach supervision.' })) };
-15 | const env = { GEMINI_API_KEY: 'mock-test-value', AI_MODEL: 'gemini-3.5-flash-lite' };
-16 | const envelope = value => ({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(value) }] } }] });
-17 |
-18 | test('contract accepts six disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
-19 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-20 |   for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: null }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
-21 |   assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);
-22 |   assert.ok(validateRequest(null));
-23 |   assert.equal(validateDraft(draft, request), null);
-24 |   for (const change of [{ title: '' }, { safety: '' }, { sections: [] }, { sections: draft.sections.map(section => ({ ...section, minutes: 11 })) }, { sections: [null, ...draft.sections.slice(1)] }]) assert.ok(validateDraft({ ...draft, ...change }, request));
-25 |   const edited = structuredClone(draft);
+10 | import { testOptions, authedFetch as fetch } from './test-auth.js';
+11 | import { generateDraft } from './ai-provider.js';
+12 | import { disciplines, sections, details, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
+13 |
+14 | const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Kimura fundamentals', techniques: 'Kimura grip', equipment: 'Mats', privacy_confirmed: true };
+15 | const draft = { title: 'Mock Kimura lesson', objectives: 'Practice controlled positioning.', ...Object.fromEntries(details.map(key => [key, 'Mock coaching guidance for testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: '1. Demonstrate slowly.\n2. Rehearse under coach supervision.' })) };
+16 | const env = { GEMINI_API_KEY: 'mock-test-value', AI_MODEL: 'gemini-3.5-flash-lite' };
+17 | const envelope = value => ({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(value) }] } }] });
+18 |
+19 | test('contract accepts six disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
+20 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
+21 |   for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: null }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
+22 |   assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);
+23 |   assert.ok(validateRequest(null));
+24 |   assert.equal(validateDraft(draft, request), null);
+25 |   for (const change of [{ title: '' }, { safety: '' }, { sections: [] }, { sections: draft.sections.map(section => ({ ...section, minutes: 11 })) }, { sections: [null, ...draft.sections.slice(1)] }]) assert.ok(validateDraft({ ...draft, ...change }, request));
 ```
 
 - **Line 1:** Imports the built-in Node test runner.
@@ -3061,223 +3195,224 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 7:** Imports the actual SQLite library so persistence tests use real storage.
 - **Line 8:** Imports the Express app factory under test.
 - **Line 9:** Imports the real versioned migration runner.
-- **Line 10:** Imports the Gemini adapter for mocked transport tests.
-- **Line 11:** Imports shared lists, validation and formatting functions exercised by these tests.
-- **Line 12:** Blank line separates related sections; it performs no operation.
-- **Line 13:** Defines generic, nonpersonal BJJ class parameters with explicit privacy confirmation.
-- **Line 14:** Defines mock output: every guidance field is filled and five twelve-minute sections total sixty minutes. Object.fromEntries builds named guidance properties.
-- **Line 15:** Defines a deliberately fake test credential and expected model ID; no real key is used.
-- **Line 16:** Defines a helper wrapping a draft in the provider's expected candidate/parts JSON shape.
-- **Line 17:** Blank line separates related sections; it performs no operation.
-- **Line 18:** Starts the contract-validation test.
-- **Line 19:** Loops through every discipline and asserts that its request is accepted with null error.
-- **Line 20:** Iterates malformed request variants and requires validation to reject each, including null optional text; this prevents optional from meaning unvalidated.
-- **Line 21:** Checks the stated expectation using Node strict assertions: `assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 22:** Checks that null input is rejected.
-- **Line 23:** Checks that the complete sixty-minute draft is accepted.
-- **Line 24:** Checks missing content, missing sections, incorrect total and a null section are rejected.
-- **Line 25:** Makes a deep copy so editing this test does not modify the shared fixture.
+- **Line 10:** Imports the fake signed-in coach options and a fetch that sends the Origin header, so these older AI tests run as a signed-in coach.
+- **Line 11:** Imports the Gemini adapter for mocked transport tests.
+- **Line 12:** Imports shared lists, validation and formatting functions exercised by these tests.
+- **Line 13:** Blank line separates related sections; it performs no operation.
+- **Line 14:** Defines generic, nonpersonal BJJ class parameters with explicit privacy confirmation.
+- **Line 15:** Defines mock output: every guidance field is filled and five twelve-minute sections total sixty minutes. Object.fromEntries builds named guidance properties.
+- **Line 16:** Defines a deliberately fake test credential and expected model ID; no real key is used.
+- **Line 17:** Defines a helper wrapping a draft in the provider's expected candidate/parts JSON shape.
+- **Line 18:** Blank line separates related sections; it performs no operation.
+- **Line 19:** Starts the contract-validation test.
+- **Line 20:** Loops through every discipline and asserts that its request is accepted with null error.
+- **Line 21:** Iterates malformed request variants and requires validation to reject each, including null optional text; this prevents optional from meaning unvalidated.
+- **Line 22:** Checks the stated expectation using Node strict assertions: `assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 23:** Checks that null input is rejected.
+- **Line 24:** Checks that the complete sixty-minute draft is accepted.
+- **Line 25:** Checks missing content, missing sections, incorrect total and a null section are rejected.
 
 ### Lines 26–50
 
 ```text
-26 |   edited.sections[1].instructions = 'Edited teaching steps';
-27 |   assert.match(toLesson(edited, request).drills, /Edited teaching steps/);
-28 |   assert.match(toLesson(edited, request).coaching_notes, /reviewed and approved/);
-29 | });
-30 |
-31 | test('mocked Gemini transport uses server header, JSON schema and bounded output', async () => {
-32 |   const fetcher = async (url, options) => {
-33 |     assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
-34 |     assert.equal(options.headers['x-goog-api-key'], env.GEMINI_API_KEY);
-35 |     assert.ok(!options.body.includes(env.GEMINI_API_KEY));
-36 |     const body = JSON.parse(options.body);
-37 |     assert.equal(body.generationConfig.responseMimeType, 'application/json');
-38 |     assert.equal(body.generationConfig.maxOutputTokens, 8192);
-39 |     return Response.json(envelope(draft));
-40 |   };
-41 |   assert.deepEqual(await generateDraft(request, { env, fetcher }), draft);
-42 | });
-43 |
-44 | test('provider configuration, HTTP failures, truncation, oversized output and timeout produce safe errors', async () => {
-45 |   await assert.rejects(generateDraft(request, { env: {} }), error => error.status === 503);
-46 |   await assert.rejects(generateDraft(request, { env: { ...env, AI_PROVIDER: 'unknown' } }), error => error.status === 503);
-47 |   for (const response of [new Response('private upstream text', { status: 500 }), new Response('x'.repeat(65537)), Response.json({ candidates: [{ finishReason: 'MAX_TOKENS' }] }), new Response('not JSON')]) {
-48 |     await assert.rejects(generateDraft(request, { env, fetcher: async () => response }), error => error.status === 502 && !error.message.includes('private'));
-49 |   }
-50 |   await assert.rejects(generateDraft(request, { env, fetcher: async () => new Response('', { status: 429 }) }), error => error.status === 429);
+26 |   const edited = structuredClone(draft);
+27 |   edited.sections[1].instructions = 'Edited teaching steps';
+28 |   assert.match(toLesson(edited, request).drills, /Edited teaching steps/);
+29 |   assert.match(toLesson(edited, request).coaching_notes, /reviewed and approved/);
+30 | });
+31 |
+32 | test('mocked Gemini transport uses server header, JSON schema and bounded output', async () => {
+33 |   const fetcher = async (url, options) => {
+34 |     assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
+35 |     assert.equal(options.headers['x-goog-api-key'], env.GEMINI_API_KEY);
+36 |     assert.ok(!options.body.includes(env.GEMINI_API_KEY));
+37 |     const body = JSON.parse(options.body);
+38 |     assert.equal(body.generationConfig.responseMimeType, 'application/json');
+39 |     assert.equal(body.generationConfig.maxOutputTokens, 8192);
+40 |     return Response.json(envelope(draft));
+41 |   };
+42 |   assert.deepEqual(await generateDraft(request, { env, fetcher }), draft);
+43 | });
+44 |
+45 | test('provider configuration, HTTP failures, truncation, oversized output and timeout produce safe errors', async () => {
+46 |   await assert.rejects(generateDraft(request, { env: {} }), error => error.status === 503);
+47 |   await assert.rejects(generateDraft(request, { env: { ...env, AI_PROVIDER: 'unknown' } }), error => error.status === 503);
+48 |   for (const response of [new Response('private upstream text', { status: 500 }), new Response('x'.repeat(65537)), Response.json({ candidates: [{ finishReason: 'MAX_TOKENS' }] }), new Response('not JSON')]) {
+49 |     await assert.rejects(generateDraft(request, { env, fetcher: async () => response }), error => error.status === 502 && !error.message.includes('private'));
+50 |   }
 ```
 
-- **Line 26:** Changes the technique-teaching instructions in the copy.
-- **Line 27:** Asserts that conversion preserves the edited instructions in saved drills text.
-- **Line 28:** Asserts that converted notes contain the review provenance text; actual user approval is tested in the browser.
-- **Line 29:** Closes the integrated test.
-- **Line 30:** Blank line separates related sections; it performs no operation.
-- **Line 31:** Starts an asynchronous test of the mocked provider transport.
-- **Line 32:** Defines a fake fetch function that inspects the outgoing call instead of using the network.
-- **Line 33:** Requires the expected Google endpoint and model path.
-- **Line 34:** Checks that the fake key is confined to the designated server request header.
-- **Line 35:** Checks that the key was not embedded in the JSON body.
-- **Line 36:** Parses the outgoing body to inspect settings.
-- **Line 37:** Requires JSON output format.
-- **Line 38:** Requires the configured maximum output-token budget.
-- **Line 39:** Returns an in-memory successful Response containing the mock draft.
-- **Line 40:** Closes the fake provider.
-- **Line 41:** Runs the real adapter with injected fake settings/transport and compares its parsed result with the fixture.
-- **Line 42:** Closes the integrated test.
-- **Line 43:** Blank line separates related sections; it performs no operation.
-- **Line 44:** Starts the safe-error test for provider failures.
-- **Line 45:** Checks that missing configuration rejects with status 503 before any network request.
-- **Line 46:** Checks that an unsupported provider rejects with 503.
-- **Line 47:** Loops through mocked upstream 500, oversized bytes, truncated output and invalid JSON responses.
-- **Line 48:** Requires each mocked failure to reject with 502 without exposing the private upstream message.
-- **Line 49:** Closes the discipline loop.
-- **Line 50:** Checks that provider quota status 429 remains a safe 429 error.
+- **Line 26:** Makes a deep copy so editing this test does not modify the shared fixture.
+- **Line 27:** Changes the technique-teaching instructions in the copy.
+- **Line 28:** Asserts that conversion preserves the edited instructions in saved drills text.
+- **Line 29:** Asserts that converted notes contain the review provenance text; actual user approval is tested in the browser.
+- **Line 30:** Closes the integrated test.
+- **Line 31:** Blank line separates related sections; it performs no operation.
+- **Line 32:** Starts an asynchronous test of the mocked provider transport.
+- **Line 33:** Defines a fake fetch function that inspects the outgoing call instead of using the network.
+- **Line 34:** Requires the expected Google endpoint and model path.
+- **Line 35:** Checks that the fake key is confined to the designated server request header.
+- **Line 36:** Checks that the key was not embedded in the JSON body.
+- **Line 37:** Parses the outgoing body to inspect settings.
+- **Line 38:** Requires JSON output format.
+- **Line 39:** Requires the configured maximum output-token budget.
+- **Line 40:** Returns an in-memory successful Response containing the mock draft.
+- **Line 41:** Closes the fake provider.
+- **Line 42:** Runs the real adapter with injected fake settings/transport and compares its parsed result with the fixture.
+- **Line 43:** Closes the integrated test.
+- **Line 44:** Blank line separates related sections; it performs no operation.
+- **Line 45:** Starts the safe-error test for provider failures.
+- **Line 46:** Checks that missing configuration rejects with status 503 before any network request.
+- **Line 47:** Checks that an unsupported provider rejects with 503.
+- **Line 48:** Loops through mocked upstream 500, oversized bytes, truncated output and invalid JSON responses.
+- **Line 49:** Requires each mocked failure to reject with 502 without exposing the private upstream message.
+- **Line 50:** Closes the discipline loop.
 
 ### Lines 51–75
 
 ```text
-51 |   const fetcher = (url, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('private transport detail')), { once: true }));
-52 |   await assert.rejects(generateDraft(request, { env, fetcher, timeout: 5 }), error => error.status === 504);
-53 | });
-54 |
-55 | test('AI API generates without saving; approved mapped lesson persists; limits and failures leave manual API usable', async t => {
-56 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-ai-'));
-57 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
-58 |   assert.ok(path.basename(directory).startsWith('coachlab-ai-'));
-59 |   const filename = path.join(directory, 'test.sqlite');
-60 |   let database = new Database(filename);
-61 |   migrate(database);
-62 |   let mode = 'ok';
-63 |   let time = 0;
-64 |   let release;
-65 |   const provider = async () => {
-66 |     if (mode === 'fail') throw new Error('SECRET upstream details');
-67 |     if (mode === 'invalid') return { ...draft, safety: '' };
-68 |     if (mode === 'slow') await new Promise(resolve => { release = resolve; });
-69 |     return structuredClone(draft);
-70 |   };
-71 |   const server = createApp(database, { provider, now: () => time }).listen(0, '127.0.0.1');
-72 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); rmSync(directory, { recursive: true, force: true }); });
-73 |   await once(server, 'listening');
-74 |   const base = `http://127.0.0.1:${server.address().port}`;
-75 |   const post = (route, body) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+51 |   await assert.rejects(generateDraft(request, { env, fetcher: async () => new Response('', { status: 429 }) }), error => error.status === 429);
+52 |   const fetcher = (url, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('private transport detail')), { once: true }));
+53 |   await assert.rejects(generateDraft(request, { env, fetcher, timeout: 5 }), error => error.status === 504);
+54 | });
+55 |
+56 | test('AI API generates without saving; approved mapped lesson persists; limits and failures leave manual API usable', async t => {
+57 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-ai-'));
+58 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+59 |   assert.ok(path.basename(directory).startsWith('coachlab-ai-'));
+60 |   const filename = path.join(directory, 'test.sqlite');
+61 |   let database = new Database(filename);
+62 |   migrate(database);
+63 |   let mode = 'ok';
+64 |   let time = 0;
+65 |   let release;
+66 |   const provider = async () => {
+67 |     if (mode === 'fail') throw new Error('SECRET upstream details');
+68 |     if (mode === 'invalid') return { ...draft, safety: '' };
+69 |     if (mode === 'slow') await new Promise(resolve => { release = resolve; });
+70 |     return structuredClone(draft);
+71 |   };
+72 |   const server = createApp(database, { provider, now: () => time, ...testOptions }).listen(0, '127.0.0.1');
+73 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); rmSync(directory, { recursive: true, force: true }); });
+74 |   await once(server, 'listening');
+75 |   const base = `http://127.0.0.1:${server.address().port}`;
 ```
 
-- **Line 51:** Creates a mock transport that waits for abort and then rejects with a deliberately private message; once removes the listener after firing.
-- **Line 52:** Uses a five-millisecond timeout to verify a safe 504 timeout error without waiting 45 seconds.
-- **Line 53:** Closes the integrated test.
-- **Line 54:** Blank line separates related sections; it performs no operation.
-- **Line 55:** Starts the integrated route/storage test with a test context for cleanup.
-- **Line 56:** Creates a uniquely named test directory under the system temporary directory.
-- **Line 57:** Verifies the resolved directory parent is the expected temporary location before cleanup is permitted.
-- **Line 58:** Verifies the generated directory name has the expected test prefix.
-- **Line 59:** Constructs the isolated SQLite file path.
-- **Line 60:** Opens that test database; let allows reopening it later.
-- **Line 61:** Applies real migrations to the test database.
-- **Line 62:** Initializes the fake provider mode as successful.
-- **Line 63:** Initializes an artificial clock so time limits can be tested without long waits.
-- **Line 64:** Reserves a function variable used to release a deliberately pending generation.
-- **Line 65:** Defines the injected asynchronous mock provider.
-- **Line 66:** Makes failure mode throw private-looking details to test that the route hides them.
-- **Line 67:** Makes invalid mode omit required safety text to test server-side output validation.
-- **Line 68:** Makes slow mode wait on a promise whose resolve function is retained for the concurrency check.
-- **Line 69:** Returns a fresh clone of the mock draft in successful cases.
-- **Line 70:** Closes the fake provider.
-- **Line 71:** Creates the real Express app with the mock provider/clock, listening only on loopback at an available port.
-- **Line 72:** Registers cleanup: close the server, close the current database handle, then remove only the previously verified owned test directory.
-- **Line 73:** Waits until the server is ready before sending requests.
-- **Line 74:** Builds the loopback base URL using the actual assigned port.
-- **Line 75:** Defines a helper posting JSON to a chosen route on that test server.
+- **Line 51:** Checks that provider quota status 429 remains a safe 429 error.
+- **Line 52:** Creates a mock transport that waits for abort and then rejects with a deliberately private message; once removes the listener after firing.
+- **Line 53:** Uses a five-millisecond timeout to verify a safe 504 timeout error without waiting 45 seconds.
+- **Line 54:** Closes the integrated test.
+- **Line 55:** Blank line separates related sections; it performs no operation.
+- **Line 56:** Starts the integrated route/storage test with a test context for cleanup.
+- **Line 57:** Creates a uniquely named test directory under the system temporary directory.
+- **Line 58:** Verifies the resolved directory parent is the expected temporary location before cleanup is permitted.
+- **Line 59:** Verifies the generated directory name has the expected test prefix.
+- **Line 60:** Constructs the isolated SQLite file path.
+- **Line 61:** Opens that test database; let allows reopening it later.
+- **Line 62:** Applies real migrations to the test database.
+- **Line 63:** Initializes the fake provider mode as successful.
+- **Line 64:** Initializes an artificial clock so time limits can be tested without long waits.
+- **Line 65:** Reserves a function variable used to release a deliberately pending generation.
+- **Line 66:** Defines the injected asynchronous mock provider.
+- **Line 67:** Makes failure mode throw private-looking details to test that the route hides them.
+- **Line 68:** Makes invalid mode omit required safety text to test server-side output validation.
+- **Line 69:** Makes slow mode wait on a promise whose resolve function is retained for the concurrency check.
+- **Line 70:** Returns a fresh clone of the mock draft in successful cases.
+- **Line 71:** Closes the fake provider.
+- **Line 72:** The test server now receives the fake sign-in options, because the app refuses to start without an authentication adapter.
+- **Line 73:** Registers cleanup: close the server, close the current database handle, then remove only the previously verified owned test directory.
+- **Line 74:** Waits until the server is ready before sending requests.
+- **Line 75:** Builds the loopback base URL using the actual assigned port.
 
 ### Lines 76–100
 
 ```text
-76 |   const generate = body => post('/api/ai/lesson-draft', body);
-77 |   assert.equal((await generate({ ...request, privacy_confirmed: false })).status, 400);
-78 |   for (const discipline of disciplines) {
-79 |     time += 60001;
-80 |     const response = await generate({ ...request, discipline });
-81 |     assert.equal(response.status, 200);
-82 |     assert.equal(validateDraft((await response.json()).draft, request), null);
-83 |   }
-84 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
-85 |   assert.equal((await post('/api/lessons', toLesson(draft, request))).status, 201);
-86 |   const check = new Database(filename, { readonly: true });
-87 |   assert.equal(check.prepare('SELECT title FROM lessons').get().title, draft.title);
-88 |   check.close();
-89 |   mode = 'fail';
-90 |   const failed = await generate(request);
-91 |   assert.equal(failed.status, 502);
-92 |   assert.ok(!(await failed.text()).includes('SECRET'));
-93 |   mode = 'invalid';
-94 |   assert.equal((await generate(request)).status, 502);
-95 |   assert.equal((await generate(request)).status, 429);
-96 |   assert.equal((await post('/api/lessons', { title: 'Manual during outage', discipline: 'Boxing' })).status, 201);
-97 |   time += 60001;
-98 |   mode = 'slow';
-99 |   const pending = generate(request);
-100 |   while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+76 |   const post = (route, body) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+77 |   const generate = body => post('/api/ai/lesson-draft', body);
+78 |   assert.equal((await generate({ ...request, privacy_confirmed: false })).status, 400);
+79 |   for (const discipline of disciplines) {
+80 |     time += 60001;
+81 |     const response = await generate({ ...request, discipline });
+82 |     assert.equal(response.status, 200);
+83 |     assert.equal(validateDraft((await response.json()).draft, request), null);
+84 |   }
+85 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
+86 |   assert.equal((await post('/api/lessons', toLesson(draft, request))).status, 201);
+87 |   const check = new Database(filename, { readonly: true });
+88 |   assert.equal(check.prepare('SELECT title FROM lessons').get().title, draft.title);
+89 |   check.close();
+90 |   mode = 'fail';
+91 |   const failed = await generate(request);
+92 |   assert.equal(failed.status, 502);
+93 |   assert.ok(!(await failed.text()).includes('SECRET'));
+94 |   mode = 'invalid';
+95 |   assert.equal((await generate(request)).status, 502);
+96 |   assert.equal((await generate(request)).status, 429);
+97 |   assert.equal((await post('/api/lessons', { title: 'Manual during outage', discipline: 'Boxing' })).status, 201);
+98 |   time += 60001;
+99 |   mode = 'slow';
+100 |   const pending = generate(request);
 ```
 
-- **Line 76:** Defines a shorter helper for the generation route.
-- **Line 77:** Verifies privacy refusal returns HTTP 400.
-- **Line 78:** Starts testing the real route for each supported discipline.
-- **Line 79:** Advances the fake clock by just over one minute to avoid the minute limit.
-- **Line 80:** Requests a draft with the current discipline.
-- **Line 81:** Requires a successful HTTP 200 generation response.
-- **Line 82:** Validates the returned draft against the requested class duration.
-- **Line 83:** Closes the discipline loop.
-- **Line 84:** GET must still return an empty lesson list: six generations have not saved anything.
-- **Line 85:** Explicitly posts a converted lesson to the existing save endpoint and requires HTTP 201.
-- **Line 86:** Opens a second, read-only connection to the same isolated database file.
-- **Line 87:** Checks that the saved title is visible from that separate connection.
-- **Line 88:** Closes the read-only connection.
-- **Line 89:** Switches the fake provider to exception mode.
-- **Line 90:** Sends a generation request that must fail.
-- **Line 91:** Requires HTTP 502.
-- **Line 92:** Checks that the raw private-looking exception text was not exposed.
-- **Line 93:** Switches to structurally invalid output mode.
-- **Line 94:** Requires the malformed draft to produce 502.
-- **Line 95:** Requires the next request to hit the twenty-per-day limit.
-- **Line 96:** Checks that manual lesson creation still returns 201 during the AI failure/limit situation.
-- **Line 97:** Advances past the minute window while still inside the rolling day.
-- **Line 98:** Switches the mock provider to pending mode.
-- **Line 99:** Starts one generation without awaiting completion yet.
-- **Line 100:** Waits in short intervals until the provider exposes its release callback.
+- **Line 76:** Defines a helper posting JSON to a chosen route on that test server.
+- **Line 77:** Defines a shorter helper for the generation route.
+- **Line 78:** Verifies privacy refusal returns HTTP 400.
+- **Line 79:** Starts testing the real route for each supported discipline.
+- **Line 80:** Advances the fake clock by just over one minute to avoid the minute limit.
+- **Line 81:** Requests a draft with the current discipline.
+- **Line 82:** Requires a successful HTTP 200 generation response.
+- **Line 83:** Validates the returned draft against the requested class duration.
+- **Line 84:** Closes the discipline loop.
+- **Line 85:** GET must still return an empty lesson list: six generations have not saved anything.
+- **Line 86:** Explicitly posts a converted lesson to the existing save endpoint and requires HTTP 201.
+- **Line 87:** Opens a second, read-only connection to the same isolated database file.
+- **Line 88:** Checks that the saved title is visible from that separate connection.
+- **Line 89:** Closes the read-only connection.
+- **Line 90:** Switches the fake provider to exception mode.
+- **Line 91:** Sends a generation request that must fail.
+- **Line 92:** Requires HTTP 502.
+- **Line 93:** Checks that the raw private-looking exception text was not exposed.
+- **Line 94:** Switches to structurally invalid output mode.
+- **Line 95:** Requires the malformed draft to produce 502.
+- **Line 96:** Requires the next request to hit the twenty-per-day limit.
+- **Line 97:** Checks that manual lesson creation still returns 201 during the AI failure/limit situation.
+- **Line 98:** Advances past the minute window while still inside the rolling day.
+- **Line 99:** Switches the mock provider to pending mode.
+- **Line 100:** Starts one generation without awaiting completion yet.
 
-### Lines 101–113
+### Lines 101–114
 
 ```text
-101 |   assert.equal((await generate(request)).status, 429);
-102 |   release();
-103 |   assert.equal((await pending).status, 200);
-104 |   mode = 'ok';
-105 |   for (let attempt = 0; attempt < 11; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
-106 |   time += 60001;
-107 |   assert.equal((await generate(request)).status, 429);
-108 |   time += 86400000;
-109 |   assert.equal((await generate(request)).status, 200);
-110 |   database.close();
-111 |   database = new Database(filename);
-112 |   assert.equal(database.prepare('SELECT title FROM lessons ORDER BY id').all()[0].title, draft.title);
-113 | });
+101 |   while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+102 |   assert.equal((await generate(request)).status, 429);
+103 |   release();
+104 |   assert.equal((await pending).status, 200);
+105 |   mode = 'ok';
+106 |   for (let attempt = 0; attempt < 11; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
+107 |   time += 60001;
+108 |   assert.equal((await generate(request)).status, 429);
+109 |   time += 86400000;
+110 |   assert.equal((await generate(request)).status, 200);
+111 |   database.close();
+112 |   database = new Database(filename);
+113 |   assert.equal(database.prepare('SELECT title FROM lessons ORDER BY id').all()[0].title, draft.title);
+114 | });
 ```
 
-- **Line 101:** Requires the next request to hit the twenty-per-day limit.
-- **Line 102:** Resolves the pending provider promise.
-- **Line 103:** Requires the original pending request to succeed.
-- **Line 104:** Restores successful provider mode.
-- **Line 105:** Adds eleven accepted attempts, advancing the fake clock each time; combined with earlier attempts these reach twenty in the day.
-- **Line 106:** Advances past the minute window while still inside the rolling day.
-- **Line 107:** Requires the next request to hit the twenty-per-day limit.
-- **Line 108:** Advances a full day so all previous attempts expire.
-- **Line 109:** Requires generation to succeed again after the day limit resets.
-- **Line 110:** Closes the original database handle after the route work is done.
-- **Line 111:** Reopens the same test database file, replacing the handle used by cleanup.
-- **Line 112:** Checks that the saved AI lesson remains present after reopening.
-- **Line 113:** Closes the integrated test.
-
+- **Line 101:** Waits in short intervals until the provider exposes its release callback.
+- **Line 102:** Requires the next request to hit the twenty-per-day limit.
+- **Line 103:** Resolves the pending provider promise.
+- **Line 104:** Requires the original pending request to succeed.
+- **Line 105:** Restores successful provider mode.
+- **Line 106:** Adds eleven accepted attempts, advancing the fake clock each time; combined with earlier attempts these reach twenty in the day.
+- **Line 107:** Advances past the minute window while still inside the rolling day.
+- **Line 108:** Requires the next request to hit the twenty-per-day limit.
+- **Line 109:** Advances a full day so all previous attempts expire.
+- **Line 110:** Requires generation to succeed again after the day limit resets.
+- **Line 111:** Closes the original database handle after the route work is done.
+- **Line 112:** Reopens the same test database file, replacing the handle used by cleanup.
+- **Line 113:** Checks that the saved AI lesson remains present after reopening.
+- **Line 114:** Closes the integrated test.
 
 ## prisma/schema.prisma
 
@@ -3310,9 +3445,9 @@ PostgreSQL design only. It generates a separate client and does not change the a
 20 |   coaching_notes   String   @default("") @db.Text
 21 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
 22 |   media            LessonMedia[]
-23 |
-24 |   @@map("lessons")
-25 | }
+23 |   owner_id         String?
+24 |   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
+25 |
 ```
 
 - **Line 1:** Opens the client-generation configuration block.
@@ -3337,57 +3472,231 @@ PostgreSQL design only. It generates a separate client and does not change the a
 - **Line 20:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
 - **Line 21:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
 - **Line 22:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
-- **Line 23:** Blank line separates related sections and performs no operation.
-- **Line 24:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
-- **Line 25:** Closes the generator block.
+- **Line 23:** Adds owner_id to Lesson: the id of the coach who owns it. It is optional (String?) because lessons created before accounts existed have no owner yet.
+- **Line 24:** Declares the relation to User through owner_id. onDelete: Restrict means an account that still owns lessons cannot be deleted by accident.
+- **Line 25:** Blank line separates related sections and performs no operation.
 
-### Lines 26–46
+### Lines 26–50
 
 ```text
-26 |
-27 | model LessonMedia {
-28 |   id          Int      @id @default(autoincrement())
-29 |   lesson_id   Int?
-30 |   position    Int      @default(0)
-31 |   kind        String   @db.Text
-32 |   origin      String   @db.Text
-33 |   url         String?  @db.Text
-34 |   title       String   @default("") @db.Text
-35 |   activity    String   @default("") @db.Text
-36 |   mime        String?  @db.Text
-37 |   size_bytes  Int?
-38 |   data        Bytes?
-39 |   credit      String   @default("") @db.Text
-40 |   source_page String?  @db.Text
-41 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
-42 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
-43 |
-44 |   @@index([lesson_id])
-45 |   @@map("lesson_media")
-46 | }
+26 |   @@index([owner_id])
+27 |   @@map("lessons")
+28 | }
+29 |
+30 | model LessonMedia {
+31 |   id          Int      @id @default(autoincrement())
+32 |   lesson_id   Int?
+33 |   position    Int      @default(0)
+34 |   kind        String   @db.Text
+35 |   origin      String   @db.Text
+36 |   url         String?  @db.Text
+37 |   title       String   @default("") @db.Text
+38 |   activity    String   @default("") @db.Text
+39 |   mime        String?  @db.Text
+40 |   size_bytes  Int?
+41 |   data        Bytes?
+42 |   credit      String   @default("") @db.Text
+43 |   source_page String?  @db.Text
+44 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
+45 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+46 |   owner_id    String?
+47 |   owner       User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
+48 |
+49 |   @@index([lesson_id])
+50 |   @@index([owner_id])
 ```
 
-- **Line 26:** Blank line separates related sections and performs no operation.
-- **Line 27:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
-- **Line 28:** Auto-incrementing whole-number primary key.
-- **Line 29:** Optional (?) lesson id: empty for uploads not saved yet.
-- **Line 30:** Order within the lesson, defaulting to 0.
-- **Line 31:** Text column for the kind of attachment.
-- **Line 32:** Text column for where the attachment came from.
-- **Line 33:** Optional web address for linked media.
-- **Line 34:** Caption text, empty by default.
-- **Line 35:** Activity heading the attachment belongs to.
-- **Line 36:** Optional MIME type of an upload.
-- **Line 37:** Optional size in bytes.
-- **Line 38:** Optional binary file contents (Bytes maps to BYTEA).
-- **Line 39:** Credit text, empty by default.
-- **Line 40:** Optional link to the source page.
-- **Line 41:** Creation time with timezone, set automatically.
-- **Line 42:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
-- **Line 43:** Blank line separates related sections and performs no operation.
-- **Line 44:** Asks Prisma for an index on lesson_id.
-- **Line 45:** Maps the model to the existing table name lesson_media.
-- **Line 46:** Closes the generator block.
+- **Line 26:** Adds an index on owner_id so listing one coach’s lessons is fast.
+- **Line 27:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 28:** Closes the generator block.
+- **Line 29:** Blank line separates related sections and performs no operation.
+- **Line 30:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
+- **Line 31:** Auto-incrementing whole-number primary key.
+- **Line 32:** Optional (?) lesson id: empty for uploads not saved yet.
+- **Line 33:** Order within the lesson, defaulting to 0.
+- **Line 34:** Text column for the kind of attachment.
+- **Line 35:** Text column for where the attachment came from.
+- **Line 36:** Optional web address for linked media.
+- **Line 37:** Caption text, empty by default.
+- **Line 38:** Activity heading the attachment belongs to.
+- **Line 39:** Optional MIME type of an upload.
+- **Line 40:** Optional size in bytes.
+- **Line 41:** Optional binary file contents (Bytes maps to BYTEA).
+- **Line 42:** Credit text, empty by default.
+- **Line 43:** Optional link to the source page.
+- **Line 44:** Creation time with timezone, set automatically.
+- **Line 45:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
+- **Line 46:** Adds owner_id to LessonMedia so every attachment, even an unsaved upload, belongs to a coach.
+- **Line 47:** Relation from an attachment to its owner, with the same Restrict rule.
+- **Line 48:** Blank line separates related sections and performs no operation.
+- **Line 49:** Asks Prisma for an index on lesson_id.
+- **Line 50:** Adds an index on owner_id for attachments.
+
+### Lines 51–75
+
+```text
+51 |   @@map("lesson_media")
+52 | }
+53 |
+54 | model User {
+55 |   id            String         @id
+56 |   name          String
+57 |   email         String         @unique
+58 |   emailVerified Boolean        @default(false) @map("email_verified")
+59 |   image         String?
+60 |   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+61 |   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+62 |   sessions      Session[]
+63 |   accounts      Account[]
+64 |   lessons       Lesson[]
+65 |   media         LessonMedia[]
+66 |
+67 |   @@map("auth_users")
+68 | }
+69 |
+70 | model Session {
+71 |   id        String   @id
+72 |   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+73 |   token     String   @unique
+74 |   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+75 |   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+```
+
+- **Line 51:** Maps the model to the existing table name lesson_media.
+- **Line 52:** Closes the generator block.
+- **Line 53:** Blank line separates related sections and performs no operation.
+- **Line 54:** Declares the User model: one coach account. Better Auth reads and writes it.
+- **Line 55:** Text primary key; Better Auth creates random ids.
+- **Line 56:** The coach’s display name.
+- **Line 57:** The email address; @unique means no two accounts can share it. Better Auth lowercases it.
+- **Line 58:** Whether the email was verified (not enforced in this local version); stored as email_verified in the database.
+- **Line 59:** Optional profile picture address (used by Google sign-in).
+- **Line 60:** When the account was created.
+- **Line 61:** When the account was last changed; @updatedAt refreshes it automatically.
+- **Line 62:** The coach’s login sessions (reverse side of Session.user).
+- **Line 63:** The coach’s sign-in methods (password, Google).
+- **Line 64:** The lessons this coach owns.
+- **Line 65:** The attachments this coach owns.
+- **Line 66:** Blank line separates related sections and performs no operation.
+- **Line 67:** Maps the model to the auth_users table.
+- **Line 68:** Closes the generator block.
+- **Line 69:** Blank line separates related sections and performs no operation.
+- **Line 70:** Declares Session: one signed-in browser. The browser holds only a random token; everything else is here on the server.
+- **Line 71:** Text primary key.
+- **Line 72:** When the session stops working (seven days after sign-in, refreshed daily).
+- **Line 73:** The secret session token; unique so one token means one session.
+- **Line 74:** When the session started.
+- **Line 75:** When the session was last refreshed.
+
+### Lines 76–100
+
+```text
+76 |   ipAddress String?  @map("ip_address")
+77 |   userAgent String?  @map("user_agent")
+78 |   userId    String   @map("user_id")
+79 |   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+80 |
+81 |   @@index([userId])
+82 |   @@map("auth_sessions")
+83 | }
+84 |
+85 | model Account {
+86 |   id                    String    @id
+87 |   accountId             String    @map("account_id")
+88 |   providerId            String    @map("provider_id")
+89 |   userId                String    @map("user_id")
+90 |   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+91 |   accessToken           String?   @map("access_token")
+92 |   refreshToken          String?   @map("refresh_token")
+93 |   idToken               String?   @map("id_token")
+94 |   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+95 |   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+96 |   scope                 String?
+97 |   password              String?
+98 |   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+99 |   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+100 |
+```
+
+- **Line 76:** The network address the session was created from (for the coach’s own audit).
+- **Line 77:** The browser description the session was created with.
+- **Line 78:** The coach this session belongs to.
+- **Line 79:** Relation to User. onDelete: Cascade removes sessions when an account is removed.
+- **Line 80:** Blank line separates related sections and performs no operation.
+- **Line 81:** Index for finding all sessions of one coach.
+- **Line 82:** Maps the model to the auth_sessions table.
+- **Line 83:** Closes the generator block.
+- **Line 84:** Blank line separates related sections and performs no operation.
+- **Line 85:** Declares Account: one way a coach can sign in (the password credential, or Google).
+- **Line 86:** Text primary key.
+- **Line 87:** The id of the account at the provider (for passwords it is the coach’s own id).
+- **Line 88:** Which provider: credential for email and password, or google.
+- **Line 89:** The coach this sign-in method belongs to.
+- **Line 90:** Relation to User with Cascade deletion.
+- **Line 91:** Google access token, if Google sign-in is used.
+- **Line 92:** Google refresh token, if used.
+- **Line 93:** Google identity token, if used.
+- **Line 94:** When the Google access token expires.
+- **Line 95:** When the Google refresh token expires.
+- **Line 96:** Permissions granted by Google.
+- **Line 97:** The password HASH (salted scrypt, never the password itself) for the credential provider.
+- **Line 98:** When this sign-in method was added.
+- **Line 99:** When it was last changed.
+- **Line 100:** Blank line separates related sections and performs no operation.
+
+### Lines 101–124
+
+```text
+101 |   @@index([userId])
+102 |   @@map("auth_accounts")
+103 | }
+104 |
+105 | model Verification {
+106 |   id         String   @id
+107 |   identifier String
+108 |   value      String
+109 |   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+110 |   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+111 |   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+112 |
+113 |   @@index([identifier])
+114 |   @@map("auth_verifications")
+115 | }
+116 |
+117 | model RateLimit {
+118 |   id          String @id
+119 |   key         String @unique
+120 |   count       Int
+121 |   lastRequest BigInt @map("last_request")
+122 |
+123 |   @@map("auth_rate_limits")
+124 | }
+```
+
+- **Line 101:** Index for finding a coach’s sign-in methods.
+- **Line 102:** Maps the model to the auth_accounts table.
+- **Line 103:** Closes the generator block.
+- **Line 104:** Blank line separates related sections and performs no operation.
+- **Line 105:** Declares Verification: short-lived one-time tokens, such as the password reset token.
+- **Line 106:** Text primary key.
+- **Line 107:** What the token is for, for example a reset request for one coach.
+- **Line 108:** The token value or data stored with it.
+- **Line 109:** When the token expires (one hour for reset links).
+- **Line 110:** When it was created.
+- **Line 111:** When it was last changed.
+- **Line 112:** Blank line separates related sections and performs no operation.
+- **Line 113:** Index for looking tokens up by what they are for.
+- **Line 114:** Maps the model to the auth_verifications table.
+- **Line 115:** Closes the generator block.
+- **Line 116:** Blank line separates related sections and performs no operation.
+- **Line 117:** Declares RateLimit: counters that slow down repeated requests (for example guessing passwords). Keeping them in the database means a restart does not reset them.
+- **Line 118:** Text primary key.
+- **Line 119:** A key made from the request path and the client address; unique so each has one counter.
+- **Line 120:** How many requests were made in the current window.
+- **Line 121:** When the last request happened, in milliseconds (BigInt because it is a large number).
+- **Line 122:** Blank line separates related sections and performs no operation.
+- **Line 123:** Maps the model to the auth_rate_limits table.
+- **Line 124:** Closes the generator block.
 
 ## prisma.config.js
 
@@ -3471,7 +3780,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\pris
 
 Reviewed initial PostgreSQL SQL, written directly after the offline diff command produced no output. Not executed against PostgreSQL; static checks are not database execution proof.
 
-### Lines 1–15
+### Lines 1–18
 
 ```text
 1 | BEGIN;
@@ -3489,6 +3798,9 @@ Reviewed initial PostgreSQL SQL, written directly after the offline diff command
 13 |   CONSTRAINT "lessons_title_check" CHECK (length(trim("title")) > 0),
 14 |   CONSTRAINT "lessons_discipline_check" CHECK ("discipline" IN ('Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training')),
 15 |   CONSTRAINT "lessons_skill_level_check" CHECK ("skill_level" IN ('Beginner', 'Intermediate', 'Advanced')),
+16 |   CONSTRAINT "lessons_duration_check" CHECK ("duration_minutes" > 0)
+17 | );
+18 | COMMIT;
 ```
 
 - **Line 1:** Starts a transaction so table creation and constraints commit together.
@@ -3506,15 +3818,6 @@ Reviewed initial PostgreSQL SQL, written directly after the offline diff command
 - **Line 13:** Rejects titles containing only ordinary surrounding spaces, matching the SQLite trim-based rule.
 - **Line 14:** Restricts discipline to the existing six exact names.
 - **Line 15:** Restricts skill level to Beginner, Intermediate or Advanced.
-
-### Lines 16–18
-
-```text
-16 |   CONSTRAINT "lessons_duration_check" CHECK ("duration_minutes" > 0)
-17 | );
-18 | COMMIT;
-```
-
 - **Line 16:** Requires positive duration when present; PostgreSQL CHECK permits null here.
 - **Line 17:** Closes the table definition and SQL statement.
 - **Line 18:** Commits the transaction. Prisma's own migration bookkeeping is managed separately by its migration runner.
@@ -3563,14 +3866,13 @@ Guarded server-only Prisma factory used by PostgreSQL startup and isolated tests
 - **Line 15:** Constructs and returns a PrismaClient without executing a query. Callers must disconnect when finished.
 - **Line 16:** Closes the development factory.
 
-
 ## server/prisma-setup.test.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\prisma-setup.test.js`
 
 Offline setup tests only. The fictitious URL is never queried. These tests do not claim a remote migration, empty table or successful Neon connection.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | import test from 'node:test';
@@ -3588,6 +3890,16 @@ Offline setup tests only. The fictitious URL is never queried. These tests do no
 13 |   const url = new URL('postgresql://test:test@ep-example-pooler.us-east-2.aws.neon.tech/coachlab_test?sslmode=require');
 14 |   const env = { COACHLAB_DB_ENV: 'development', COACHLAB_DEV_DATABASE_URL: url.href, COACHLAB_DEV_EXPECTED_HOST: url.hostname, COACHLAB_DEV_EXPECTED_DATABASE: 'coachlab_test' };
 15 |   const client = createDevelopmentClient(env);
+16 |   assert.equal(typeof client.lesson.findMany, 'function');
+17 |   assert.equal(typeof client.lesson.create, 'function');
+18 |   await client.$disconnect();
+19 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_EXPECTED_DATABASE: 'another' }), /does not match/);
+20 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href.replace('sslmode=require', 'sslmode=disable') }), /TLS/);
+21 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href + '&sslcert=unexpected' }), /Unsupported/);
+22 | });
+23 |
+24 | test('initial migration preserves nine fields and SQLite checks without destructive SQL', () => {
+25 |   const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
 ```
 
 - **Line 1:** Imports Node's built-in test runner.
@@ -3605,52 +3917,36 @@ Offline setup tests only. The fictitious URL is never queried. These tests do no
 - **Line 13:** Creates a fictitious Neon-shaped URL with deliberately fake test credentials; no database operation uses it.
 - **Line 14:** Builds explicit development settings with matching expected host and database for the fake target.
 - **Line 15:** Constructs the client without calling connect or a model query.
-
-### Lines 16–30
-
-```text
-16 |   assert.equal(typeof client.lesson.findMany, 'function');
-17 |   assert.equal(typeof client.lesson.create, 'function');
-18 |   await client.$disconnect();
-19 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_EXPECTED_DATABASE: 'another' }), /does not match/);
-20 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href.replace('sslmode=require', 'sslmode=disable') }), /TLS/);
-21 |   assert.throws(() => createDevelopmentClient({ ...env, COACHLAB_DEV_DATABASE_URL: url.href + '&sslcert=unexpected' }), /Unsupported/);
-22 | });
-23 |
-24 | test('initial migration preserves nine fields and SQLite checks without destructive SQL', () => {
-25 |   const sql = readFileSync(new URL('../prisma/migrations/20261015000100_create_lessons/migration.sql', import.meta.url), 'utf8');
-26 |   const columns = [...sql.matchAll(/^  "([a-z_]+)" /gm)].map(match => match[1]);
-27 |   assert.deepEqual(columns, ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
-28 |   assert.equal((sql.match(/ CHECK /g) || []).length, 4);
-29 |   assert.match(sql, /TIMESTAMPTZ\(3\)/);
-30 |   assert.match(sql, /BEGIN;[\s\S]*COMMIT;/);
-```
-
 - **Line 16:** Confirms the generated Lesson read method exists without invoking it.
 - **Line 17:** Confirms the generated Lesson create method exists without invoking it.
 - **Line 18:** Disconnects the unconnected client to release any resources.
 - **Line 19:** Checks that a mismatched expected database is refused.
 - **Line 20:** Checks that disabling TLS in the supplied URL is refused.
 - **Line 21:** Checks that an unexpected SSL query option is refused.
-- **Line 22:** Closes the construction test.
+- **Line 22:** Closes the first test.
 - **Line 23:** Blank line separates related sections and performs no operation.
 - **Line 24:** Starts static SQL integrity checks, not a PostgreSQL execution test.
 - **Line 25:** Reads the committed initial migration as UTF-8 text.
+
+### Lines 26–32
+
+```text
+26 |   const columns = [...sql.matchAll(/^  "([a-z_]+)" /gm)].map(match => match[1]);
+27 |   assert.deepEqual(columns, ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+28 |   assert.equal((sql.match(/ CHECK /g) || []).length, 4);
+29 |   assert.match(sql, /TIMESTAMPTZ\(3\)/);
+30 |   assert.match(sql, /BEGIN;[\s\S]*COMMIT;/);
+31 |   assert.doesNotMatch(sql, /\b(DROP|DELETE|TRUNCATE|UPDATE|INSERT)\b/i);
+32 | });
+```
+
 - **Line 26:** Extracts the nine quoted column declarations using a regular expression and map.
 - **Line 27:** Compares exact column names/order with the existing lesson schema.
 - **Line 28:** Requires four database CHECK constraints.
 - **Line 29:** Requires millisecond timestamp-with-time-zone storage.
 - **Line 30:** Requires an explicit BEGIN/COMMIT transaction wrapper.
-
-### Lines 31–32
-
-```text
-31 |   assert.doesNotMatch(sql, /\b(DROP|DELETE|TRUNCATE|UPDATE|INSERT)\b/i);
-32 | });
-```
-
 - **Line 31:** Rejects destructive or data-changing statement keywords in this initial schema file.
-- **Line 32:** Closes the static migration test.
+- **Line 32:** Closes the first test.
 
 ## SQL migrations and excluded files
 
@@ -3668,7 +3964,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 These tests run through npm run test:prisma. They do not connect to a database or execute migrations. They guard the real config-loader path and the security fix after the scoped dependency overrides.
 
-### Lines 1–15
+### Lines 1–25
 
 ```text
 1 | import test from 'node:test';
@@ -3686,6 +3982,16 @@ These tests run through npm run test:prisma. They do not connect to a database o
 13 |
 14 | test('configuration merging preserves nested settings and handles circular references', () => {
 15 |   const original = { migrations: { path: 'prisma/migrations' } };
+16 |   assert.deepEqual(deepmerge(original, { migrations: { seed: 'node seed.js' } }), {
+17 |     migrations: { path: 'prisma/migrations', seed: 'node seed.js' },
+18 |   });
+19 |   assert.deepEqual(original, { migrations: { path: 'prisma/migrations' } });
+20 |   const left = {};
+21 |   const right = {};
+22 |   left.self = left;
+23 |   right.self = right;
+24 |   const merged = deepmerge(left, right);
+25 |   assert.equal(merged.self, merged);
 ```
 
 - **Line 1:** Imports Node’s built-in test function; import names code supplied by another module.
@@ -3700,26 +4006,9 @@ These tests run through npm run test:prisma. They do not connect to a database o
 - **Line 10:** Checks the resolved Prisma schema path is the real CoachLab schema file.
 - **Line 11:** Compares the complete migrations settings object with the expected absolute directory.
 - **Line 12:** Closes the callback and test registration; the semicolon ends the statement.
-- **Line 13:** Blank line separates the two independent test cases.
+- **Line 13:** Blank line separates imports from test definitions.
 - **Line 14:** Declares a synchronous regression test for merge behavior and the previously vulnerable recursive case.
 - **Line 15:** Creates a nested configuration object whose original contents must survive merging unchanged.
-
-### Lines 16–26
-
-```text
-16 |   assert.deepEqual(deepmerge(original, { migrations: { seed: 'node seed.js' } }), {
-17 |     migrations: { path: 'prisma/migrations', seed: 'node seed.js' },
-18 |   });
-19 |   assert.deepEqual(original, { migrations: { path: 'prisma/migrations' } });
-20 |   const left = {};
-21 |   const right = {};
-22 |   left.self = left;
-23 |   right.self = right;
-24 |   const merged = deepmerge(left, right);
-25 |   assert.equal(merged.self, merged);
-26 | });
-```
-
 - **Line 16:** Merges a second migrations setting and begins an exact comparison against an expected object; seed is sample text, not an executed command.
 - **Line 17:** Defines the expected combined settings, retaining both path and seed.
 - **Line 18:** Closes the expected object and assertion call.
@@ -3730,7 +4019,14 @@ These tests run through npm run test:prisma. They do not connect to a database o
 - **Line 23:** Makes the second object point to itself at the same property, reproducing the vulnerable shape.
 - **Line 24:** Merges the cyclic objects; an exception or stack exhaustion would fail this test.
 - **Line 25:** Checks the merged object preserves its own self-reference rather than breaking the cycle.
-- **Line 26:** Closes the test callback and registration.
+
+### Lines 26–26
+
+```text
+26 | });
+```
+
+- **Line 26:** Closes the callback and test registration; the semicolon ends the statement.
 
 ## Phase 9C.1 verification note (2026-10-15)
 
@@ -3746,9 +4042,9 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\serv
 
 This opt-in integration test uses existing pg and SQLite dependencies. It does not change Express startup or add an importer to the application. The isolated schema and all records exist only inside a transaction, then roll back. Operator Console verification is still required before setting the opt-in flag. Disposable copies stay outside OneDrive/Git; historical lesson contents are never embedded in this file.
 
-### Lines 1–15
+### Lines 1–25
 
-```javascript
+```text
 1 | import test from 'node:test';
 2 | import assert from 'node:assert/strict';
 3 | import Database from 'better-sqlite3';
@@ -3764,6 +4060,16 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 13 | const fileHash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 14 | const canonical = rows => rows.map(row => fields.map(key => key === 'created_at' ? new Date(row[key]).toISOString() : row[key]));
 15 | const equalRows = (actual, expected) => {
+16 |   assert.equal(actual.length, expected.length);
+17 |   const left = canonical(actual), right = canonical(expected);
+18 |   for (let row = 0; row < right.length; row++) {
+19 |     for (let field = 0; field < fields.length; field++) {
+20 |       assert.ok(left[row][field] === right[row][field], `Mismatch in row ${row}, field ${fields[field]}`);
+21 |     }
+22 |   }
+23 | };
+24 |
+25 | test('isolated PostgreSQL migration validation', { skip: process.env.COACHLAB_RUN_MIGRATION_TESTS !== 'verified-development', timeout: 120000 }, async t => {
 ```
 
 - **Line 1:** Imports Node's built-in test runner; no additional test framework is installed.
@@ -3781,27 +4087,6 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 13:** Fingerprints file bytes so the test can detect any change to an original SQLite file.
 - **Line 14:** Nested map calls turn each row into nine ordered values; the conditional converts dates to UTC ISO strings while preserving other values exactly.
 - **Line 15:** Begins the helper that compares every field without printing its contents.
-
-### Lines 16–30
-
-```javascript
-16 |   assert.equal(actual.length, expected.length);
-17 |   const left = canonical(actual), right = canonical(expected);
-18 |   for (let row = 0; row < right.length; row++) {
-19 |     for (let field = 0; field < fields.length; field++) {
-20 |       assert.ok(left[row][field] === right[row][field], `Mismatch in row ${row}, field ${fields[field]}`);
-21 |     }
-22 |   }
-23 | };
-24 |
-25 | test('isolated PostgreSQL migration validation', { skip: process.env.COACHLAB_RUN_MIGRATION_TESTS !== 'verified-development', timeout: 120000 }, async t => {
-26 |   const env = process.env;
-27 |   assert.equal(env.COACHLAB_DB_ENV, 'development');
-28 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
-29 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
-30 |   const direct = parseUrl(env.COACHLAB_DEV_DIRECT_URL);
-```
-
 - **Line 16:** Requires identical record counts before comparing values.
 - **Line 17:** Builds normalized value arrays for actual and expected rows; the comma declares both constants.
 - **Line 18:** Loops over every record index; row++ advances to the next record.
@@ -3812,15 +4097,15 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 23:** Closes the helper function body and ends its assignment with a semicolon.
 - **Line 24:** Blank line separates related parts of the test for readability.
 - **Line 25:** Registers an opt-in live test with a two-minute timeout; missing explicit approval flag skips it without connecting.
-- **Line 26:** Creates a short reference to server-side process environment settings.
-- **Line 27:** Requires explicit development configuration.
-- **Line 28:** Requires the reviewed CoachLab project identifier; this local assertion cannot replace independent Console verification.
-- **Line 29:** Requires the reviewed Development branch identifier, not production.
-- **Line 30:** Parses the private unpooled connection URL in memory.
 
-### Lines 31–45
+### Lines 26–50
 
-```javascript
+```text
+26 |   const env = process.env;
+27 |   assert.equal(env.COACHLAB_DB_ENV, 'development');
+28 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
+29 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
+30 |   const direct = parseUrl(env.COACHLAB_DEV_DIRECT_URL);
 31 |   const pooled = parseUrl(env.COACHLAB_DEV_DATABASE_URL);
 32 |   assert.equal(pooled.hostname, env.COACHLAB_DEV_EXPECTED_HOST);
 33 |   assert.ok(pooled.hostname.startsWith('ep-long-bird-b50l2nhb-pooler.') && pooled.hostname.endsWith('.neon.tech'));
@@ -3836,8 +4121,18 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 43 |   }
 44 |   const sources = JSON.parse(env.COACHLAB_MIGRATION_SOURCES);
 45 |   assert.ok(Array.isArray(sources) && sources.length === 2);
+46 |   const archive = mkdtempSync(path.join(tmpdir(), 'coachlab-migration-validation-'));
+47 |   assert.ok(!/onedrive/i.test(archive));
+48 |   const hashes = sources.map(fileHash);
+49 |   const datasets = [];
+50 |   for (const [index, filename] of sources.entries()) {
 ```
 
+- **Line 26:** Creates a short reference to server-side process environment settings.
+- **Line 27:** Requires explicit development configuration.
+- **Line 28:** Requires the reviewed CoachLab project identifier; this local assertion cannot replace independent Console verification.
+- **Line 29:** Requires the reviewed Development branch identifier, not production.
+- **Line 30:** Parses the private unpooled connection URL in memory.
 - **Line 31:** Parses the private pooled connection URL in memory.
 - **Line 32:** Checks the pooled host matches the operator's expected host.
 - **Line 33:** Requires the independently reviewed endpoint prefix and Neon hostname suffix.
@@ -3853,15 +4148,15 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 43:** Closes the current loop, condition or protected block.
 - **Line 44:** Parses the JSON array of two explicitly selected source paths from the environment.
 - **Line 45:** Rejects missing or differently shaped source lists.
+- **Line 46:** Creates a unique disposable-copy directory in the operating system's temporary location.
+- **Line 47:** Rejects a temporary-copy directory whose path includes OneDrive, case-insensitively.
+- **Line 48:** Records both original files' SHA-256 fingerprints before backup.
+- **Line 49:** Starts an empty array to hold lesson rows read from the disposable copies.
+- **Line 50:** Destructures each indexed item so the loop can use its position and its value.
 
-### Lines 46–60
+### Lines 51–75
 
-```javascript
-46 |   const archive = mkdtempSync(path.join(tmpdir(), 'coachlab-migration-validation-'));
-47 |   assert.ok(!/onedrive/i.test(archive));
-48 |   const hashes = sources.map(fileHash);
-49 |   const datasets = [];
-50 |   for (const [index, filename] of sources.entries()) {
+```text
 51 |     assert.ok(path.isAbsolute(filename));
 52 |     const original = new Database(filename, { readonly: true, fileMustExist: true });
 53 |     const copy = path.join(archive, `source-${index}.sqlite`);
@@ -3872,27 +4167,6 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 58 |       const rows = database.prepare('SELECT * FROM lessons ORDER BY id').safeIntegers().all();
 59 |       for (const row of rows) {
 60 |         assert.ok(row.id >= -2147483648n && row.id < 2147483647n);
-```
-
-- **Line 46:** Creates a unique disposable-copy directory in the operating system's temporary location.
-- **Line 47:** Rejects a temporary-copy directory whose path includes OneDrive, case-insensitively.
-- **Line 48:** Records both original files' SHA-256 fingerprints before backup.
-- **Line 49:** Starts an empty array to hold lesson rows read from the disposable copies.
-- **Line 50:** Destructures each indexed item so the loop can use its position and its value.
-- **Line 51:** Requires explicit absolute source paths.
-- **Line 52:** Opens an existing source read-only and refuses to create a missing file.
-- **Line 53:** Builds a distinct copy filename from the source index; no lesson content is embedded in code.
-- **Line 54:** Uses SQLite's backup mechanism for consistency and always closes the original handle afterward.
-- **Line 55:** Opens only the disposable copy for lesson inspection, still read-only.
-- **Line 56:** Starts a protected operation whose following catch or finally handles errors or cleanup.
-- **Line 57:** Runs SQLite integrity_check on the copy and requires its result to be ok.
-- **Line 58:** Reads every lesson ordered by ID, using BigInt for SQLite integers to avoid rounding.
-- **Line 59:** Iterates over every row to validate or insert it, depending on the surrounding helper.
-- **Line 60:** Rejects IDs outside PostgreSQL Int range or the top value that leaves no room for a generated successor; n suffixes denote BigInt literals.
-
-### Lines 61–75
-
-```javascript
 61 |         row.id = Number(row.id);
 62 |         if (row.duration_minutes !== null) {
 63 |           assert.ok(row.duration_minutes > 0n && row.duration_minutes <= 2147483647n);
@@ -3910,6 +4184,16 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 75 |   const read = async () => (await client.query('SELECT * FROM lessons ORDER BY id')).rows;
 ```
 
+- **Line 51:** Requires explicit absolute source paths.
+- **Line 52:** Opens an existing source read-only and refuses to create a missing file.
+- **Line 53:** Builds a distinct copy filename from the source index; no lesson content is embedded in code.
+- **Line 54:** Uses SQLite's backup mechanism for consistency and always closes the original handle afterward.
+- **Line 55:** Opens only the disposable copy for lesson inspection, still read-only.
+- **Line 56:** Starts a protected operation whose following catch or finally handles errors or cleanup.
+- **Line 57:** Runs SQLite integrity_check on the copy and requires its result to be ok.
+- **Line 58:** Reads every lesson ordered by ID, using BigInt for SQLite integers to avoid rounding.
+- **Line 59:** Iterates over every row to validate or insert it, depending on the surrounding helper.
+- **Line 60:** Rejects IDs outside PostgreSQL Int range or the top value that leaves no room for a generated successor; n suffixes denote BigInt literals.
 - **Line 61:** Converts a verified in-range BigInt ID into a JavaScript number.
 - **Line 62:** Preserves null duration; only supplied numeric durations enter this block.
 - **Line 63:** Checks duration is positive and within PostgreSQL's signed integer range before conversion.
@@ -3926,9 +4210,9 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 74:** Combines a fixed test prefix with UUID hex characters to produce a collision-resistant SQL-safe schema name.
 - **Line 75:** Defines an async read helper; search_path is later restricted to the isolated schema.
 
-### Lines 76–90
+### Lines 76–100
 
-```javascript
+```text
 76 |   const insert = async row => client.query(`INSERT INTO lessons (${fields.join(',')}) VALUES (${fields.map((_, i) => '$' + (i + 1)).join(',')})`, fields.map(key => row[key]));
 77 |   const importRows = async rows => {
 78 |     await client.query('SAVEPOINT import_batch');
@@ -3944,6 +4228,16 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 88 |       await client.query(`ALTER SEQUENCE lessons_id_seq RESTART WITH ${next}`);
 89 |       await client.query('RELEASE SAVEPOINT import_batch');
 90 |     } catch (error) {
+91 |       await client.query('ROLLBACK TO SAVEPOINT import_batch');
+92 |       await client.query('RELEASE SAVEPOINT import_batch');
+93 |       throw new Error(/^[0-9A-Z]{5}$/.test(error.code || '') ? error.code : 'Import rejected');
+94 |     }
+95 |   };
+96 |   let publicBefore;
+97 |   let stage = 'connection';
+98 |   try {
+99 |     await client.connect();
+100 |     stage = 'identity';
 ```
 
 - **Line 76:** Builds column names from the fixed field list and numbered placeholders; row values are passed separately as bound parameters.
@@ -3961,27 +4255,6 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 88:** Restarts only the isolated sequence at a validated integer; ALTER RESTART participates in transaction rollback.
 - **Line 89:** Removes the batch savepoint after success or completed rollback; the outer transaction is still uncommitted.
 - **Line 90:** Handles failure from the preceding protected operation.
-
-### Lines 91–105
-
-```javascript
-91 |       await client.query('ROLLBACK TO SAVEPOINT import_batch');
-92 |       await client.query('RELEASE SAVEPOINT import_batch');
-93 |       throw new Error(/^[0-9A-Z]{5}$/.test(error.code || '') ? error.code : 'Import rejected');
-94 |     }
-95 |   };
-96 |   let publicBefore;
-97 |   let stage = 'connection';
-98 |   try {
-99 |     await client.connect();
-100 |     stage = 'identity';
-101 |     const identity = (await client.query('SELECT current_database() AS name, current_user AS role')).rows[0];
-102 |     assert.ok(identity.name === 'neondb' && identity.role === decodeURIComponent(direct.username));
-103 |     publicBefore = digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows);
-104 |     const sequenceBefore = digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows);
-105 |     assert.equal((await client.query('SELECT count(*)::integer AS n FROM public.lessons')).rows[0].n, 0);
-```
-
 - **Line 91:** Undoes every row inserted by the failed batch, preventing partial imports.
 - **Line 92:** Removes the batch savepoint after success or completed rollback; the outer transaction is still uncommitted.
 - **Line 93:** Returns only a five-character SQLSTATE or a generic rejection, suppressing database error details and lesson content.
@@ -3992,15 +4265,15 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 98:** Starts a protected operation whose following catch or finally handles errors or cleanup.
 - **Line 99:** Authenticates the direct TLS connection before any schema operation.
 - **Line 100:** Updates the safe diagnostic stage label without including connection information.
-- **Line 101:** Queries the actual database and role from PostgreSQL rather than trusting URL text alone.
-- **Line 102:** Checks authenticated database and role match the approved local configuration without printing the role.
-- **Line 103:** Fingerprints the application's public.lessons rows read-only for later preservation verification.
-- **Line 104:** Fingerprints the application's sequence state read-only to detect accidental changes.
-- **Line 105:** Requires the real application Lesson table to remain empty before starting tests.
 
-### Lines 106–120
+### Lines 101–125
 
-```javascript
+```text
+101 |     const identity = (await client.query('SELECT current_database() AS name, current_user AS role')).rows[0];
+102 |     assert.ok(identity.name === 'neondb' && identity.role === decodeURIComponent(direct.username));
+103 |     publicBefore = digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows);
+104 |     const sequenceBefore = digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows);
+105 |     assert.equal((await client.query('SELECT count(*)::integer AS n FROM public.lessons')).rows[0].n, 0);
 106 |     stage = 'isolated schema';
 107 |     await client.query('BEGIN');
 108 |     await client.query(`CREATE SCHEMA "${schema}"`);
@@ -4016,8 +4289,18 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 118 |       try { await run(); } finally { await client.query('ROLLBACK TO SAVEPOINT scenario'); await client.query('RELEASE SAVEPOINT scenario'); }
 119 |     });
 120 |     for (const [index, rows] of datasets.entries()) {
+121 |       await scenario(`source ${index + 1}: all nine fields and millisecond timestamps`, async () => {
+122 |         await importRows(rows);
+123 |         equalRows(await read(), rows);
+124 |         await client.query("SET LOCAL TIME ZONE 'America/New_York'");
+125 |         equalRows(await read(), rows);
 ```
 
+- **Line 101:** Queries the actual database and role from PostgreSQL rather than trusting URL text alone.
+- **Line 102:** Checks authenticated database and role match the approved local configuration without printing the role.
+- **Line 103:** Fingerprints the application's public.lessons rows read-only for later preservation verification.
+- **Line 104:** Fingerprints the application's sequence state read-only to detect accidental changes.
+- **Line 105:** Requires the real application Lesson table to remain empty before starting tests.
 - **Line 106:** Updates the safe diagnostic stage label without including connection information.
 - **Line 107:** Starts the outer PostgreSQL transaction that contains the disposable schema and all test changes.
 - **Line 108:** Creates only the newly generated isolated schema inside that transaction.
@@ -4033,15 +4316,15 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 118:** Awaits the scenario, then always rolls back and releases its savepoint in finally, even if the scenario fails.
 - **Line 119:** Closes the async callback and its test or scenario registration.
 - **Line 120:** Destructures each indexed item so the loop can use its position and its value.
+- **Line 121:** Registers a preservation scenario separately for each source dataset.
+- **Line 122:** Imports that scenario's supplied rows with original IDs and timestamps.
+- **Line 123:** Checks every returned field against that scenario's expected source values.
+- **Line 124:** Changes the database session timezone to New York so the next comparison verifies equivalent UTC instants.
+- **Line 125:** Checks every returned field against that scenario's expected source values.
 
-### Lines 121–135
+### Lines 126–150
 
-```javascript
-121 |       await scenario(`source ${index + 1}: all nine fields and millisecond timestamps`, async () => {
-122 |         await importRows(rows);
-123 |         equalRows(await read(), rows);
-124 |         await client.query("SET LOCAL TIME ZONE 'America/New_York'");
-125 |         equalRows(await read(), rows);
+```text
 126 |         t.diagnostic(`${rows.length} records, ${rows.length * fields.length} field values matched`);
 127 |       });
 128 |     }
@@ -4052,27 +4335,6 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 133 |       equalRows(await read(), datasets[0]);
 134 |     });
 135 |     await scenario('mid-batch failure rolls back every inserted row and recovery succeeds', async () => {
-```
-
-- **Line 121:** Registers a preservation scenario separately for each source dataset.
-- **Line 122:** Imports that scenario's supplied rows with original IDs and timestamps.
-- **Line 123:** Checks every returned field against that scenario's expected source values.
-- **Line 124:** Changes the database session timezone to New York so the next comparison verifies equivalent UTC instants.
-- **Line 125:** Checks every returned field against that scenario's expected source values.
-- **Line 126:** Reports only record and field counts, without titles or lesson content.
-- **Line 127:** Closes the async callback and its test or scenario registration.
-- **Line 128:** Closes the current loop, condition or protected block.
-- **Line 129:** Starts the duplicate and cross-source ID conflict scenario.
-- **Line 130:** Imports the two-row source into this isolated scenario.
-- **Line 131:** Requires a repeated import to fail with duplicate-key SQLSTATE 23505.
-- **Line 132:** Requires overlapping IDs from the other dataset to fail rather than overwrite or renumber records.
-- **Line 133:** Verifies the existing two records retain every field after rejected operations.
-- **Line 134:** Closes the async callback and its test or scenario registration.
-- **Line 135:** Starts the partial-import prevention and recovery scenario.
-
-### Lines 136–150
-
-```javascript
 136 |       const rows = datasets[1].map(row => ({ ...row }));
 137 |       rows[1].title = '';
 138 |       await assert.rejects(importRows(rows), /23514/);
@@ -4090,6 +4352,16 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 150 |       await importRows(datasets[1]);
 ```
 
+- **Line 126:** Reports only record and field counts, without titles or lesson content.
+- **Line 127:** Closes the async callback and its test or scenario registration.
+- **Line 128:** Closes the current loop, condition or protected block.
+- **Line 129:** Starts the duplicate and cross-source ID conflict scenario.
+- **Line 130:** Imports the two-row source into this isolated scenario.
+- **Line 131:** Requires a repeated import to fail with duplicate-key SQLSTATE 23505.
+- **Line 132:** Requires overlapping IDs from the other dataset to fail rather than overwrite or renumber records.
+- **Line 133:** Verifies the existing two records retain every field after rejected operations.
+- **Line 134:** Closes the async callback and its test or scenario registration.
+- **Line 135:** Starts the partial-import prevention and recovery scenario.
 - **Line 136:** Uses object spread to clone rows in memory so the disposable source dataset is unchanged.
 - **Line 137:** Deliberately invalidates the second in-memory record to fail after the first insert has succeeded.
 - **Line 138:** Requires the deliberate invalid title to trigger CHECK SQLSTATE 23514.
@@ -4106,9 +4378,9 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 149:** Tests generated IDs, default fields and JSON timestamp compatibility after explicit-ID import.
 - **Line 150:** Imports the seven valid records into the current isolated scenario.
 
-### Lines 151–165
+### Lines 151–175
 
-```javascript
+```text
 151 |       const row = datasets[1][0];
 152 |       const created = (await client.query('INSERT INTO lessons(title,discipline) VALUES ($1,$2) RETURNING *', [row.title, row.discipline])).rows[0];
 153 |       assert.equal(created.id, Math.max(...datasets[1].map(item => item.id)) + 1);
@@ -4124,6 +4396,16 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 163 |     });
 164 |     await scenario('PostgreSQL update and delete primitives work only in isolated schema', async () => {
 165 |       await importRows(datasets[0]);
+166 |       const row = datasets[0][0];
+167 |       const updated = await client.query('UPDATE lessons SET goal=$1 WHERE id=$2 RETURNING goal', [row.drills, row.id]);
+168 |       assert.equal(digest(updated.rows[0].goal), digest(row.drills));
+169 |       assert.equal((await client.query('DELETE FROM lessons WHERE id=$1', [row.id])).rowCount, 1);
+170 |     });
+171 |     await client.query('ROLLBACK');
+172 |     assert.equal((await client.query('SELECT to_regnamespace($1) AS schema', [schema])).rows[0].schema, null);
+173 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows), publicBefore);
+174 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows), sequenceBefore);
+175 |     t.diagnostic('Isolated schema removed by rollback; public lessons and sequence unchanged.');
 ```
 
 - **Line 151:** Selects an in-memory copy of one source row for the generated-ID test.
@@ -4141,27 +4423,6 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 163:** Closes the async callback and its test or scenario registration.
 - **Line 164:** Evaluates database UPDATE/DELETE primitives without implementing those application features.
 - **Line 165:** Imports the two-row source into this isolated scenario.
-
-### Lines 166–180
-
-```javascript
-166 |       const row = datasets[0][0];
-167 |       const updated = await client.query('UPDATE lessons SET goal=$1 WHERE id=$2 RETURNING goal', [row.drills, row.id]);
-168 |       assert.equal(digest(updated.rows[0].goal), digest(row.drills));
-169 |       assert.equal((await client.query('DELETE FROM lessons WHERE id=$1', [row.id])).rowCount, 1);
-170 |     });
-171 |     await client.query('ROLLBACK');
-172 |     assert.equal((await client.query('SELECT to_regnamespace($1) AS schema', [schema])).rows[0].schema, null);
-173 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons ORDER BY id')).rows), publicBefore);
-174 |     assert.equal(digest((await client.query('SELECT * FROM public.lessons_id_seq')).rows), sequenceBefore);
-175 |     t.diagnostic('Isolated schema removed by rollback; public lessons and sequence unchanged.');
-176 |   } catch (error) {
-177 |     throw new Error('Migration validation failed at ' + stage + ': ' + (/^[0-9A-Z_]+$/.test(error.code || '') ? error.code : error.name));
-178 |   } finally {
-179 |     await client.query('ROLLBACK').catch(() => {});
-180 |     await client.end();
-```
-
 - **Line 166:** Selects an in-memory source copy to identify a disposable test row.
 - **Line 167:** Binds a replacement goal and ID to UPDATE and retrieves the changed goal from the isolated table.
 - **Line 168:** Checks updated content by fingerprint so failures do not display lesson text.
@@ -4172,20 +4433,25 @@ This opt-in integration test uses existing pg and SQLite dependencies. It does n
 - **Line 173:** Checks the real application table's fingerprint is unchanged.
 - **Line 174:** Checks the real application's sequence fingerprint is unchanged.
 - **Line 175:** Reports successful isolation cleanup without printing data or credentials.
-- **Line 176:** Handles failure from the preceding protected operation.
-- **Line 177:** Reports only the safe stage and error code/name; raw connection errors are suppressed.
-- **Line 178:** Begins unconditional cleanup for the outer PostgreSQL operation.
-- **Line 179:** Attempts rollback during cleanup; the empty catch tolerates a connection that never opened.
-- **Line 180:** Closes the PostgreSQL connection; disconnecting also rolls back an unfinished transaction.
 
-### Lines 181–183
+### Lines 176–183
 
-```javascript
+```text
+176 |   } catch (error) {
+177 |     throw new Error('Migration validation failed at ' + stage + ': ' + (/^[0-9A-Z_]+$/.test(error.code || '') ? error.code : error.name));
+178 |   } finally {
+179 |     await client.query('ROLLBACK').catch(() => {});
+180 |     await client.end();
 181 |     assert.deepEqual(sources.map(fileHash), hashes, 'Original SQLite file hashes unchanged');
 182 |   }
 183 | });
 ```
 
+- **Line 176:** Handles failure from the preceding protected operation.
+- **Line 177:** Reports only the safe stage and error code/name; raw connection errors are suppressed.
+- **Line 178:** Begins unconditional cleanup for the outer PostgreSQL operation.
+- **Line 179:** Attempts rollback during cleanup; the empty catch tolerates a connection that never opened.
+- **Line 180:** Closes the PostgreSQL connection; disconnecting also rolls back an unfinished transaction.
 - **Line 181:** Recomputes original-file hashes and requires them to match the pre-test fingerprints.
 - **Line 182:** Closes the current loop, condition or protected block.
 - **Line 183:** Closes the async callback and its test or scenario registration.
@@ -4476,7 +4742,6 @@ Fixed public reference catalog and local relevance filter. No AI-generated URL i
 - **Line 10:** Keeps only references whose allowed disciplines contain this lesson's discipline AND whose technique expression matches the text; otherwise returns an empty list.
 - **Line 11:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
-
 ## server/lesson-store.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-store.js`
@@ -4488,250 +4753,262 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 ```text
 1 | export class MediaReferenceError extends Error {}
 2 |
-3 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
-4 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
-5 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
-6 |
-7 | export function sqliteLessons(database) {
-8 |   database.pragma('foreign_keys = ON');
-9 |   const list = database.prepare('SELECT * FROM lessons ORDER BY created_at DESC, id DESC');
-10 |   const find = database.prepare('SELECT * FROM lessons WHERE id = ?');
-11 |   const insert = database.prepare(`INSERT INTO lessons
-12 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes)
-13 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes)`);
-14 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
-15 |   const findMedia = database.prepare('SELECT id, lesson_id FROM lesson_media WHERE id = ?');
-16 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
-17 |   const addLink = database.prepare(`INSERT INTO lesson_media (lesson_id, position, kind, origin, url, title, activity, credit, source_page)
-18 |     VALUES (@lessonId, @position, @kind, @origin, @url, @title, @activity, @credit, @source_page)`);
-19 |   const dropMedia = database.prepare('DELETE FROM lesson_media WHERE id = ?');
-20 |   function attach(lessonId, items) {
-21 |     const before = attachedIds.all(lessonId).map(row => row.id);
-22 |     const keep = new Set();
-23 |     items.forEach((item, position) => {
-24 |       if (item.id) {
-25 |         const row = findMedia.get(item.id);
+3 | const lessonColumns = 'id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at';
+4 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
+5 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
+6 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
+7 |
+8 | export function sqliteLessons(database) {
+9 |   database.pragma('foreign_keys = ON');
+10 |   const list = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE owner_id = ? ORDER BY created_at DESC, id DESC`);
+11 |   const find = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE id = ?`);
+12 |   const insert = database.prepare(`INSERT INTO lessons
+13 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id)
+14 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId)`);
+15 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
+16 |   const findMedia = database.prepare('SELECT id, lesson_id, owner_id FROM lesson_media WHERE id = ?');
+17 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
+18 |   const addLink = database.prepare(`INSERT INTO lesson_media (lesson_id, owner_id, position, kind, origin, url, title, activity, credit, source_page)
+19 |     VALUES (@lessonId, @ownerId, @position, @kind, @origin, @url, @title, @activity, @credit, @source_page)`);
+20 |   const dropMedia = database.prepare('DELETE FROM lesson_media WHERE id = ?');
+21 |   function attach(ownerId, lessonId, items) {
+22 |     const before = attachedIds.all(lessonId).map(row => row.id);
+23 |     const keep = new Set();
+24 |     items.forEach((item, position) => {
+25 |       if (item.id) {
 ```
 
 - **Line 1:** Defines MediaReferenceError, thrown when a lesson refers to an attachment that does not exist or belongs to another lesson; the API turns it into a 400 message.
 - **Line 2:** Blank line separating related statements; it has no runtime effect.
-- **Line 3:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
-- **Line 4:** The same list in Prisma’s select format.
-- **Line 5:** Creates the standard error for a missing attachment.
-- **Line 6:** Blank line separating related statements; it has no runtime effect.
-- **Line 7:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
-- **Line 8:** Turns on SQLite foreign key enforcement for this connection (it is off by default), so the attachments table’s link to lessons is checked.
-- **Line 9:** Prepares a newest-first select with ID as a tie-breaker; preparing separates SQL structure from later values.
-- **Line 10:** Prepares lookup of a single row by a bound ID placeholder, avoiding SQL interpolation.
-- **Line 11:** Begins a multiline template string defining the parameterized INSERT command.
-- **Line 12:** Lists the seven editable columns; ID and creation timestamp are supplied by database defaults.
-- **Line 13:** Uses named bound placeholders for each editable value and closes the SQL template and prepare call.
-- **Line 14:** Prepared query: the ids already attached to a lesson.
-- **Line 15:** Prepared query: finds an attachment and the lesson it belongs to.
-- **Line 16:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
-- **Line 17:** Prepared insert for a new link attachment, listing the columns.
-- **Line 18:** The matching named values (the @ names are filled safely by the database driver, never by joining text).
-- **Line 19:** Prepared delete of one attachment.
-- **Line 20:** Defines attach: makes a lesson’s attachments equal the given list. It always runs inside a transaction.
-- **Line 21:** Remembers which attachments the lesson had before.
-- **Line 22:** Will hold the ids that stay.
-- **Line 23:** Goes through the new list with each item’s position.
-- **Line 24:** An item with an id is an existing attachment.
-- **Line 25:** Looks it up.
+- **Line 3:** The nine lesson columns the API returns. Listing them explicitly (instead of SELECT *) keeps the new owner_id column out of every response.
+- **Line 4:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
+- **Line 5:** The same list in Prisma’s select format.
+- **Line 6:** Creates the standard error for a missing attachment.
+- **Line 7:** Blank line separating related statements; it has no runtime effect.
+- **Line 8:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
+- **Line 9:** Turns on SQLite foreign key enforcement for this connection (it is off by default), so the attachments table’s link to lessons is checked.
+- **Line 10:** Listing now needs an owner: only that coach’s lessons are returned.
+- **Line 11:** Finding a lesson by id returns only the nine public columns.
+- **Line 12:** Begins a multiline template string defining the parameterized INSERT command.
+- **Line 13:** The insert statement now also stores owner_id.
+- **Line 14:** The matching named value @ownerId (filled in safely by the driver).
+- **Line 15:** Prepared query: the ids already attached to a lesson.
+- **Line 16:** When looking up an attachment, also reads who owns it.
+- **Line 17:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
+- **Line 18:** The insert for a new link attachment now includes owner_id.
+- **Line 19:** The matching named values.
+- **Line 20:** Prepared delete of one attachment.
+- **Line 21:** attach now takes the owner as its first argument.
+- **Line 22:** Remembers which attachments the lesson had before.
+- **Line 23:** Will hold the ids that stay.
+- **Line 24:** Goes through the new list with each item’s position.
+- **Line 25:** An item with an id is an existing attachment.
 
 ### Lines 26–50
 
 ```text
-26 |         if (!row || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-27 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
-28 |         keep.add(item.id);
-29 |       } else {
-30 |         keep.add(Number(addLink.run({ lessonId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
-31 |       }
-32 |     });
-33 |     for (const id of before) if (!keep.has(id)) dropMedia.run(id);
-34 |   }
-35 |   const create = database.transaction((lesson, media) => {
-36 |     const result = insert.run(lesson);
-37 |     if (media) attach(Number(result.lastInsertRowid), media);
-38 |     return find.get(result.lastInsertRowid);
-39 |   });
-40 |   const update = database.transaction((id, lesson, media) => {
-41 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id').run({ ...lesson, id });
-42 |     if (!result.changes) return null;
-43 |     if (media) attach(id, media);
-44 |     return find.get(id);
-45 |   });
-46 |   const remove = database.transaction(id => {
-47 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
-48 |     return database.prepare('DELETE FROM lessons WHERE id=?').run(id).changes > 0;
-49 |   });
-50 |   const media = {
+26 |         const row = findMedia.get(item.id);
+27 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+28 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
+29 |         keep.add(item.id);
+30 |       } else {
+31 |         keep.add(Number(addLink.run({ lessonId, ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
+32 |       }
+33 |     });
+34 |     for (const id of before) if (!keep.has(id)) dropMedia.run(id);
+35 |   }
+36 |   const create = database.transaction((ownerId, lesson, media) => {
+37 |     const result = insert.run({ ...lesson, ownerId });
+38 |     if (media) attach(ownerId, Number(result.lastInsertRowid), media);
+39 |     return find.get(result.lastInsertRowid);
+40 |   });
+41 |   const update = database.transaction((ownerId, id, lesson, media) => {
+42 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
+43 |     if (!result.changes) return null;
+44 |     if (media) attach(ownerId, id, media);
+45 |     return find.get(id);
+46 |   });
+47 |   const remove = database.transaction((ownerId, id) => {
+48 |     if (!database.prepare('SELECT 1 FROM lessons WHERE id=? AND owner_id=?').get(id, ownerId)) return false;
+49 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
+50 |     return database.prepare('DELETE FROM lessons WHERE id=? AND owner_id=?').run(id, ownerId).changes > 0;
 ```
 
-- **Line 26:** It must exist and either be unattached (a fresh upload) or already belong to this lesson; otherwise the whole save is cancelled.
-- **Line 27:** Attaches it and updates its caption, activity and position.
-- **Line 28:** Remembers to keep it.
-- **Line 29:** Otherwise it is a new link.
-- **Line 30:** Inserts the link row (empty credit and source page are stored appropriately) and remembers its new id.
-- **Line 31:** Closes the preceding block (function, object, or statement body).
-- **Line 32:** Closes the callback body and the function call that received it.
-- **Line 33:** Deletes attachments that were attached before but are not in the new list.
-- **Line 34:** Closes the preceding block (function, object, or statement body).
-- **Line 35:** Create now accepts an optional media list as well, in the same transaction as the lesson.
-- **Line 36:** Runs the prepared insert with the validated lesson values and records SQLite's insertion result.
-- **Line 37:** If a list was given (even an empty one), attaches it to the new lesson’s id.
-- **Line 38:** Reads back the new row using its database-assigned ID, including the generated timestamp.
-- **Line 39:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 40:** Update also accepts the optional media list.
-- **Line 41:** Binds all seven editable values and the ID into UPDATE. The WHERE clause limits it to one row; ID and created_at are not assigned and therefore stay unchanged.
-- **Line 42:** If no row matched, returns null (lesson not found) without touching media.
-- **Line 43:** If a list was given, makes the lesson’s attachments match it. When no list is given, existing attachments are left alone.
-- **Line 44:** Returns the updated lesson.
-- **Line 45:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 46:** Delete is now a transaction too.
-- **Line 47:** Deletes the lesson’s attachments first.
-- **Line 48:** Then deletes the lesson and reports whether one existed.
-- **Line 49:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 50:** Starts the media functions exposed to the API.
+- **Line 26:** Looks it up.
+- **Line 27:** An attachment may be attached only if it exists, belongs to the same owner, and is unattached or already attached to this lesson. This stops one coach attaching another coach’s upload by guessing its id.
+- **Line 28:** Attaches it and updates its caption, activity and position.
+- **Line 29:** Remembers to keep it.
+- **Line 30:** Otherwise it is a new link.
+- **Line 31:** New link attachments are stored with the owner.
+- **Line 32:** Closes the preceding block (function, object, or statement body).
+- **Line 33:** Closes the callback body and the function call that received it.
+- **Line 34:** Deletes attachments that were attached before but are not in the new list.
+- **Line 35:** Closes the preceding block (function, object, or statement body).
+- **Line 36:** Create now takes the owner as its first argument.
+- **Line 37:** Inserts the lesson with its owner.
+- **Line 38:** Attaches media for the same owner.
+- **Line 39:** Reads back the new row using its database-assigned ID, including the generated timestamp.
+- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 41:** Update now takes the owner first.
+- **Line 42:** The UPDATE statement now has an extra condition, owner_id = @ownerId, so a coach can only change their own lesson. If no row matches, nothing is changed.
+- **Line 43:** If no row matched, returns null (lesson not found) without touching media.
+- **Line 44:** Media is attached for the same owner.
+- **Line 45:** Returns the updated lesson.
+- **Line 46:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 47:** Delete now takes the owner first.
+- **Line 48:** First checks that the lesson exists and belongs to this owner; otherwise returns false and deletes nothing, including attachments.
+- **Line 49:** Deletes the lesson’s attachments first.
+- **Line 50:** Deletes the lesson only when it is owned by this coach.
 
 ### Lines 51–75
 
 ```text
-51 |     list: () => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(),
-52 |     addUpload: ({ kind, mime, title, data }) => {
-53 |       const id = database.prepare('INSERT INTO lesson_media (kind, origin, title, mime, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?)').run(kind, 'upload', title, mime, data.length, data).lastInsertRowid;
-54 |       return database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE id = ?`).get(id);
-55 |     },
-56 |     getFile: id => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND origin = 'upload'").get(id) || null,
-57 |     removeOrphan: id => database.prepare("DELETE FROM lesson_media WHERE id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id).changes > 0,
-58 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
-59 |   };
-60 |   return { list: () => list.all(), create, update, remove, media };
-61 | }
-62 |
-63 | export function prismaLessons(client) {
-64 |   const serialize = row => ({ ...row, created_at: row.created_at.toISOString() });
-65 |   const serializeMedia = row => ({ ...row, created_at: row.created_at.toISOString() });
-66 |   async function attach(tx, lessonId, items) {
-67 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
-68 |     const keep = new Set();
-69 |     for (const [position, item] of items.entries()) {
-70 |       if (item.id) {
-71 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true } });
-72 |         if (!row || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-73 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
-74 |         keep.add(item.id);
-75 |       } else {
+51 |   });
+52 |   const media = {
+53 |     list: ownerId => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE owner_id = ? AND lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(ownerId),
+54 |     addUpload: (ownerId, { kind, mime, title, data }) => {
+55 |       const id = database.prepare('INSERT INTO lesson_media (owner_id, kind, origin, title, mime, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?, ?)').run(ownerId, kind, 'upload', title, mime, data.length, data).lastInsertRowid;
+56 |       return database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE id = ?`).get(id);
+57 |     },
+58 |     getFile: (ownerId, id) => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND owner_id = ? AND origin = 'upload'").get(id, ownerId) || null,
+59 |     removeOrphan: (ownerId, id) => database.prepare("DELETE FROM lesson_media WHERE id = ? AND owner_id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id, ownerId).changes > 0,
+60 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
+61 |   };
+62 |   return { list: ownerId => list.all(ownerId), create, update, remove, media };
+63 | }
+64 |
+65 | export function prismaLessons(client) {
+66 |   const serialize = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
+67 |   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
+68 |   async function attach(tx, ownerId, lessonId, items) {
+69 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
+70 |     const keep = new Set();
+71 |     for (const [position, item] of items.entries()) {
+72 |       if (item.id) {
+73 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true, owner_id: true } });
+74 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+75 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
 ```
 
-- **Line 51:** Lists attachments of saved lessons only (unsaved uploads are hidden), ordered by lesson and position.
-- **Line 52:** Stores a new uploaded file that does not belong to a lesson yet.
-- **Line 53:** Inserts the file bytes and details and remembers the new id.
-- **Line 54:** Returns the new row without its bytes.
-- **Line 55:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 56:** Fetches an uploaded file’s type and bytes for downloading, or null.
-- **Line 57:** Deletes an upload only if it is still unattached.
-- **Line 58:** Deletes unattached uploads older than the given age and reports how many.
-- **Line 59:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 60:** Returns the store with its original functions plus the new media group.
+- **Line 51:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 52:** Starts the media functions exposed to the API.
+- **Line 53:** Lists attachments of saved lessons belonging to the owner only.
+- **Line 54:** Stores a new upload for an owner.
+- **Line 55:** Inserts the upload with its owner.
+- **Line 56:** Returns the new row without its bytes.
+- **Line 57:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 58:** Fetches an uploaded file only if the owner matches.
+- **Line 59:** Deletes an unsaved upload only if the owner matches.
+- **Line 60:** Deletes unattached uploads older than the given age and reports how many.
 - **Line 61:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 62:** Blank line separating related statements; it has no runtime effect.
-- **Line 63:** Builds the PostgreSQL-backed store from the guarded Prisma client.
-- **Line 64:** Copies each row and converts Prisma's Date object to a UTC ISO timestamp, preserving the API's text timestamp type.
-- **Line 65:** Converts a media row’s timestamp to text, like lessons.
-- **Line 66:** Prisma version of attach; it receives the transaction object tx so all queries commit or roll back together.
-- **Line 67:** Remembers the lesson’s current attachments.
-- **Line 68:** Will hold the ids that stay.
-- **Line 69:** Goes through the new list with positions.
-- **Line 70:** An item with an id is an existing attachment.
-- **Line 71:** Looks it up.
-- **Line 72:** It must exist and either be unattached (a fresh upload) or already belong to this lesson; otherwise the whole save is cancelled.
-- **Line 73:** Attaches it and updates caption, activity and position.
-- **Line 74:** Remembers to keep it.
-- **Line 75:** Otherwise it is a new link.
+- **Line 62:** The store’s list now needs an owner.
+- **Line 63:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 64:** Blank line separating related statements; it has no runtime effect.
+- **Line 65:** Builds the PostgreSQL-backed store from the guarded Prisma client.
+- **Line 66:** The PostgreSQL store removes owner_id from each lesson before returning it, so responses keep the original nine fields.
+- **Line 67:** Same for attachments.
+- **Line 68:** PostgreSQL attach also takes the owner.
+- **Line 69:** Remembers the lesson’s current attachments.
+- **Line 70:** Will hold the ids that stay.
+- **Line 71:** Goes through the new list with positions.
+- **Line 72:** An item with an id is an existing attachment.
+- **Line 73:** Reads the attachment’s lesson and owner.
+- **Line 74:** Same ownership rule as the SQLite store.
+- **Line 75:** Attaches it and updates caption, activity and position.
 
 ### Lines 76–100
 
 ```text
-76 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
-77 |         keep.add(created.id);
-78 |       }
-79 |     }
-80 |     const stale = before.filter(id => !keep.has(id));
-81 |     if (stale.length) await tx.lessonMedia.deleteMany({ where: { id: { in: stale } } });
-82 |   }
-83 |   const transaction = work => client.$transaction(work, { timeout: 30000, maxWait: 10000 });
-84 |   return {
-85 |     list: async () => (await client.lesson.findMany({ orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
-86 |     create: (lesson, media) => transaction(async tx => {
-87 |       const created = await tx.lesson.create({ data: lesson });
-88 |       if (media) await attach(tx, created.id, media);
-89 |       return serialize(created);
-90 |     }),
-91 |     update: (id, lesson, media) => transaction(async tx => {
-92 |       let updated;
-93 |       try { updated = await tx.lesson.update({ where: { id }, data: lesson }); }
-94 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
-95 |       if (media) await attach(tx, id, media);
-96 |       return serialize(updated);
-97 |     }),
-98 |     remove: async id => (await client.lesson.deleteMany({ where: { id } })).count > 0,
-99 |     media: {
-100 |       list: async () => (await client.lessonMedia.findMany({ where: { lesson_id: { not: null } }, orderBy: [{ lesson_id: 'asc' }, { position: 'asc' }, { id: 'asc' }], select: publicSelect })).map(serializeMedia),
+76 |         keep.add(item.id);
+77 |       } else {
+78 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, owner_id: ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
+79 |         keep.add(created.id);
+80 |       }
+81 |     }
+82 |     const stale = before.filter(id => !keep.has(id));
+83 |     if (stale.length) await tx.lessonMedia.deleteMany({ where: { id: { in: stale } } });
+84 |   }
+85 |   const transaction = work => client.$transaction(work, { timeout: 30000, maxWait: 10000 });
+86 |   return {
+87 |     list: async ownerId => (await client.lesson.findMany({ where: { owner_id: ownerId }, orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
+88 |     create: (ownerId, lesson, media) => transaction(async tx => {
+89 |       const created = await tx.lesson.create({ data: { ...lesson, owner_id: ownerId } });
+90 |       if (media) await attach(tx, ownerId, created.id, media);
+91 |       return serialize(created);
+92 |     }),
+93 |     update: (ownerId, id, lesson, media) => transaction(async tx => {
+94 |       let updated;
+95 |       try { updated = await tx.lesson.update({ where: { id, owner_id: ownerId }, data: lesson }); }
+96 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
+97 |       if (media) await attach(tx, ownerId, id, media);
+98 |       return serialize(updated);
+99 |     }),
+100 |     remove: (ownerId, id) => transaction(async tx => {
 ```
 
-- **Line 76:** Creates the link row.
-- **Line 77:** Remembers its id.
-- **Line 78:** Closes the preceding block (function, object, or statement body).
-- **Line 79:** Closes the preceding block (function, object, or statement body).
-- **Line 80:** Works out which previous attachments are no longer wanted.
-- **Line 81:** Deletes them if there are any.
-- **Line 82:** Closes the preceding block (function, object, or statement body).
-- **Line 83:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
-- **Line 84:** Starts the returned object containing the store methods; each following property supplies one operation.
-- **Line 85:** Awaits a newest-first Prisma query, then maps every row through timestamp serialization.
-- **Line 86:** Create now runs inside a transaction and accepts the optional media list.
-- **Line 87:** Creates the lesson.
-- **Line 88:** Attaches media if a list was given.
-- **Line 89:** Returns the lesson in the API format.
-- **Line 90:** Ends the transaction callback.
-- **Line 91:** Update also runs inside a transaction with the optional media list.
-- **Line 92:** Will hold the updated lesson.
-- **Line 93:** Updates the lesson; the next line turns “record not found” (code P2025) into null.
-- **Line 94:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
-- **Line 95:** Makes attachments match the list when one was given.
-- **Line 96:** Returns the updated lesson.
-- **Line 97:** Ends the transaction callback.
-- **Line 98:** Deletes only rows matching the unique numeric ID and returns whether the affected count exceeds zero.
-- **Line 99:** Starts the media functions for the PostgreSQL store.
-- **Line 100:** Lists attachments of saved lessons in order, selecting only the public columns.
+- **Line 76:** Remembers to keep it.
+- **Line 77:** Otherwise it is a new link.
+- **Line 78:** Creates the link attachment with its owner.
+- **Line 79:** Remembers its id.
+- **Line 80:** Closes the preceding block (function, object, or statement body).
+- **Line 81:** Closes the preceding block (function, object, or statement body).
+- **Line 82:** Works out which previous attachments are no longer wanted.
+- **Line 83:** Deletes them if there are any.
+- **Line 84:** Closes the preceding block (function, object, or statement body).
+- **Line 85:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
+- **Line 86:** Starts the returned object containing the store methods; each following property supplies one operation.
+- **Line 87:** Lists only the owner’s lessons.
+- **Line 88:** Create now takes the owner first.
+- **Line 89:** Creates the lesson with its owner id.
+- **Line 90:** Attaches media for the same owner.
+- **Line 91:** Returns the lesson in the API format.
+- **Line 92:** Ends the transaction callback.
+- **Line 93:** Update now takes the owner first.
+- **Line 94:** Will hold the updated lesson.
+- **Line 95:** Updates the lesson only where both the id and the owner match; Prisma reports “record not found” (turned into null) otherwise.
+- **Line 96:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
+- **Line 97:** Attaches media for the owner.
+- **Line 98:** Returns the updated lesson.
+- **Line 99:** Ends the transaction callback.
+- **Line 100:** Delete now runs in a transaction and takes the owner first.
 
-### Lines 101–110
+### Lines 101–116
 
 ```text
-101 |       addUpload: async ({ kind, mime, title, data }) => serializeMedia(await client.lessonMedia.create({ data: { kind, origin: 'upload', title, mime, size_bytes: data.length, data }, select: publicSelect })),
-102 |       getFile: async id => {
-103 |         const row = await client.lessonMedia.findFirst({ where: { id, origin: 'upload' }, select: { mime: true, data: true } });
-104 |         return row ? { mime: row.mime, data: Buffer.from(row.data) } : null;
-105 |       },
-106 |       removeOrphan: async id => (await client.lessonMedia.deleteMany({ where: { id, lesson_id: null, origin: 'upload' } })).count > 0,
-107 |       purgeOrphans: async maxAgeMs => (await client.lessonMedia.deleteMany({ where: { lesson_id: null, created_at: { lt: new Date(Date.now() - maxAgeMs) } } })).count,
-108 |     },
-109 |   };
-110 | }
+101 |       if (!await tx.lesson.findFirst({ where: { id, owner_id: ownerId }, select: { id: true } })) return false;
+102 |       await tx.lessonMedia.deleteMany({ where: { lesson_id: id } });
+103 |       return (await tx.lesson.deleteMany({ where: { id, owner_id: ownerId } })).count > 0;
+104 |     }),
+105 |     media: {
+106 |       list: async ownerId => (await client.lessonMedia.findMany({ where: { owner_id: ownerId, lesson_id: { not: null } }, orderBy: [{ lesson_id: 'asc' }, { position: 'asc' }, { id: 'asc' }], select: publicSelect })).map(serializeMedia),
+107 |       addUpload: async (ownerId, { kind, mime, title, data }) => serializeMedia(await client.lessonMedia.create({ data: { owner_id: ownerId, kind, origin: 'upload', title, mime, size_bytes: data.length, data }, select: publicSelect })),
+108 |       getFile: async (ownerId, id) => {
+109 |         const row = await client.lessonMedia.findFirst({ where: { id, owner_id: ownerId, origin: 'upload' }, select: { mime: true, data: true } });
+110 |         return row ? { mime: row.mime, data: Buffer.from(row.data) } : null;
+111 |       },
+112 |       removeOrphan: async (ownerId, id) => (await client.lessonMedia.deleteMany({ where: { id, owner_id: ownerId, lesson_id: null, origin: 'upload' } })).count > 0,
+113 |       purgeOrphans: async maxAgeMs => (await client.lessonMedia.deleteMany({ where: { lesson_id: null, created_at: { lt: new Date(Date.now() - maxAgeMs) } } })).count,
+114 |     },
+115 |   };
+116 | }
 ```
 
-- **Line 101:** Stores a new upload with its bytes and returns its details without them.
-- **Line 102:** Fetches an uploaded file.
-- **Line 103:** Reads only the type and bytes of the upload.
-- **Line 104:** Returns them with the bytes as a Buffer, or null when it does not exist.
-- **Line 105:** Closes the object or block and continues the surrounding list.
-- **Line 106:** Deletes an upload only if it is unattached.
-- **Line 107:** Deletes unattached uploads older than a given age.
-- **Line 108:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 109:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 110:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 101:** Returns false without changing anything when the lesson is not this owner’s.
+- **Line 102:** Deletes the lesson’s attachments.
+- **Line 103:** Deletes the lesson where the id and owner match.
+- **Line 104:** Ends the transaction callback.
+- **Line 105:** Starts the media functions for the PostgreSQL store.
+- **Line 106:** Lists the owner’s attachments.
+- **Line 107:** Stores an upload for the owner.
+- **Line 108:** Fetches a file for the owner.
+- **Line 109:** Finds the file only if the owner matches.
+- **Line 110:** Returns them with the bytes as a Buffer, or null when it does not exist.
+- **Line 111:** Closes the object or block and continues the surrounding list.
+- **Line 112:** Deletes an unsaved upload only if the owner matches.
+- **Line 113:** Deletes unattached uploads older than a given age.
+- **Line 114:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 115:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 116:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/lesson-ui.test.js
 
@@ -4890,25 +5167,25 @@ Opt-in live Development test. Fresh independent Console verification is required
 4 | import { randomUUID } from 'node:crypto';
 5 | import { readFileSync, readdirSync } from 'node:fs';
 6 | import { png } from './media-fixtures.js';
-7 | import pg from 'pg';
-8 | import { createApp } from './app.js';
-9 | import { prismaLessons } from './lesson-store.js';
-10 | import { createDevelopmentClient } from './prisma-development.js';
-11 | import { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js';
-12 |
-13 | export const mockDraft = { title: 'Integration draft', objectives: 'Practice controlled movement.', ...Object.fromEntries(details.map(key => [key, 'Mock guidance for integration testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: 'Demonstrate, then practice under supervision.' })) };
-14 |
-15 | test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures', { skip: process.env.COACHLAB_RUN_POSTGRES_TESTS !== 'verified-development', timeout: 120000 }, async t => {
-16 |   const env = process.env;
-17 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
-18 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
-19 |   const schema = 'coachlab_test_' + randomUUID().replaceAll('-', '');
-20 |   let client = createDevelopmentClient(env, schema);
-21 |   let direct;
-22 |   try { direct = new URL(env.COACHLAB_DEV_DIRECT_URL); } catch { throw new Error('Invalid direct configuration.'); }
-23 |   assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));
-24 |   assert.equal(direct.pathname, '/neondb');
-25 |   assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));
+7 | import { testOptions, authedFetch as fetch } from './test-auth.js';
+8 | import pg from 'pg';
+9 | import { createApp } from './app.js';
+10 | import { prismaLessons } from './lesson-store.js';
+11 | import { createDevelopmentClient } from './prisma-development.js';
+12 | import { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js';
+13 |
+14 | export const mockDraft = { title: 'Integration draft', objectives: 'Practice controlled movement.', ...Object.fromEntries(details.map(key => [key, 'Mock guidance for integration testing.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: 'Demonstrate, then practice under supervision.' })) };
+15 |
+16 | test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures', { skip: process.env.COACHLAB_RUN_POSTGRES_TESTS !== 'verified-development', timeout: 120000 }, async t => {
+17 |   const env = process.env;
+18 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
+19 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
+20 |   const schema = 'coachlab_test_' + randomUUID().replaceAll('-', '');
+21 |   let client = createDevelopmentClient(env, schema);
+22 |   let direct;
+23 |   try { direct = new URL(env.COACHLAB_DEV_DIRECT_URL); } catch { throw new Error('Invalid direct configuration.'); }
+24 |   assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));
+25 |   assert.equal(direct.pathname, '/neondb');
 ```
 
 - **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
@@ -4917,261 +5194,265 @@ Opt-in live Development test. Fresh independent Console verification is required
 - **Line 4:** Imports { randomUUID } from 'node:crypto'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 5:** Imports readdirSync as well so the test can find every migration folder.
 - **Line 6:** Imports the fake PNG for the media checks.
-- **Line 7:** Imports pg from 'pg'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 8:** Imports { createApp } from './app.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 9:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 10:** Imports { createDevelopmentClient } from './prisma-development.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 11:** Imports { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 12:** Blank line separating related statements; it has no runtime effect.
-- **Line 13:** Exports deterministic synthetic guidance and five 12-minute sections for repeatable tests. Object.fromEntries builds guidance fields and structuredClone later prevents shared mutation; no real provider is called.
-- **Line 14:** Blank line separating related statements; it has no runtime effect.
-- **Line 15:** Registers this named test with Node: PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 16:** Reads server environment settings without printing private values.
-- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 18:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 19:** Creates a unique test schema name using a random UUID stripped of hyphens; its characters meet the factory's strict allowlist.
-- **Line 20:** Constructs a client targeting that random schema explicitly, never implicitly public.
-- **Line 21:** Declares a variable for the parsed private direct connection URL.
-- **Line 22:** Parses the direct URL and replaces URL-parser exceptions with a generic configuration error to avoid printing credentials.
-- **Line 23:** Checks the stated expectation using Node strict assertions: `assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 24:** Checks the stated expectation using Node strict assertions: `assert.equal(direct.pathname, '/neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 25:** Checks the stated expectation using Node strict assertions: `assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 7:** Imports the fake signed-in coach helpers.
+- **Line 8:** Imports pg from 'pg'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 9:** Imports { createApp } from './app.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 10:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 11:** Imports { createDevelopmentClient } from './prisma-development.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 12:** Imports { disciplines, sections, details, toLesson } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 13:** Blank line separating related statements; it has no runtime effect.
+- **Line 14:** Exports deterministic synthetic guidance and five 12-minute sections for repeatable tests. Object.fromEntries builds guidance fields and structuredClone later prevents shared mutation; no real provider is called.
+- **Line 15:** Blank line separating related statements; it has no runtime effect.
+- **Line 16:** Registers this named test with Node: PostgreSQL API: six disciplines, mocked AI approval, committed persistence and safe failures. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 17:** Reads server environment settings without printing private values.
+- **Line 18:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 19:** Checks the stated expectation using Node strict assertions: `assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 20:** Creates a unique test schema name using a random UUID stripped of hyphens; its characters meet the factory's strict allowlist.
+- **Line 21:** Constructs a client targeting that random schema explicitly, never implicitly public.
+- **Line 22:** Declares a variable for the parsed private direct connection URL.
+- **Line 23:** Parses the direct URL and replaces URL-parser exceptions with a generic configuration error to avoid printing credentials.
+- **Line 24:** Checks the stated expectation using Node strict assertions: `assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 25:** Checks the stated expectation using Node strict assertions: `assert.equal(direct.pathname, '/neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 
 ### Lines 26–50
 
 ```text
-26 |   direct.search = '';
-27 |   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
-28 |   let server, url, created = false;
-29 |   const stop = async () => {
-30 |     if (server?.listening) await new Promise(resolve => server.close(resolve));
-31 |     await client.$disconnect();
-32 |   };
-33 |   const start = async () => {
-34 |     client = createDevelopmentClient(env, schema);
-35 |     server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
-36 |     await once(server, 'listening');
-37 |     url = `http://127.0.0.1:${server.address().port}`;
-38 |   };
-39 |   const get = async () => (await fetch(url + '/api/lessons')).json();
-40 |   const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-41 |   try {
-42 |     await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));
-43 |     await client.$disconnect();
-44 |     await admin.connect();
-45 |     assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');
-46 |     const before = JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows);
-47 |     await admin.query(`CREATE SCHEMA "${schema}"`);
-48 |     created = true;
-49 |     await admin.query('BEGIN');
-50 |     await admin.query(`SET LOCAL search_path TO "${schema}"`);
+26 |   assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));
+27 |   direct.search = '';
+28 |   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
+29 |   let server, url, created = false;
+30 |   const stop = async () => {
+31 |     if (server?.listening) await new Promise(resolve => server.close(resolve));
+32 |     await client.$disconnect();
+33 |   };
+34 |   const start = async () => {
+35 |     client = createDevelopmentClient(env, schema);
+36 |     server = createApp(prismaLessons(client), { ...testOptions, provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
+37 |     await once(server, 'listening');
+38 |     url = `http://127.0.0.1:${server.address().port}`;
+39 |   };
+40 |   const get = async () => (await fetch(url + '/api/lessons')).json();
+41 |   const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+42 |   try {
+43 |     await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));
+44 |     await client.$disconnect();
+45 |     await admin.connect();
+46 |     assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');
+47 |     const before = JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows);
+48 |     await admin.query(`CREATE SCHEMA "${schema}"`);
+49 |     created = true;
+50 |     await admin.query('BEGIN');
 ```
 
-- **Line 26:** Removes URL query options after validation so the explicit TLS driver options control encryption.
-- **Line 27:** Creates a direct PostgreSQL connection for isolated schema setup/cleanup with certificate validation and bounded connection/query times.
-- **Line 28:** Tracks the test server, its local address, and whether this test actually created its disposable schema.
-- **Line 29:** Defines cleanup for the test HTTP server and Prisma client.
-- **Line 30:** Only closes an existing listening server, awaiting its close callback through a Promise; optional chaining handles an unset server.
-- **Line 31:** Waits for Prisma's pool to close before recreation or cleanup.
-- **Line 32:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 33:** Defines a helper to start a fresh test client and HTTP server against the same committed test data.
-- **Line 34:** Recreates the Prisma client using the same isolated schema after a stop.
-- **Line 35:** The test server now receives a fake link verifier next to the mock AI, so the media checks need no internet.
-- **Line 36:** Waits for the listener-ready event before sending HTTP requests.
-- **Line 37:** Builds the loopback HTTP address using the actual port allocated by the operating system.
-- **Line 38:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 39:** Defines a helper to fetch and decode the lesson list from the test server.
-- **Line 40:** Defines a JSON POST helper for either lesson creation or the AI draft route.
-- **Line 41:** Starts a guarded block whose failures are handled by the following catch or finally clause.
-- **Line 42:** Checks the stated expectation using Node strict assertions: `await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 43:** Waits for Prisma's pool to close before recreation or cleanup.
-- **Line 44:** Authenticates the direct database connection before any schema operation.
-- **Line 45:** Checks the stated expectation using Node strict assertions: `assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 46:** Takes an in-memory ordered snapshot of real public lessons for later unchanged-data verification; contents are not printed.
-- **Line 47:** Creates only the randomly named schema after target and isolation checks. Interpolation is safe here because the generated identifier has been strictly constrained.
-- **Line 48:** Records successful creation so cleanup only drops a schema this test owns.
-- **Line 49:** Starts a transaction for the disposable schema's table setup.
-- **Line 50:** Restricts unqualified SQL in this transaction to the random test schema.
+- **Line 26:** Checks the stated expectation using Node strict assertions: `assert.ok(['require', 'verify-full'].includes(direct.searchParams.get('sslmode')));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 27:** Removes URL query options after validation so the explicit TLS driver options control encryption.
+- **Line 28:** Creates a direct PostgreSQL connection for isolated schema setup/cleanup with certificate validation and bounded connection/query times.
+- **Line 29:** Tracks the test server, its local address, and whether this test actually created its disposable schema.
+- **Line 30:** Defines cleanup for the test HTTP server and Prisma client.
+- **Line 31:** Only closes an existing listening server, awaiting its close callback through a Promise; optional chaining handles an unset server.
+- **Line 32:** Waits for Prisma's pool to close before recreation or cleanup.
+- **Line 33:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 34:** Defines a helper to start a fresh test client and HTTP server against the same committed test data.
+- **Line 35:** Recreates the Prisma client using the same isolated schema after a stop.
+- **Line 36:** The PostgreSQL test app is created with the fake sign-in options in addition to the mock AI and link checker.
+- **Line 37:** Waits for the listener-ready event before sending HTTP requests.
+- **Line 38:** Builds the loopback HTTP address using the actual port allocated by the operating system.
+- **Line 39:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 40:** Defines a helper to fetch and decode the lesson list from the test server.
+- **Line 41:** Defines a JSON POST helper for either lesson creation or the AI draft route.
+- **Line 42:** Starts a guarded block whose failures are handled by the following catch or finally clause.
+- **Line 43:** Checks the stated expectation using Node strict assertions: `await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 44:** Waits for Prisma's pool to close before recreation or cleanup.
+- **Line 45:** Authenticates the direct database connection before any schema operation.
+- **Line 46:** Checks the stated expectation using Node strict assertions: `assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 47:** Takes an in-memory ordered snapshot of real public lessons for later unchanged-data verification; contents are not printed.
+- **Line 48:** Creates only the randomly named schema after target and isolation checks. Interpolation is safe here because the generated identifier has been strictly constrained.
+- **Line 49:** Records successful creation so cleanup only drops a schema this test owns.
+- **Line 50:** Starts a transaction for the disposable schema's table setup.
 
 ### Lines 51–75
 
 ```text
-51 |     for (const name of readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
-52 |       const sql = readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8');
-53 |       await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
-54 |     }
-55 |     await admin.query('COMMIT');
-56 |     await start();
-57 |     assert.deepEqual(await get(), []);
-58 |     for (const discipline of disciplines) {
-59 |       const response = await post('/api/lessons', { title: `Integration ${discipline}`, discipline });
-60 |       assert.equal(response.status, 201);
-61 |       const saved = await response.json();
-62 |       assert.ok(Number.isInteger(saved.id));
-63 |       assert.equal(saved.created_at, new Date(saved.created_at).toISOString());
-64 |       assert.equal(saved.discipline, discipline);
-65 |     }
-66 |     const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Controlled practice', techniques: 'Basic positions', equipment: 'Mats', privacy_confirmed: true };
-67 |     const generated = await post('/api/ai/lesson-draft', request);
-68 |     assert.equal(generated.status, 200);
-69 |     const draft = (await generated.json()).draft;
-70 |     assert.equal((await get()).length, 6);
-71 |     draft.objectives = 'Edited and approved integration objective.';
-72 |     const approved = toLesson(draft, request);
-73 |     const savedResponse = await post('/api/lessons', approved);
-74 |     assert.equal(savedResponse.status, 201);
-75 |     const saved = await savedResponse.json();
+51 |     await admin.query(`SET LOCAL search_path TO "${schema}"`);
+52 |     for (const name of readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
+53 |       const sql = readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8');
+54 |       await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+55 |     }
+56 |     await admin.query("INSERT INTO auth_users (id, name, email) VALUES ('user-a', 'Coach A', 'a@example.com'), ('user-b', 'Coach B', 'b@example.com')");
+57 |     await admin.query('COMMIT');
+58 |     await start();
+59 |     assert.deepEqual(await get(), []);
+60 |     for (const discipline of disciplines) {
+61 |       const response = await post('/api/lessons', { title: `Integration ${discipline}`, discipline });
+62 |       assert.equal(response.status, 201);
+63 |       const saved = await response.json();
+64 |       assert.ok(Number.isInteger(saved.id));
+65 |       assert.equal(saved.created_at, new Date(saved.created_at).toISOString());
+66 |       assert.equal(saved.discipline, discipline);
+67 |     }
+68 |     const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Controlled practice', techniques: 'Basic positions', equipment: 'Mats', privacy_confirmed: true };
+69 |     const generated = await post('/api/ai/lesson-draft', request);
+70 |     assert.equal(generated.status, 200);
+71 |     const draft = (await generated.json()).draft;
+72 |     assert.equal((await get()).length, 6);
+73 |     draft.objectives = 'Edited and approved integration objective.';
+74 |     const approved = toLesson(draft, request);
+75 |     const savedResponse = await post('/api/lessons', approved);
 ```
 
-- **Line 51:** Builds the disposable schema from every migration folder in name order, not only the first, so the media table exists in the test schema.
-- **Line 52:** Reads one migration file.
-- **Line 53:** Runs it without its own BEGIN and COMMIT, because the test already wraps all of them in one transaction scoped to the disposable schema.
-- **Line 54:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 55:** Commits isolated table setup so separate pooled application connections can see the test table.
-- **Line 56:** Starts the local test API with a fresh Prisma pool and the committed test schema.
-- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 58:** Loops through all six supported disciplines for real PostgreSQL creation tests.
-- **Line 59:** Creates a synthetic lesson for the current discipline through the actual API, rather than inserting behind the API.
-- **Line 60:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 61:** Decodes the server-confirmed saved row for identity, timestamp and discipline assertions.
-- **Line 62:** Checks the stated expectation using Node strict assertions: `assert.ok(Number.isInteger(saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 63:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.created_at, new Date(saved.created_at).toISOString());`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 64:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.discipline, discipline);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 65:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 66:** Defines generic BJJ parameters for mocked draft generation; no personal athlete data is used.
-- **Line 67:** Calls the actual AI route with the injected test provider.
-- **Line 68:** Checks the stated expectation using Node strict assertions: `assert.equal(generated.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 69:** Extracts the validated draft returned by the server; subsequent assertions check generation has not saved a record.
-- **Line 70:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 71:** Simulates a coach editing a draft before approval and persistence.
-- **Line 72:** Maps the edited draft into the existing seven editable lesson fields, exactly as the browser does after approval.
-- **Line 73:** Saves that approved synthetic lesson through the existing creation API.
-- **Line 74:** Checks the stated expectation using Node strict assertions: `assert.equal(savedResponse.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 75:** Decodes the confirmed row for comparison with the approved payload and generated metadata.
+- **Line 51:** Restricts unqualified SQL in this transaction to the random test schema.
+- **Line 52:** Builds the disposable schema from every migration folder in name order, not only the first, so the media table exists in the test schema.
+- **Line 53:** Reads one migration file.
+- **Line 54:** Runs it without its own BEGIN and COMMIT, because the test already wraps all of them in one transaction scoped to the disposable schema.
+- **Line 55:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 56:** Creates the two fake coaches as real account rows in the disposable test schema, because lessons now have a foreign key to the accounts table.
+- **Line 57:** Commits isolated table setup so separate pooled application connections can see the test table.
+- **Line 58:** Starts the local test API with a fresh Prisma pool and the committed test schema.
+- **Line 59:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 60:** Loops through all six supported disciplines for real PostgreSQL creation tests.
+- **Line 61:** Creates a synthetic lesson for the current discipline through the actual API, rather than inserting behind the API.
+- **Line 62:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 63:** Decodes the server-confirmed saved row for identity, timestamp and discipline assertions.
+- **Line 64:** Checks the stated expectation using Node strict assertions: `assert.ok(Number.isInteger(saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 65:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.created_at, new Date(saved.created_at).toISOString());`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 66:** Checks the stated expectation using Node strict assertions: `assert.equal(saved.discipline, discipline);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 67:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 68:** Defines generic BJJ parameters for mocked draft generation; no personal athlete data is used.
+- **Line 69:** Calls the actual AI route with the injected test provider.
+- **Line 70:** Checks the stated expectation using Node strict assertions: `assert.equal(generated.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 71:** Extracts the validated draft returned by the server; subsequent assertions check generation has not saved a record.
+- **Line 72:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 73:** Simulates a coach editing a draft before approval and persistence.
+- **Line 74:** Maps the edited draft into the existing seven editable lesson fields, exactly as the browser does after approval.
+- **Line 75:** Saves that approved synthetic lesson through the existing creation API.
 
 ### Lines 76–100
 
 ```text
-76 |     assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });
-77 |     const changed = { ...approved, title: 'Updated integration lesson', drills: 'Reordered activity two\n\nActivity one' };
-78 |     const update = await fetch(url + '/api/lessons/' + saved.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
-79 |     assert.equal(update.status, 200);
-80 |     assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });
-81 |     const upload = await (await fetch(url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-File-Name': 'pg-test.png' }, body: png })).json();
-82 |     const withMedia = await post('/api/lessons', { ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Stored picture', activity: 'Activity one' }, { url: 'https://example.com/pic.png', title: 'Linked picture' }] });
-83 |     assert.equal(withMedia.status, 201);
-84 |     const mediaLesson = await withMedia.json();
-85 |     const mediaRows = async () => (await fetch(url + '/api/lesson-media')).json();
-86 |     assert.deepEqual((await mediaRows()).map(item => [item.origin, item.title, item.lesson_id]), [['upload', 'Stored picture', mediaLesson.id], ['link', 'Linked picture', mediaLesson.id]]);
-87 |     const snapshot = await get();
-88 |     assert.equal(snapshot.length, 8);
-89 |     await stop();
-90 |     await start();
-91 |     assert.deepEqual(await get(), snapshot);
-92 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Stored picture', 'Linked picture']);
-93 |     assert.deepEqual(Buffer.from(await (await fetch(`${url}/api/media/${upload.id}/file`)).arrayBuffer()), png);
-94 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`, { headers: { Range: 'bytes=0-3' } })).status, 206);
-95 |     const kept = await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Renamed picture', activity: '' }] }) });
-96 |     assert.equal(kept.status, 200);
-97 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Renamed picture']);
-98 |     assert.equal((await post('/api/lessons', { ...changed, media: [{ id: 99999999 }] })).status, 400);
-99 |     assert.equal((await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'DELETE' })).status, 204);
-100 |     assert.deepEqual(await mediaRows(), []);
+76 |     assert.equal(savedResponse.status, 201);
+77 |     const saved = await savedResponse.json();
+78 |     assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });
+79 |     const changed = { ...approved, title: 'Updated integration lesson', drills: 'Reordered activity two\n\nActivity one' };
+80 |     const update = await fetch(url + '/api/lessons/' + saved.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
+81 |     assert.equal(update.status, 200);
+82 |     assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });
+83 |     const upload = await (await fetch(url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-File-Name': 'pg-test.png' }, body: png })).json();
+84 |     const withMedia = await post('/api/lessons', { ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Stored picture', activity: 'Activity one' }, { url: 'https://example.com/pic.png', title: 'Linked picture' }] });
+85 |     assert.equal(withMedia.status, 201);
+86 |     const mediaLesson = await withMedia.json();
+87 |     const mediaRows = async () => (await fetch(url + '/api/lesson-media')).json();
+88 |     assert.deepEqual((await mediaRows()).map(item => [item.origin, item.title, item.lesson_id]), [['upload', 'Stored picture', mediaLesson.id], ['link', 'Linked picture', mediaLesson.id]]);
+89 |     const snapshot = await get();
+90 |     assert.equal(snapshot.length, 8);
+91 |     await stop();
+92 |     await start();
+93 |     assert.deepEqual(await get(), snapshot);
+94 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Stored picture', 'Linked picture']);
+95 |     assert.deepEqual(Buffer.from(await (await fetch(`${url}/api/media/${upload.id}/file`)).arrayBuffer()), png);
+96 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`, { headers: { Range: 'bytes=0-3' } })).status, 206);
+97 |     const kept = await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Renamed picture', activity: '' }] }) });
+98 |     assert.equal(kept.status, 200);
+99 |     assert.deepEqual((await mediaRows()).map(item => item.title), ['Renamed picture']);
+100 |     assert.equal((await post('/api/lessons', { ...changed, media: [{ id: 99999999 }] })).status, 400);
 ```
 
-- **Line 76:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 77:** Copies the approved payload and modifies title and activity order to exercise an update without creating a new ID.
-- **Line 78:** Issues a JSON PUT for the saved ID and waits for the confirmed update response.
-- **Line 79:** Checks the stated expectation using Node strict assertions: `assert.equal(update.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 80:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 81:** Uploads a picture through the real API into the disposable PostgreSQL schema.
-- **Line 82:** Creates a lesson that attaches the upload and a new link.
-- **Line 83:** Expects 201.
-- **Line 84:** Reads the saved lesson.
-- **Line 85:** Helper that lists attachments.
-- **Line 86:** Checks both attachments with their origins, captions and lesson id.
-- **Line 87:** Captures all test rows before restarting the test server/client for persistence comparison.
-- **Line 88:** The lesson count is now eight because of the extra media lesson.
-- **Line 89:** Stops the current test HTTP server and its Prisma pool.
-- **Line 90:** Starts the local test API with a fresh Prisma pool and the committed test schema.
-- **Line 91:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), snapshot);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 92:** After the server and database client are recreated, both attachments are still there.
-- **Line 93:** The uploaded bytes come back identical from PostgreSQL.
-- **Line 94:** A byte-range request works against the PostgreSQL store.
-- **Line 95:** Updates the lesson keeping only the upload, renamed.
-- **Line 96:** Expects success.
-- **Line 97:** Only the renamed upload remains.
-- **Line 98:** A missing attachment id is refused with 400.
-- **Line 99:** Deletes the media lesson.
-- **Line 100:** Its attachments are removed too.
+- **Line 76:** Checks the stated expectation using Node strict assertions: `assert.equal(savedResponse.status, 201);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 77:** Decodes the confirmed row for comparison with the approved payload and generated metadata.
+- **Line 78:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(saved, { ...approved, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 79:** Copies the approved payload and modifies title and activity order to exercise an update without creating a new ID.
+- **Line 80:** Issues a JSON PUT for the saved ID and waits for the confirmed update response.
+- **Line 81:** Checks the stated expectation using Node strict assertions: `assert.equal(update.status, 200);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 82:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await update.json(), { ...changed, id: saved.id, created_at: saved.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 83:** Uploads a picture through the real API into the disposable PostgreSQL schema.
+- **Line 84:** Creates a lesson that attaches the upload and a new link.
+- **Line 85:** Expects 201.
+- **Line 86:** Reads the saved lesson.
+- **Line 87:** Helper that lists attachments.
+- **Line 88:** Checks both attachments with their origins, captions and lesson id.
+- **Line 89:** Captures all test rows before restarting the test server/client for persistence comparison.
+- **Line 90:** The lesson count is now eight because of the extra media lesson.
+- **Line 91:** Stops the current test HTTP server and its Prisma pool.
+- **Line 92:** Starts the local test API with a fresh Prisma pool and the committed test schema.
+- **Line 93:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await get(), snapshot);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 94:** After the server and database client are recreated, both attachments are still there.
+- **Line 95:** The uploaded bytes come back identical from PostgreSQL.
+- **Line 96:** A byte-range request works against the PostgreSQL store.
+- **Line 97:** Updates the lesson keeping only the upload, renamed.
+- **Line 98:** Expects success.
+- **Line 99:** Only the renamed upload remains.
+- **Line 100:** A missing attachment id is refused with 400.
 
 ### Lines 101–125
 
 ```text
-101 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`)).status, 404);
-102 |     assert.equal((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".lesson_media`)).rows[0].n, 0);
-103 |     assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);
-104 |     assert.equal((await get()).length, 7);
-105 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);
-106 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);
-107 |     await stop(); await start();
-108 |     assert.equal((await get()).length, 6);
-109 |     assert.ok(!(await get()).some(row => row.id === saved.id));
-110 |     await stop();
-111 |     server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }).listen(0, '127.0.0.1');
-112 |     await once(server, 'listening');
-113 |     url = `http://127.0.0.1:${server.address().port}`;
-114 |     for (const response of [await fetch(url + '/api/lessons'), await post('/api/lessons', { title: 'Failure probe', discipline: 'Boxing' })]) {
-115 |       assert.equal(response.status, 500);
-116 |       assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
-117 |     }
-118 |     assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);
-119 |     t.diagnostic('Six disciplines and mocked approval saved; committed rows survived server/client recreation; public table unchanged.');
-120 |   } catch (error) {
-121 |     throw new Error('PostgreSQL integration failed: ' + (/^[A-Z0-9_]+$/.test(error.code || '') ? error.code : error.name));
-122 |   } finally {
-123 |     await stop();
-124 |     await admin.query('ROLLBACK').catch(() => {});
-125 |     if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+101 |     assert.equal((await fetch(url + '/api/lessons/' + mediaLesson.id, { method: 'DELETE' })).status, 204);
+102 |     assert.deepEqual(await mediaRows(), []);
+103 |     assert.equal((await fetch(`${url}/api/media/${upload.id}/file`)).status, 404);
+104 |     assert.equal((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".lesson_media`)).rows[0].n, 0);
+105 |     assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);
+106 |     assert.equal((await get()).length, 7);
+107 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);
+108 |     assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);
+109 |     await stop(); await start();
+110 |     assert.equal((await get()).length, 6);
+111 |     assert.ok(!(await get()).some(row => row.id === saved.id));
+112 |     await stop();
+113 |     server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }, testOptions).listen(0, '127.0.0.1');
+114 |     await once(server, 'listening');
+115 |     url = `http://127.0.0.1:${server.address().port}`;
+116 |     for (const response of [await fetch(url + '/api/lessons'), await post('/api/lessons', { title: 'Failure probe', discipline: 'Boxing' })]) {
+117 |       assert.equal(response.status, 500);
+118 |       assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });
+119 |     }
+120 |     assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);
+121 |     t.diagnostic('Six disciplines and mocked approval saved; committed rows survived server/client recreation; public table unchanged.');
+122 |   } catch (error) {
+123 |     throw new Error('PostgreSQL integration failed: ' + (/^[A-Z0-9_]+$/.test(error.code || '') ? error.code : error.name));
+124 |   } finally {
+125 |     await stop();
 ```
 
-- **Line 101:** The stored file is gone.
-- **Line 102:** Counts media rows directly in the disposable schema: none remain, proving the cascade.
-- **Line 103:** Checks the stated expectation using Node strict assertions: `assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 104:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 7);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 105:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 106:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 107:** Closes and recreates server/client connections to verify committed changes survive recreation.
-- **Line 108:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 109:** Checks the stated expectation using Node strict assertions: `assert.ok(!(await get()).some(row => row.id === saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 110:** Stops the current test HTTP server and its Prisma pool.
-- **Line 111:** Starts a deliberately failing store with private-looking error text, so the API's safe error response can be checked without breaking a real database.
-- **Line 112:** Waits for the listener-ready event before sending HTTP requests.
-- **Line 113:** Builds the loopback HTTP address using the actual port allocated by the operating system.
-- **Line 114:** Exercises both read and create failure paths on that deliberately failing server.
-- **Line 115:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 500);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 116:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 117:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 118:** Checks the stated expectation using Node strict assertions: `assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 119:** Prints a concise successful-test explanation without credentials or lesson contents.
-- **Line 120:** Handles a thrown error using a local error variable rather than exposing it directly to callers.
-- **Line 121:** Replaces failures with a safe error name or uppercase error code; database messages and connection strings are not printed.
-- **Line 122:** Begins cleanup that runs whether the guarded operation succeeded or failed.
-- **Line 123:** Stops the current test HTTP server and its Prisma pool.
-- **Line 124:** Ends any unfinished setup transaction during cleanup; an already-ended transaction is harmless here.
-- **Line 125:** Drops only this test's owned random schema and its objects, never public or production; the created flag prevents deleting an unowned schema.
+- **Line 101:** Deletes the media lesson.
+- **Line 102:** Its attachments are removed too.
+- **Line 103:** The stored file is gone.
+- **Line 104:** Counts media rows directly in the disposable schema: none remain, proving the cascade.
+- **Line 105:** Checks the stated expectation using Node strict assertions: `assert.equal((await post('/api/lessons', { title: '', discipline: 'Boxing' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 106:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 7);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 107:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 204);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 108:** Checks the stated expectation using Node strict assertions: `assert.equal((await fetch(url + '/api/lessons/' + saved.id, { method: 'DELETE' })).status, 404);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 109:** Closes and recreates server/client connections to verify committed changes survive recreation.
+- **Line 110:** Checks the stated expectation using Node strict assertions: `assert.equal((await get()).length, 6);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 111:** Checks the stated expectation using Node strict assertions: `assert.ok(!(await get()).some(row => row.id === saved.id));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 112:** Stops the current test HTTP server and its Prisma pool.
+- **Line 113:** The deliberately failing fake store also receives the sign-in options, so the safe-error test still reaches the store.
+- **Line 114:** Waits for the listener-ready event before sending HTTP requests.
+- **Line 115:** Builds the loopback HTTP address using the actual port allocated by the operating system.
+- **Line 116:** Exercises both read and create failure paths on that deliberately failing server.
+- **Line 117:** Checks the stated expectation using Node strict assertions: `assert.equal(response.status, 500);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 118:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { error: 'Unexpected server error.' });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 119:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 120:** Checks the stated expectation using Node strict assertions: `assert.equal(JSON.stringify((await admin.query('SELECT * FROM public.lessons ORDER BY id')).rows), before);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 121:** Prints a concise successful-test explanation without credentials or lesson contents.
+- **Line 122:** Handles a thrown error using a local error variable rather than exposing it directly to callers.
+- **Line 123:** Replaces failures with a safe error name or uppercase error code; database messages and connection strings are not printed.
+- **Line 124:** Begins cleanup that runs whether the guarded operation succeeded or failed.
+- **Line 125:** Stops the current test HTTP server and its Prisma pool.
 
-### Lines 126–128
+### Lines 126–130
 
 ```text
-126 |     await admin.end();
-127 |   }
-128 | });
+126 |     await admin.query('ROLLBACK').catch(() => {});
+127 |     if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+128 |     await admin.end();
+129 |   }
+130 | });
 ```
 
-- **Line 126:** Closes the direct test-administration connection.
-- **Line 127:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 128:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 126:** Ends any unfinished setup transaction during cleanup; an already-ended transaction is harmless here.
+- **Line 127:** Drops only this test's owned random schema and its objects, never public or production; the created flag prevents deleting an unowned schema.
+- **Line 128:** Closes the direct test-administration connection.
+- **Line 129:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 130:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## client/src/media.js
 
@@ -6847,22 +7128,22 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 7 | import Database from 'better-sqlite3';
 8 | import { createApp } from './app.js';
 9 | import { migrate } from './migrations.js';
-10 | import { MediaLinkError } from './media-verify.js';
-11 | import { png, webm } from './media-fixtures.js';
-12 |
-13 | const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-14 | const verifyLink = async url => {
-15 |   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
-16 |   if (url.includes('offline')) throw new Error('private transport detail');
-17 |   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
-18 | };
-19 |
-20 | async function fixture(t, extra = {}) {
-21 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
-22 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
-23 |   const state = { filename: path.join(directory, 'test.sqlite') };
-24 |   state.stop = async () => {
-25 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+10 | import { testOptions, authedFetch as fetch } from './test-auth.js';
+11 | import { MediaLinkError } from './media-verify.js';
+12 | import { png, webm } from './media-fixtures.js';
+13 |
+14 | const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+15 | const verifyLink = async url => {
+16 |   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
+17 |   if (url.includes('offline')) throw new Error('private transport detail');
+18 |   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
+19 | };
+20 |
+21 | async function fixture(t, extra = {}) {
+22 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
+23 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+24 |   const state = { filename: path.join(directory, 'test.sqlite') };
+25 |   state.stop = async () => {
 ```
 
 - **Line 1:** Imports Node’s test function.
@@ -6874,332 +7155,336 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 7:** Imports the SQLite driver.
 - **Line 8:** Imports the app factory under test.
 - **Line 9:** Imports the SQLite migrations, which now include the media table.
-- **Line 10:** Imports the error type used to simulate a rejected link.
-- **Line 11:** Imports the fake PNG and WebM files.
-- **Line 12:** Blank line separates related sections for readability; it performs no operation.
-- **Line 13:** A sample YouTube watch address used by the fakes.
-- **Line 14:** A fake link verifier that replaces real network checks.
-- **Line 15:** Addresses containing “broken” simulate a link that cannot be used.
-- **Line 16:** Addresses containing “offline” simulate an unexpected failure whose technical message must never reach the user.
-- **Line 17:** Everything else is confirmed: YouTube-looking links as a video, others as a picture.
-- **Line 18:** Closes the preceding block and ends the statement.
-- **Line 19:** Blank line separates related sections for readability; it performs no operation.
-- **Line 20:** Defines the fixture that builds a fresh app for each test; extra options can override fakes.
-- **Line 21:** Creates a temporary folder inside the system temp directory.
-- **Line 22:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
-- **Line 23:** The state object starts with the database file path.
-- **Line 24:** stop closes the server and database.
-- **Line 25:** Closes the HTTP server if it is listening.
+- **Line 10:** Imports the fake signed-in coach helpers.
+- **Line 11:** Imports the error type used to simulate a rejected link.
+- **Line 12:** Imports the fake PNG and WebM files.
+- **Line 13:** Blank line separates related sections for readability; it performs no operation.
+- **Line 14:** A sample YouTube watch address used by the fakes.
+- **Line 15:** A fake link verifier that replaces real network checks.
+- **Line 16:** Addresses containing “broken” simulate a link that cannot be used.
+- **Line 17:** Addresses containing “offline” simulate an unexpected failure whose technical message must never reach the user.
+- **Line 18:** Everything else is confirmed: YouTube-looking links as a video, others as a picture.
+- **Line 19:** Closes the preceding block and ends the statement.
+- **Line 20:** Blank line separates related sections for readability; it performs no operation.
+- **Line 21:** Defines the fixture that builds a fresh app for each test; extra options can override fakes.
+- **Line 22:** Creates a temporary folder inside the system temp directory.
+- **Line 23:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
+- **Line 24:** The state object starts with the database file path.
+- **Line 25:** stop closes the server and database.
 
 ### Lines 26–50
 
 ```text
-26 |     if (state.database?.open) state.database.close();
-27 |   };
-28 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
-29 |   state.start = async () => {
-30 |     state.database = new Database(state.filename);
-31 |     migrate(state.database);
-32 |     state.server = createApp(state.database, { verifyLink, ...extra }).listen(0, '127.0.0.1');
-33 |     await once(state.server, 'listening');
-34 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
-35 |   };
-36 |   await state.start();
-37 |   state.json = (route, method, body) => fetch(state.url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-38 |   state.upload = (data, type = 'image/png', name = 'Jab-setup.png') => fetch(state.url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name) }, body: data });
-39 |   state.media = async () => (await fetch(state.url + '/api/lesson-media')).json();
-40 |   return state;
-41 | }
-42 |
-43 | test('uploads are checked by content, stored in the database, served with range support and never trusted as pages', async t => {
-44 |   const state = await fixture(t);
-45 |   const response = await state.upload(png);
-46 |   assert.equal(response.status, 201);
-47 |   const saved = await response.json();
-48 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
-49 |   assert.ok(!('data' in saved));
-50 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
+26 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+27 |     if (state.database?.open) state.database.close();
+28 |   };
+29 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
+30 |   state.start = async () => {
+31 |     state.database = new Database(state.filename);
+32 |     migrate(state.database);
+33 |     state.server = createApp(state.database, { verifyLink, ...testOptions, ...extra }).listen(0, '127.0.0.1');
+34 |     await once(state.server, 'listening');
+35 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
+36 |   };
+37 |   await state.start();
+38 |   state.json = (route, method, body) => fetch(state.url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+39 |   state.upload = (data, type = 'image/png', name = 'Jab-setup.png') => fetch(state.url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name) }, body: data });
+40 |   state.media = async () => (await fetch(state.url + '/api/lesson-media')).json();
+41 |   return state;
+42 | }
+43 |
+44 | test('uploads are checked by content, stored in the database, served with range support and never trusted as pages', async t => {
+45 |   const state = await fixture(t);
+46 |   const response = await state.upload(png);
+47 |   assert.equal(response.status, 201);
+48 |   const saved = await response.json();
+49 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
+50 |   assert.ok(!('data' in saved));
 ```
 
-- **Line 26:** Closes the database if it is open.
-- **Line 27:** Closes the preceding block and ends the statement.
-- **Line 28:** Registers cleanup after the test: stop everything and delete the temporary folder.
-- **Line 29:** start opens the database and server; tests call stop and start to simulate a restart.
-- **Line 30:** Opens (or reopens) the SQLite file.
-- **Line 31:** Applies migrations (a no-op the second time).
-- **Line 32:** Starts the real app on a random free port on this computer only, with the fake verifier.
-- **Line 33:** Waits until the server is listening.
-- **Line 34:** Remembers the base address.
-- **Line 35:** Closes the preceding block and ends the statement.
-- **Line 36:** Starts the first time.
-- **Line 37:** Helper that sends JSON to a route.
-- **Line 38:** Helper that uploads raw bytes with a declared type and file name.
-- **Line 39:** Helper that lists saved attachments.
-- **Line 40:** Returns the state to the test.
-- **Line 41:** Closes the preceding block (function, object, or statement body).
-- **Line 42:** Blank line separates related sections for readability; it performs no operation.
-- **Line 43:** Registers the upload test.
-- **Line 44:** Creates the fixture.
-- **Line 45:** Uploads the fake PNG.
-- **Line 46:** Expects status 201 (Created).
-- **Line 47:** Reads the reply.
-- **Line 48:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
-- **Line 49:** The reply must not contain the file bytes.
-- **Line 50:** Downloads the file.
+- **Line 26:** Closes the HTTP server if it is listening.
+- **Line 27:** Closes the database if it is open.
+- **Line 28:** Closes the preceding block and ends the statement.
+- **Line 29:** Registers cleanup after the test: stop everything and delete the temporary folder.
+- **Line 30:** start opens the database and server; tests call stop and start to simulate a restart.
+- **Line 31:** Opens (or reopens) the SQLite file.
+- **Line 32:** Applies migrations (a no-op the second time).
+- **Line 33:** Creates the test app with the fake sign-in options (and lets a test override them).
+- **Line 34:** Waits until the server is listening.
+- **Line 35:** Remembers the base address.
+- **Line 36:** Closes the preceding block and ends the statement.
+- **Line 37:** Starts the first time.
+- **Line 38:** Helper that sends JSON to a route.
+- **Line 39:** Helper that uploads raw bytes with a declared type and file name.
+- **Line 40:** Helper that lists saved attachments.
+- **Line 41:** Returns the state to the test.
+- **Line 42:** Closes the preceding block (function, object, or statement body).
+- **Line 43:** Blank line separates related sections for readability; it performs no operation.
+- **Line 44:** Registers the upload test.
+- **Line 45:** Creates the fixture.
+- **Line 46:** Uploads the fake PNG.
+- **Line 47:** Expects status 201 (Created).
+- **Line 48:** Reads the reply.
+- **Line 49:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
+- **Line 50:** The reply must not contain the file bytes.
 
 ### Lines 51–75
 
 ```text
-51 |   assert.equal(file.status, 200);
-52 |   assert.equal(file.headers.get('content-type'), 'image/png');
-53 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
-54 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
-55 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
-56 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
-57 |   assert.equal(partial.status, 206);
-58 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
-59 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
-60 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
-61 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
-62 |   assert.equal(video.kind, 'video');
-63 |   for (const [body, type, status] of [[Buffer.alloc(0), 'image/png', 400], [png, 'text/html', 415], [png, 'video/mp4', 415], [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'image/png', 415], [Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'image/png', 413], [Buffer.concat([webm, Buffer.alloc(21 * 1024 * 1024)]), 'video/webm', 413]]) {
-64 |     const result = await state.upload(body, type);
-65 |     assert.equal(result.status, status, type);
-66 |     assert.equal(typeof (await result.json()).error, 'string');
-67 |   }
-68 |   assert.equal((await fetch(`${state.url}/api/media/99999/file`)).status, 404);
-69 |   assert.deepEqual(await state.media(), []);
-70 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 204);
-71 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
-72 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
-73 | });
-74 |
-75 | test('lessons keep their nine fields while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+51 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
+52 |   assert.equal(file.status, 200);
+53 |   assert.equal(file.headers.get('content-type'), 'image/png');
+54 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+55 |   assert.equal(file.headers.get('cache-control'), 'private, no-cache');
+56 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
+57 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+58 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
+59 |   assert.equal(partial.status, 206);
+60 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
+61 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
+62 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
+63 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
+64 |   assert.equal(video.kind, 'video');
+65 |   for (const [body, type, status] of [[Buffer.alloc(0), 'image/png', 400], [png, 'text/html', 415], [png, 'video/mp4', 415], [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'image/png', 415], [Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'image/png', 413], [Buffer.concat([webm, Buffer.alloc(21 * 1024 * 1024)]), 'video/webm', 413]]) {
+66 |     const result = await state.upload(body, type);
+67 |     assert.equal(result.status, status, type);
+68 |     assert.equal(typeof (await result.json()).error, 'string');
+69 |   }
+70 |   assert.equal((await fetch(`${state.url}/api/media/99999/file`)).status, 404);
+71 |   assert.deepEqual(await state.media(), []);
+72 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 204);
+73 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
+74 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
+75 | });
 ```
 
-- **Line 51:** Expects 200.
-- **Line 52:** Expects the verified type.
-- **Line 53:** Expects the nosniff security header.
-- **Line 54:** Expects a Content-Security-Policy containing sandbox.
-- **Line 55:** The downloaded bytes equal the uploaded bytes.
-- **Line 56:** Requests only the first eight bytes.
-- **Line 57:** Expects 206 (Partial Content).
-- **Line 58:** Expects the Content-Range header to describe the slice.
-- **Line 59:** The slice bytes equal the first eight bytes.
-- **Line 60:** A range beyond the end of the file gets 416.
-- **Line 61:** Uploads a WebM video.
-- **Line 62:** Expects it to be classed as a video.
-- **Line 63:** Tries six bad uploads: empty file, wrong declared type, a declared type that does not match the contents, SVG text declared as PNG, a PNG over 6 MB and a WebM over 20 MB, with the expected 400, 415 or 413 statuses.
-- **Line 64:** Sends each bad upload.
-- **Line 65:** Checks the status for that case.
-- **Line 66:** Every refusal carries a text message.
-- **Line 67:** Closes the preceding block (function, object, or statement body).
-- **Line 68:** An unknown file id gives 404.
-- **Line 69:** Unsaved uploads are not listed as lesson attachments.
-- **Line 70:** Deleting an unsaved upload returns 204.
-- **Line 71:** Deleting it again gives 404.
-- **Line 72:** Its file is gone.
-- **Line 73:** Closes the callback body and the function call that received it.
-- **Line 74:** Blank line separates related sections for readability; it performs no operation.
-- **Line 75:** Registers the main lifecycle test.
+- **Line 51:** Downloads the file.
+- **Line 52:** Expects 200.
+- **Line 53:** Expects the verified type.
+- **Line 54:** Expects the nosniff security header.
+- **Line 55:** New check: uploaded files are sent with Cache-Control “private, no-cache”, so browsers must ask the server (which checks the sign-in) before reusing a picture or video, and one coach’s cached files cannot be shown to another on a shared computer.
+- **Line 56:** Expects a Content-Security-Policy containing sandbox.
+- **Line 57:** The downloaded bytes equal the uploaded bytes.
+- **Line 58:** Requests only the first eight bytes.
+- **Line 59:** Expects 206 (Partial Content).
+- **Line 60:** Expects the Content-Range header to describe the slice.
+- **Line 61:** The slice bytes equal the first eight bytes.
+- **Line 62:** A range beyond the end of the file gets 416.
+- **Line 63:** Uploads a WebM video.
+- **Line 64:** Expects it to be classed as a video.
+- **Line 65:** Tries six bad uploads: empty file, wrong declared type, a declared type that does not match the contents, SVG text declared as PNG, a PNG over 6 MB and a WebM over 20 MB, with the expected 400, 415 or 413 statuses.
+- **Line 66:** Sends each bad upload.
+- **Line 67:** Checks the status for that case.
+- **Line 68:** Every refusal carries a text message.
+- **Line 69:** Closes the preceding block (function, object, or statement body).
+- **Line 70:** An unknown file id gives 404.
+- **Line 71:** Unsaved uploads are not listed as lesson attachments.
+- **Line 72:** Deleting an unsaved upload returns 204.
+- **Line 73:** Deleting it again gives 404.
+- **Line 74:** Its file is gone.
+- **Line 75:** Closes the callback body and the function call that received it.
 
 ### Lines 76–100
 
 ```text
-76 |   const state = await fixture(t);
-77 |   const upload = await (await state.upload(png)).json();
-78 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
-79 |   const created = await state.json('/api/lessons', 'POST', body);
-80 |   assert.equal(created.status, 201);
-81 |   const lesson = await created.json();
-82 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
-83 |   const attached = await state.media();
-84 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
-85 |   assert.equal(attached[1].url, ytLink);
-86 |   assert.equal(attached[1].credit, 'YouTube — Coach');
-87 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
-88 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
-89 |   assert.equal((await state.media()).length, 3);
-90 |   const [first, second, third] = attached;
-91 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
-92 |   assert.equal(edited.status, 200);
-93 |   assert.deepEqual((await state.media()).map(item => [item.id, item.title, item.position]), [[third.id, 'Moved first', 0], [first.id, 'Photo renamed', 1]]);
-94 |   assert.equal((await fetch(`${state.url}/api/media/${second.id}/file`)).status, 404);
-95 |   await state.stop(); await state.start();
-96 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
-97 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
-98 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
-99 |   assert.deepEqual(await state.media(), []);
-100 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
+76 |
+77 | test('lessons keep their nine fields while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+78 |   const state = await fixture(t);
+79 |   const upload = await (await state.upload(png)).json();
+80 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
+81 |   const created = await state.json('/api/lessons', 'POST', body);
+82 |   assert.equal(created.status, 201);
+83 |   const lesson = await created.json();
+84 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+85 |   const attached = await state.media();
+86 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
+87 |   assert.equal(attached[1].url, ytLink);
+88 |   assert.equal(attached[1].credit, 'YouTube — Coach');
+89 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
+90 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
+91 |   assert.equal((await state.media()).length, 3);
+92 |   const [first, second, third] = attached;
+93 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
+94 |   assert.equal(edited.status, 200);
+95 |   assert.deepEqual((await state.media()).map(item => [item.id, item.title, item.position]), [[third.id, 'Moved first', 0], [first.id, 'Photo renamed', 1]]);
+96 |   assert.equal((await fetch(`${state.url}/api/media/${second.id}/file`)).status, 404);
+97 |   await state.stop(); await state.start();
+98 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
+99 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
+100 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
 ```
 
-- **Line 76:** Creates the fixture.
-- **Line 77:** Uploads a picture first.
-- **Line 78:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
-- **Line 79:** Creates the lesson.
-- **Line 80:** Expects 201.
-- **Line 81:** Reads the lesson.
-- **Line 82:** The lesson reply still has exactly the original nine fields, so existing clients are unaffected.
-- **Line 83:** Loads the saved attachments.
-- **Line 84:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
-- **Line 85:** The YouTube address was replaced by the clean verified address.
-- **Line 86:** The YouTube credit came from verification.
-- **Line 87:** The suggested picture kept its supplied credit.
-- **Line 88:** Updates the lesson without a media key and expects success.
-- **Line 89:** Leaving media out must keep all three attachments.
-- **Line 90:** Names the three attachments.
-- **Line 91:** Updates with a new list: the third attachment first, the first second, the second dropped.
-- **Line 92:** Expects success.
-- **Line 93:** Expects the new order and edited captions.
-- **Line 94:** The dropped attachment no longer exists.
-- **Line 95:** Stops and restarts the server (and database connection).
-- **Line 96:** The attachments are still there after the restart.
-- **Line 97:** The uploaded file’s bytes are still intact.
-- **Line 98:** Updating with an empty list removes every attachment.
-- **Line 99:** Unsaved uploads are not listed as lesson attachments.
-- **Line 100:** Creates a second lesson with one link.
+- **Line 76:** Blank line separates related sections for readability; it performs no operation.
+- **Line 77:** Registers the main lifecycle test.
+- **Line 78:** Creates the fixture.
+- **Line 79:** Uploads a picture first.
+- **Line 80:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
+- **Line 81:** Creates the lesson.
+- **Line 82:** Expects 201.
+- **Line 83:** Reads the lesson.
+- **Line 84:** The lesson reply still has exactly the original nine fields, so existing clients are unaffected.
+- **Line 85:** Loads the saved attachments.
+- **Line 86:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
+- **Line 87:** The YouTube address was replaced by the clean verified address.
+- **Line 88:** The YouTube credit came from verification.
+- **Line 89:** The suggested picture kept its supplied credit.
+- **Line 90:** Updates the lesson without a media key and expects success.
+- **Line 91:** Leaving media out must keep all three attachments.
+- **Line 92:** Names the three attachments.
+- **Line 93:** Updates with a new list: the third attachment first, the first second, the second dropped.
+- **Line 94:** Expects success.
+- **Line 95:** Expects the new order and edited captions.
+- **Line 96:** The dropped attachment no longer exists.
+- **Line 97:** Stops and restarts the server (and database connection).
+- **Line 98:** The attachments are still there after the restart.
+- **Line 99:** The uploaded file’s bytes are still intact.
+- **Line 100:** Updating with an empty list removes every attachment.
 
 ### Lines 101–125
 
 ```text
-101 |   assert.equal((await state.media()).length, 1);
-102 |   assert.equal((await fetch(`${state.url}/api/lessons/${again.id}`, { method: 'DELETE' })).status, 204);
-103 |   assert.deepEqual(await state.media(), []);
-104 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lesson_media').get().n, 0);
-105 | });
-106 |
-107 | test('links that fail verification or attachments that do not exist stop the save and leave data unchanged', async t => {
-108 |   const state = await fixture(t);
-109 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Safe', discipline: 'Boxing' })).json();
-110 |   const orphan = await (await state.upload(png)).json();
-111 |   const broken = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/broken.png', title: 'x' }] });
-112 |   assert.equal(broken.status, 400);
-113 |   assert.match((await broken.json()).error, /example\.com could not be used: .*404/);
-114 |   const offline = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/offline.png' }] });
-115 |   assert.equal(offline.status, 400);
-116 |   const message = (await offline.json()).error;
-117 |   assert.match(message, /could not check the link/);
-118 |   assert.ok(!message.includes('private'));
-119 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
-120 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
-121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
-122 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
-123 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
-124 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
-125 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
+101 |   assert.deepEqual(await state.media(), []);
+102 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
+103 |   assert.equal((await state.media()).length, 1);
+104 |   assert.equal((await fetch(`${state.url}/api/lessons/${again.id}`, { method: 'DELETE' })).status, 204);
+105 |   assert.deepEqual(await state.media(), []);
+106 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lesson_media').get().n, 0);
+107 | });
+108 |
+109 | test('links that fail verification or attachments that do not exist stop the save and leave data unchanged', async t => {
+110 |   const state = await fixture(t);
+111 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Safe', discipline: 'Boxing' })).json();
+112 |   const orphan = await (await state.upload(png)).json();
+113 |   const broken = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/broken.png', title: 'x' }] });
+114 |   assert.equal(broken.status, 400);
+115 |   assert.match((await broken.json()).error, /example\.com could not be used: .*404/);
+116 |   const offline = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/offline.png' }] });
+117 |   assert.equal(offline.status, 400);
+118 |   const message = (await offline.json()).error;
+119 |   assert.match(message, /could not check the link/);
+120 |   assert.ok(!message.includes('private'));
+121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
+122 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
+123 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
+124 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
+125 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
 ```
 
-- **Line 101:** Exactly one attachment exists.
-- **Line 102:** Deletes that lesson.
-- **Line 103:** Unsaved uploads are not listed as lesson attachments.
-- **Line 104:** Checks the table directly: no rows remain.
-- **Line 105:** Closes the callback body and the function call that received it.
-- **Line 106:** Blank line separates related sections for readability; it performs no operation.
-- **Line 107:** Registers the failure test.
-- **Line 108:** Creates the fixture.
-- **Line 109:** Saves a plain lesson.
-- **Line 110:** Uploads an unattached file.
-- **Line 111:** Tries to create a lesson with a link the fake verifier rejects.
-- **Line 112:** Expects 400.
-- **Line 113:** The message names the host and the reason (404).
-- **Line 114:** Tries a link that fails unexpectedly.
-- **Line 115:** Expects 400.
-- **Line 116:** Reads the message.
-- **Line 117:** It says the link could not be checked.
-- **Line 118:** It must not leak the internal failure text.
-- **Line 119:** Referring to an attachment id that does not exist gives 400.
-- **Line 120:** Attaches the unattached upload to a new lesson.
-- **Line 121:** Trying to attach the same upload to a different lesson gives 400.
-- **Line 122:** Only the first lesson owns it.
-- **Line 123:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
-- **Line 124:** Only the two intended lessons exist, so failed saves created nothing.
-- **Line 125:** Updating a lesson that does not exist still gives 404.
+- **Line 101:** Unsaved uploads are not listed as lesson attachments.
+- **Line 102:** Creates a second lesson with one link.
+- **Line 103:** Exactly one attachment exists.
+- **Line 104:** Deletes that lesson.
+- **Line 105:** Unsaved uploads are not listed as lesson attachments.
+- **Line 106:** Checks the table directly: no rows remain.
+- **Line 107:** Closes the callback body and the function call that received it.
+- **Line 108:** Blank line separates related sections for readability; it performs no operation.
+- **Line 109:** Registers the failure test.
+- **Line 110:** Creates the fixture.
+- **Line 111:** Saves a plain lesson.
+- **Line 112:** Uploads an unattached file.
+- **Line 113:** Tries to create a lesson with a link the fake verifier rejects.
+- **Line 114:** Expects 400.
+- **Line 115:** The message names the host and the reason (404).
+- **Line 116:** Tries a link that fails unexpectedly.
+- **Line 117:** Expects 400.
+- **Line 118:** Reads the message.
+- **Line 119:** It says the link could not be checked.
+- **Line 120:** It must not leak the internal failure text.
+- **Line 121:** Referring to an attachment id that does not exist gives 400.
+- **Line 122:** Attaches the unattached upload to a new lesson.
+- **Line 123:** Trying to attach the same upload to a different lesson gives 400.
+- **Line 124:** Only the first lesson owns it.
+- **Line 125:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
 
 ### Lines 126–150
 
 ```text
-126 | });
-127 |
-128 | test('verify and suggest routes validate input, hide failures and limit searches', async t => {
-129 |   let calls = 0;
-130 |   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
-131 |   const state = await fixture(t, { findMedia });
-132 |   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });
-133 |   assert.equal(ok.status, 200);
-134 |   assert.equal((await ok.json()).kind, 'youtube');
-135 |   const broken = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/broken.png' });
-136 |   assert.equal(broken.status, 400);
-137 |   assert.match((await broken.json()).error, /404/);
-138 |   const offline = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/offline.png' });
-139 |   assert.equal(offline.status, 502);
-140 |   assert.ok(!(await offline.json()).error.includes('private'));
-141 |   assert.equal((await state.json('/api/media/verify', 'POST', { url: 5 })).status, 400);
-142 |   const sections = [{ name: 'Technique teaching', instructions: 'Teach.', queries: ['jab'] }];
-143 |   for (const bad of [{}, { discipline: 'Chess', sections }, { discipline: 'Boxing', sections: 'x' }, { discipline: 'Boxing', sections: [{ name: 1, instructions: '' }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: 'x'.repeat(1501) }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: '', queries: ['x', 'y', 'z', 'w'] }] }]) assert.equal((await state.json('/api/media/suggest', 'POST', bad)).status, 400);
-144 |   const found = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections });
-145 |   assert.equal(found.status, 200);
-146 |   assert.equal((await found.json()).media[0].activity, 'Technique teaching');
-147 |   for (let index = 0; index < 5; index++) await (await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).text();
-148 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
-149 |   assert.equal(calls, 6);
-150 | });
+126 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
+127 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
+128 | });
+129 |
+130 | test('verify and suggest routes validate input, hide failures and limit searches', async t => {
+131 |   let calls = 0;
+132 |   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
+133 |   const state = await fixture(t, { findMedia });
+134 |   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });
+135 |   assert.equal(ok.status, 200);
+136 |   assert.equal((await ok.json()).kind, 'youtube');
+137 |   const broken = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/broken.png' });
+138 |   assert.equal(broken.status, 400);
+139 |   assert.match((await broken.json()).error, /404/);
+140 |   const offline = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/offline.png' });
+141 |   assert.equal(offline.status, 502);
+142 |   assert.ok(!(await offline.json()).error.includes('private'));
+143 |   assert.equal((await state.json('/api/media/verify', 'POST', { url: 5 })).status, 400);
+144 |   const sections = [{ name: 'Technique teaching', instructions: 'Teach.', queries: ['jab'] }];
+145 |   for (const bad of [{}, { discipline: 'Chess', sections }, { discipline: 'Boxing', sections: 'x' }, { discipline: 'Boxing', sections: [{ name: 1, instructions: '' }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: 'x'.repeat(1501) }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: '', queries: ['x', 'y', 'z', 'w'] }] }]) assert.equal((await state.json('/api/media/suggest', 'POST', bad)).status, 400);
+146 |   const found = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections });
+147 |   assert.equal(found.status, 200);
+148 |   assert.equal((await found.json()).media[0].activity, 'Technique teaching');
+149 |   for (let index = 0; index < 5; index++) await (await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).text();
+150 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
 ```
 
-- **Line 126:** Closes the callback body and the function call that received it.
-- **Line 127:** Blank line separates related sections for readability; it performs no operation.
-- **Line 128:** Registers the verify and suggest route test.
-- **Line 129:** Counts how often the fake finder is called.
-- **Line 130:** A fake finder that returns one suggested video for the first section.
-- **Line 131:** Creates the fixture with that fake finder.
-- **Line 132:** Verifies a YouTube link.
-- **Line 133:** Expects 200.
-- **Line 134:** Expects kind youtube.
-- **Line 135:** Verifies a link the fake rejects.
-- **Line 136:** Expects 400.
-- **Line 137:** The message contains the reason.
-- **Line 138:** Verifies a link that fails unexpectedly.
-- **Line 139:** Expects 502.
-- **Line 140:** No internal detail is revealed.
-- **Line 141:** A request whose url is not text gives 400.
-- **Line 142:** A valid sections list for the suggest route.
-- **Line 143:** Six invalid suggest requests (empty, unknown discipline, sections not a list, a non-text section name, instructions over 1500 characters, four search phrases) each give 400.
-- **Line 144:** A valid suggest request.
-- **Line 145:** Expects 200.
-- **Line 146:** The suggestion belongs to the section that asked.
-- **Line 147:** Makes five more searches (six in total within a minute).
-- **Line 148:** The seventh search is refused with 429.
-- **Line 149:** Only the six allowed searches reached the finder.
-- **Line 150:** Closes the callback body and the function call that received it.
+- **Line 126:** Only the two intended lessons exist, so failed saves created nothing.
+- **Line 127:** Updating a lesson that does not exist still gives 404.
+- **Line 128:** Closes the callback body and the function call that received it.
+- **Line 129:** Blank line separates related sections for readability; it performs no operation.
+- **Line 130:** Registers the verify and suggest route test.
+- **Line 131:** Counts how often the fake finder is called.
+- **Line 132:** A fake finder that returns one suggested video for the first section.
+- **Line 133:** Creates the fixture with that fake finder.
+- **Line 134:** Verifies a YouTube link.
+- **Line 135:** Expects 200.
+- **Line 136:** Expects kind youtube.
+- **Line 137:** Verifies a link the fake rejects.
+- **Line 138:** Expects 400.
+- **Line 139:** The message contains the reason.
+- **Line 140:** Verifies a link that fails unexpectedly.
+- **Line 141:** Expects 502.
+- **Line 142:** No internal detail is revealed.
+- **Line 143:** A request whose url is not text gives 400.
+- **Line 144:** A valid sections list for the suggest route.
+- **Line 145:** Six invalid suggest requests (empty, unknown discipline, sections not a list, a non-text section name, instructions over 1500 characters, four search phrases) each give 400.
+- **Line 146:** A valid suggest request.
+- **Line 147:** Expects 200.
+- **Line 148:** The suggestion belongs to the section that asked.
+- **Line 149:** Makes five more searches (six in total within a minute).
+- **Line 150:** The seventh search is refused with 429.
 
-### Lines 151–162
+### Lines 151–164
 
 ```text
-151 |
-152 | test('suggest failures return a friendly message and old unattached uploads are purged', async t => {
-153 |   const state = await fixture(t, { findMedia: async () => { throw new Error('private search detail'); } });
-154 |   const failed = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'A', instructions: '' }] });
-155 |   assert.equal(failed.status, 502);
-156 |   assert.ok(!(await failed.json()).error.includes('private'));
-157 |   const old = await (await state.upload(png)).json();
-158 |   state.database.prepare("UPDATE lesson_media SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?").run(old.id);
-159 |   const fresh = await (await state.upload(png)).json();
-160 |   assert.equal((await fetch(`${state.url}/api/media/${old.id}/file`)).status, 404);
-161 |   assert.equal((await fetch(`${state.url}/api/media/${fresh.id}/file`)).status, 200);
-162 | });
+151 |   assert.equal(calls, 6);
+152 | });
+153 |
+154 | test('suggest failures return a friendly message and old unattached uploads are purged', async t => {
+155 |   const state = await fixture(t, { findMedia: async () => { throw new Error('private search detail'); } });
+156 |   const failed = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'A', instructions: '' }] });
+157 |   assert.equal(failed.status, 502);
+158 |   assert.ok(!(await failed.json()).error.includes('private'));
+159 |   const old = await (await state.upload(png)).json();
+160 |   state.database.prepare("UPDATE lesson_media SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?").run(old.id);
+161 |   const fresh = await (await state.upload(png)).json();
+162 |   assert.equal((await fetch(`${state.url}/api/media/${old.id}/file`)).status, 404);
+163 |   assert.equal((await fetch(`${state.url}/api/media/${fresh.id}/file`)).status, 200);
+164 | });
 ```
 
-- **Line 151:** Blank line separates related sections for readability; it performs no operation.
-- **Line 152:** Registers the final test: finder failures and orphan cleanup.
-- **Line 153:** Creates a fixture whose finder throws an internal error.
-- **Line 154:** Asks for suggestions.
-- **Line 155:** Expects 502.
-- **Line 156:** The reply hides the internal detail.
-- **Line 157:** Uploads a file.
-- **Line 158:** Pretends it was uploaded in 2020 by editing its timestamp directly in the database.
-- **Line 159:** Uploads another file; every upload triggers cleanup of old unattached files.
-- **Line 160:** The old upload has been purged.
-- **Line 161:** The new upload remains.
-- **Line 162:** Closes the callback body and the function call that received it.
+- **Line 151:** Only the six allowed searches reached the finder.
+- **Line 152:** Closes the callback body and the function call that received it.
+- **Line 153:** Blank line separates related sections for readability; it performs no operation.
+- **Line 154:** Registers the final test: finder failures and orphan cleanup.
+- **Line 155:** Creates a fixture whose finder throws an internal error.
+- **Line 156:** Asks for suggestions.
+- **Line 157:** Expects 502.
+- **Line 158:** The reply hides the internal detail.
+- **Line 159:** Uploads a file.
+- **Line 160:** Pretends it was uploaded in 2020 by editing its timestamp directly in the database.
+- **Line 161:** Uploads another file; every upload triggers cleanup of old unattached files.
+- **Line 162:** The old upload has been purged.
+- **Line 163:** The new upload remains.
+- **Line 164:** Closes the callback body and the function call that received it.
 
 ## client/api-proxy.js
 
@@ -7218,7 +7503,7 @@ Small Vite plugin that forwards every /api request from the development web page
 6 |     name: 'coachlab-api-proxy',
 7 |     configureServer(server) {
 8 |       server.middlewares.use('/api', (request, response) => {
-9 |         const upstream = http.request({ host: '127.0.0.1', port, method: request.method, path: request.originalUrl, headers: { ...request.headers, host: `127.0.0.1:${port}` } }, answer => {
+9 |         const upstream = http.request({ host: '127.0.0.1', port, method: request.method, path: request.originalUrl, headers: { ...request.headers, host: `127.0.0.1:${port}`, 'x-forwarded-for': request.socket.remoteAddress } }, answer => {
 10 |           response.writeHead(answer.statusCode, answer.headers);
 11 |           answer.pipe(response);
 12 |         });
@@ -7243,7 +7528,7 @@ Small Vite plugin that forwards every /api request from the development web page
 - **Line 6:** A name that appears in Vite’s messages.
 - **Line 7:** configureServer is called by Vite when the development server starts; it receives the server.
 - **Line 8:** Registers a handler for every address starting with /api. request is what the browser sent, response is what will be returned.
-- **Line 9:** Makes the same request to the backend at 127.0.0.1 (this computer only): same method, same path and query, same headers except the host name. The function after it receives the backend’s answer.
+- **Line 9:** The development proxy now also forwards the real address of the browser in an x-forwarded-for header (replacing any value the browser supplied). The backend uses it to rate-limit sign-in attempts per device instead of treating every request as coming from the proxy.
 - **Line 10:** Copies the backend’s status code and headers to the browser’s response.
 - **Line 11:** pipe sends the backend’s body to the browser piece by piece, waiting whenever the browser is busy, so large files stream correctly.
 - **Line 12:** Ends the answer callback and the request options.
@@ -7258,3 +7543,2473 @@ Small Vite plugin that forwards every /api request from the development web page
 - **Line 21:** Ends configureServer, followed by a comma because it is a property.
 - **Line 22:** Ends the plugin object.
 - **Line 23:** Ends the function.
+
+## client/src/AuthScreen.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\AuthScreen.jsx`
+
+The login screens: sign in, create account, forgot password and choose a new password. They are built for phones first (large touch targets, full-width buttons, proper autocomplete and keyboard hints so password managers work) and show clear messages. The page never reveals whether an email is registered.
+
+### Lines 1–25
+
+```text
+1 | import React, { useState } from 'react';
+2 | import { getSession, requestReset, resetPassword, signIn, signUp, startGoogleSignIn } from './auth.js';
+3 | import { passwordLimits, passwordProblem, validateEmail, validateName } from './password-policy.js';
+4 |
+5 | function PasswordField({ label, value, onChange, autoComplete, hint, disabled }) {
+6 |   const [shown, setShown] = useState(false);
+7 |   return <div className="password-field">
+8 |     <label>{label}
+9 |       <input type={shown ? 'text' : 'password'} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} required maxLength={passwordLimits.max} disabled={disabled} autoCapitalize="none" spellCheck="false" />
+10 |     </label>
+11 |     {hint && <small>{hint}</small>}
+12 |     <label className="check-label show-password"><input type="checkbox" checked={shown} onChange={event => setShown(event.target.checked)} />Show password</label>
+13 |   </div>;
+14 | }
+15 |
+16 | export default function AuthScreen({ config, notice, resetToken, resetError, onSignedIn }) {
+17 |   const [mode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
+18 |   const [name, setName] = useState('');
+19 |   const [email, setEmail] = useState('');
+20 |   const [password, setPassword] = useState('');
+21 |   const [message, setMessage] = useState(notice ? { tone: 'success', text: notice } : resetError ? { tone: 'error', text: resetError } : null);
+22 |   const [busy, setBusy] = useState(false);
+23 |
+24 |   function go(next, text, tone = 'success') {
+25 |     setMode(next);
+```
+
+- **Line 1:** Imports React and useState.
+- **Line 2:** Imports the login helper functions.
+- **Line 3:** Imports the shared password, name and email rules.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Defines PasswordField, a password input with a Show password checkbox and optional hint.
+- **Line 6:** Remembers whether the password is visible.
+- **Line 7:** Starts the field container.
+- **Line 8:** Starts the label (which also names the input for screen readers).
+- **Line 9:** The password input: its type switches between password and text, autoComplete tells password managers whether to fill or suggest, and maxLength matches the server limit.
+- **Line 10:** Ends the label.
+- **Line 11:** Shows the hint text when one was given.
+- **Line 12:** The Show password checkbox, with a label for easy tapping.
+- **Line 13:** Closes the div element and the returned expression.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Exports AuthScreen. It receives the public settings, an optional message, a reset token or reset error from a link, and a function to call after signing in.
+- **Line 17:** Chooses the first screen: the reset form when a token came with a reset link, the forgot form when the link was invalid, otherwise sign in.
+- **Line 18:** State for the name field.
+- **Line 19:** State for the email field.
+- **Line 20:** State for the password field.
+- **Line 21:** The message shown above the form: a notice (such as “You have been signed out”), a link error, or none.
+- **Line 22:** True while a request is running, which disables the form.
+- **Line 23:** Blank line separates related sections for readability; it performs no operation.
+- **Line 24:** Defines go, which switches screen and optionally shows a message.
+- **Line 25:** Changes the screen.
+
+### Lines 26–50
+
+```text
+26 |     setPassword('');
+27 |     setMessage(text ? { tone, text } : null);
+28 |   }
+29 |   async function run(work) {
+30 |     if (busy) return;
+31 |     setBusy(true);
+32 |     setMessage(null);
+33 |     try { await work(); } catch (failure) { setMessage({ tone: 'error', text: failure.message }); } finally { setBusy(false); }
+34 |   }
+35 |   const submit = work => event => { event.preventDefault(); run(work); };
+36 |
+37 |   const login = submit(async () => {
+38 |     const problem = validateEmail(email);
+39 |     if (problem) throw new Error(problem);
+40 |     if (!password) throw new Error('Enter your password.');
+41 |     await signIn({ email, password });
+42 |     const user = await getSession();
+43 |     if (!user) throw new Error('Sign-in did not complete. Please try again.');
+44 |     onSignedIn(user);
+45 |   });
+46 |   const register = submit(async () => {
+47 |     const problem = validateName(name) || validateEmail(email) || passwordProblem(password, email);
+48 |     if (problem) throw new Error(problem);
+49 |     await signUp({ name, email, password });
+50 |     go('signin', 'Your account request was received. Sign in below. If this email already had an account, its password was not changed: sign in with your existing password or choose “Forgot password”.');
+```
+
+- **Line 26:** Always clears the password, so it is never carried between screens.
+- **Line 27:** Sets or clears the message.
+- **Line 28:** Closes the preceding block (function, object, or statement body).
+- **Line 29:** Defines run, which performs one action safely.
+- **Line 30:** Ignores a second press while one request is running.
+- **Line 31:** Shows the busy state.
+- **Line 32:** Clears the old message.
+- **Line 33:** Runs the action; any error becomes a visible message; the busy state always ends.
+- **Line 34:** Closes the preceding block (function, object, or statement body).
+- **Line 35:** Defines submit: wraps an action so the page does not reload and the action runs through run.
+- **Line 36:** Blank line separates related sections for readability; it performs no operation.
+- **Line 37:** The sign-in action.
+- **Line 38:** Checks the email shape first.
+- **Line 39:** Shows the problem if there is one.
+- **Line 40:** A password is required.
+- **Line 41:** Sends the sign-in request; the server sets the session cookie.
+- **Line 42:** Asks the server who is now signed in, to confirm the session works.
+- **Line 43:** If no session appeared, reports a problem instead of showing the dashboard.
+- **Line 44:** Tells the parent the coach is signed in.
+- **Line 45:** Closes the callback body and the function call that received it.
+- **Line 46:** The registration action.
+- **Line 47:** Checks name, email and password with the shared rules (the server checks them again).
+- **Line 48:** Shows the first problem.
+- **Line 49:** Sends the registration.
+- **Line 50:** Always shows the same message and moves to sign in, whether or not the email already had an account: it explains both cases without confirming either, so the page cannot be used to discover registered emails.
+
+### Lines 51–75
+
+```text
+51 |   });
+52 |   const forgot = submit(async () => {
+53 |     const problem = validateEmail(email);
+54 |     if (problem) throw new Error(problem);
+55 |     await requestReset(email);
+56 |     go('signin', config.mail === 'console' ? 'If that email has an account, a reset link was created. Email is not set up yet in this local copy, so the link is printed in the CoachLab backend window. It works once and expires in one hour.' : 'If that email has an account, we sent a reset link. It works once and expires in one hour.');
+57 |   });
+58 |   const reset = submit(async () => {
+59 |     const problem = passwordProblem(password);
+60 |     if (problem) throw new Error(problem);
+61 |     await resetPassword({ token: resetToken, newPassword: password });
+62 |     go('signin', 'Your password was changed and every other session was signed out. Sign in with your new password.');
+63 |   });
+64 |
+65 |   const heading = { signin: 'Sign in to CoachLab', register: 'Create your coach account', forgot: 'Reset your password', reset: 'Choose a new password' }[mode];
+66 |   return <main className="auth-screen">
+67 |     <div className="auth-card">
+68 |       <p className="eyebrow">PLAN WITH PURPOSE</p>
+69 |       <h1>CoachLab</h1>
+70 |       <h2>{heading}</h2>
+71 |       {message && <p className={message.tone === 'error' ? 'error' : 'success'} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
+72 |       {mode === 'signin' && <form onSubmit={login} noValidate>
+73 |         <fieldset disabled={busy}>
+74 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
+75 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
+```
+
+- **Line 51:** Closes the callback body and the function call that received it.
+- **Line 52:** The forgot-password action.
+- **Line 53:** Checks the email shape.
+- **Line 54:** Shows the problem.
+- **Line 55:** Requests the reset link.
+- **Line 56:** Always shows the same message. In local mode it also explains that the link appears in the backend window because email is not set up yet.
+- **Line 57:** Closes the callback body and the function call that received it.
+- **Line 58:** The choose-new-password action.
+- **Line 59:** Checks the new password with the shared rules.
+- **Line 60:** Shows the problem.
+- **Line 61:** Sends the one-time token and the new password.
+- **Line 62:** Confirms the change, says other sessions were signed out and moves to sign in.
+- **Line 63:** Closes the callback body and the function call that received it.
+- **Line 64:** Blank line separates related sections for readability; it performs no operation.
+- **Line 65:** Chooses the heading for each screen.
+- **Line 66:** Starts the page.
+- **Line 67:** The card.
+- **Line 68:** Small tagline above the title.
+- **Line 69:** The CoachLab title.
+- **Line 70:** The screen heading.
+- **Line 71:** Shows the message, as an alert for errors and as a status for good news, so screen readers announce it.
+- **Line 72:** The sign-in form; noValidate lets CoachLab show its own friendlier messages.
+- **Line 73:** A fieldset disabled while busy disables every control inside at once.
+- **Line 74:** The email input: type email and inputMode email show a suitable phone keyboard, autoComplete username lets password managers fill it, and autoCapitalize none stops phones capitalising the first letter.
+- **Line 75:** The password field; current-password tells password managers to fill the saved password.
+
+### Lines 76–100
+
+```text
+76 |           <button type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
+77 |         </fieldset>
+78 |         <p className="auth-links"><button type="button" className="link" onClick={() => go('forgot')}>Forgot password?</button></p>
+79 |       </form>}
+80 |       {mode === 'register' && <form onSubmit={register} noValidate>
+81 |         <fieldset disabled={busy}>
+82 |           <label>Your name<input value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={80} required autoFocus /></label>
+83 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" required /></label>
+84 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters. A few random words work well. Avoid common passwords.`} />
+85 |           <button type="submit">{busy ? 'Creating account…' : 'Create account'}</button>
+86 |         </fieldset>
+87 |       </form>}
+88 |       {mode === 'forgot' && <form onSubmit={forgot} noValidate>
+89 |         <fieldset disabled={busy}>
+90 |           <p>Enter your email and we will create a one-time reset link.</p>
+91 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
+92 |           <button type="submit">{busy ? 'Sending…' : 'Send reset link'}</button>
+93 |         </fieldset>
+94 |       </form>}
+95 |       {mode === 'reset' && <form onSubmit={reset} noValidate>
+96 |         <fieldset disabled={busy}>
+97 |           <PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters.`} />
+98 |           <button type="submit">{busy ? 'Saving…' : 'Change password'}</button>
+99 |         </fieldset>
+100 |       </form>}
+```
+
+- **Line 76:** The submit button.
+- **Line 77:** Ends the fieldset.
+- **Line 78:** The Forgot password link-button.
+- **Line 79:** Ends the sign-in form.
+- **Line 80:** The registration form.
+- **Line 81:** Fieldset disabled while busy.
+- **Line 82:** The name input with the browser’s name autofill hint and the 80-character limit.
+- **Line 83:** The email input.
+- **Line 84:** The password field; new-password tells password managers to offer a strong password; the hint states the rule.
+- **Line 85:** The submit button.
+- **Line 86:** Ends the fieldset.
+- **Line 87:** Ends the registration form.
+- **Line 88:** The forgot-password form.
+- **Line 89:** Fieldset disabled while busy.
+- **Line 90:** Explains what will happen.
+- **Line 91:** The email input.
+- **Line 92:** The submit button.
+- **Line 93:** Ends the fieldset.
+- **Line 94:** Ends the form.
+- **Line 95:** The choose-new-password form (shown only when a valid reset link was opened).
+- **Line 96:** Fieldset disabled while busy.
+- **Line 97:** The new password field with its hint.
+- **Line 98:** The submit button.
+- **Line 99:** Ends the fieldset.
+- **Line 100:** Ends the form.
+
+### Lines 101–111
+
+```text
+101 |       {mode === 'signin' && config.google && <>
+102 |         <p className="auth-divider"><span>or</span></p>
+103 |         <button type="button" className="secondary" disabled={busy} onClick={() => run(startGoogleSignIn)}>Continue with Google</button>
+104 |       </>}
+105 |       <p className="auth-links">
+106 |         {mode === 'signin' && <>New here? <button type="button" className="link" onClick={() => go('register')}>Create an account</button></>}
+107 |         {mode !== 'signin' && <button type="button" className="link" onClick={() => go('signin')}>Back to sign in</button>}
+108 |       </p>
+109 |     </div>
+110 |   </main>;
+111 | }
+```
+
+- **Line 101:** On the sign-in screen, when the server says Google is configured, shows the Google option.
+- **Line 102:** The “or” divider.
+- **Line 103:** The Continue with Google button.
+- **Line 104:** Ends the Google section.
+- **Line 105:** Starts the bottom links.
+- **Line 106:** On sign in: a link-button to create an account.
+- **Line 107:** On the other screens: a link-button back to sign in.
+- **Line 108:** Ends the links.
+- **Line 109:** Closes the div element.
+- **Line 110:** Ends the page.
+- **Line 111:** Closes the preceding block (function, object, or statement body).
+
+## client/src/Gate.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\Gate.jsx`
+
+The top-level component. It decides what the coach sees: a loading message, the login screens, or the dashboard. The dashboard (App) is not created at all until the server confirms a session, and it is discarded on logout, so one coach’s lessons never stay in memory for the next person at the same browser.
+
+### Lines 1–25
+
+```text
+1 | import React, { useEffect, useState } from 'react';
+2 | import App from './App.jsx';
+3 | import AuthScreen from './AuthScreen.jsx';
+4 | import { getAuthConfig, getSession, installUnauthorizedHandler, signOut } from './auth.js';
+5 |
+6 | function readResetLink() {
+7 |   const params = new URLSearchParams(window.location.search);
+8 |   const onResetPage = window.location.pathname === '/reset-password';
+9 |   const token = onResetPage ? params.get('token') : null;
+10 |   const error = onResetPage && params.get('error') ? 'This reset link is invalid or has expired. Request a new one.' : null;
+11 |   if (onResetPage) window.history.replaceState({}, '', '/');
+12 |   return { token, error };
+13 | }
+14 |
+15 | export default function Gate() {
+16 |   const [link] = useState(readResetLink);
+17 |   const [config, setConfig] = useState({ google: false, mail: 'unknown' });
+18 |   const [state, setState] = useState({ status: 'loading', user: null, notice: null });
+19 |
+20 |   useEffect(() => {
+21 |     let active = true;
+22 |     getAuthConfig().then(value => { if (active) setConfig(value); });
+23 |     getSession().then(user => { if (active) setState({ status: user && !link.token && !link.error ? 'in' : 'out', user: user && !link.token && !link.error ? user : null, notice: null }); }).catch(() => { if (active) setState({ status: 'out', user: null, notice: null }); });
+24 |     return () => { active = false; };
+25 |   }, []);
+```
+
+- **Line 1:** Imports React and its hooks.
+- **Line 2:** Imports the dashboard.
+- **Line 3:** Imports the login screens.
+- **Line 4:** Imports the login helper functions.
+- **Line 5:** Blank line separates related sections for readability; it performs no operation.
+- **Line 6:** Defines readResetLink, run once when the page opens: it reads a password reset link.
+- **Line 7:** Reads the address’s query parameters.
+- **Line 8:** True when the page address is /reset-password.
+- **Line 9:** On that page, the one-time token from the address.
+- **Line 10:** On that page, an error message when the link was invalid or expired.
+- **Line 11:** Immediately replaces the address with / so the token does not stay in the address bar or browser history.
+- **Line 12:** Returns the token and error.
+- **Line 13:** Closes the preceding block (function, object, or statement body).
+- **Line 14:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Exports Gate.
+- **Line 16:** Reads the reset link once.
+- **Line 17:** Stores the public settings (Google, mail mode).
+- **Line 18:** Stores the sign-in state: loading, in or out, with the coach and an optional message.
+- **Line 19:** Blank line separates related sections for readability; it performs no operation.
+- **Line 20:** Runs once when the page opens.
+- **Line 21:** A flag that stops updates if the page was closed meanwhile.
+- **Line 22:** Loads the public settings.
+- **Line 23:** Asks the server whether the browser has a valid session. A reset link always shows the reset screen first, even if someone is signed in.
+- **Line 24:** Cleanup: ignore late answers.
+- **Line 25:** Empty list: run only once.
+
+### Lines 26–37
+
+```text
+26 |
+27 |   useEffect(() => installUnauthorizedHandler(() => setState(current => current.status === 'in' ? { status: 'out', user: null, notice: 'Your session ended, so you were signed out. Please sign in again.' } : current)), []);
+28 |
+29 |   async function logOut() {
+30 |     try { await signOut(); } catch { /* the server may already have ended the session */ }
+31 |     setState({ status: 'out', user: null, notice: 'You have been signed out.' });
+32 |   }
+33 |
+34 |   if (state.status === 'loading') return <main><p role="status">Loading CoachLab…</p></main>;
+35 |   if (state.status === 'out') return <AuthScreen config={config} notice={state.notice} resetToken={link.token} resetError={link.error} onSignedIn={user => setState({ status: 'in', user, notice: null })} />;
+36 |   return <App user={state.user} onLogOut={logOut} />;
+37 | }
+```
+
+- **Line 26:** Blank line separates related sections for readability; it performs no operation.
+- **Line 27:** Installs the handler that, when a data request is refused with 401, returns the coach to the login screen with an explanation. The function it returns removes the handler.
+- **Line 28:** Blank line separates related sections for readability; it performs no operation.
+- **Line 29:** Defines logOut for the Log out button.
+- **Line 30:** Asks the server to end the session; a failure is ignored because the session may already be gone.
+- **Line 31:** Shows the login screen with “You have been signed out.”
+- **Line 32:** Closes the preceding block (function, object, or statement body).
+- **Line 33:** Blank line separates related sections for readability; it performs no operation.
+- **Line 34:** While checking, shows a loading message.
+- **Line 35:** When signed out, shows the login screens and, after a successful sign-in, switches to the dashboard.
+- **Line 36:** When signed in, shows the dashboard for that coach.
+- **Line 37:** Closes the preceding block (function, object, or statement body).
+
+## client/src/auth.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\auth.js`
+
+Browser helper functions for the login system. They call Better Auth’s routes under /api/auth with plain fetch (the session itself lives in an HttpOnly cookie the browser sends automatically and JavaScript can never read), and turn technical error codes into plain-language messages.
+
+### Lines 1–25
+
+```text
+1 | const json = { 'Content-Type': 'application/json' };
+2 | export const networkMessage = 'Could not reach CoachLab. Check your connection and try again.';
+3 |
+4 | export function friendlyAuthError(status, data) {
+5 |   const code = data?.code;
+6 |   if (code === 'INVALID_EMAIL_OR_PASSWORD' || status === 401) return 'Incorrect email or password.';
+7 |   if (code === 'TOO_MANY_ATTEMPTS') return data.message;
+8 |   if (status === 429) return 'Too many attempts from this device. Wait a few minutes and try again.';
+9 |   if (code === 'INVALID_TOKEN') return 'This reset link is invalid or has expired. Request a new one.';
+10 |   if (['INVALID_REGISTRATION', 'WEAK_PASSWORD', 'PASSWORD_TOO_SHORT', 'PASSWORD_TOO_LONG'].includes(code) && data.message) return data.message;
+11 |   if (status === 403) return 'This request was blocked for your safety. Reload the page and try again.';
+12 |   return 'Something went wrong. Please try again.';
+13 | }
+14 |
+15 | async function call(path, { method = 'POST', body } = {}) {
+16 |   let response;
+17 |   try {
+18 |     response = await fetch(`/api/auth${path}`, { method, headers: body === undefined ? undefined : json, body: body === undefined ? undefined : JSON.stringify(body) });
+19 |   } catch {
+20 |     throw new Error(networkMessage);
+21 |   }
+22 |   const data = await response.json().catch(() => null);
+23 |   if (!response.ok) throw new Error(friendlyAuthError(response.status, data));
+24 |   return data;
+25 | }
+```
+
+- **Line 1:** Header object used for requests that send JSON.
+- **Line 2:** The message shown when the server cannot be reached.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Exports friendlyAuthError, which chooses the sentence a coach sees for a failed request, from the HTTP status and the server’s error code.
+- **Line 5:** Reads the machine-readable error code, if the reply had one.
+- **Line 6:** A wrong password, an unknown email or any 401 all produce the same sentence, so the page cannot be used to find out which emails have accounts.
+- **Line 7:** A temporarily locked account shows the server’s own explanation.
+- **Line 8:** Any other 429 (too many requests) says to wait a few minutes.
+- **Line 9:** An invalid or expired reset token tells the coach to request a new link.
+- **Line 10:** Registration and password rule failures show the server’s specific reason (for example “Use at least 10 characters.”).
+- **Line 11:** A 403 means the request was blocked as not coming from CoachLab’s own page; the advice is to reload.
+- **Line 12:** Everything else gets a general message that reveals no technical detail.
+- **Line 13:** Closes the preceding block (function, object, or statement body).
+- **Line 14:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Defines call, the shared request helper for the login routes (POST by default).
+- **Line 16:** Will hold the server’s answer.
+- **Line 17:** Starts the guarded request.
+- **Line 18:** Sends the request to /api/auth plus the path, with a JSON body when there is one. Cookies travel automatically because the request is to the same site.
+- **Line 19:** If the network fails…
+- **Line 20:** …throws the friendly connection message.
+- **Line 21:** Closes the preceding block (function, object, or statement body).
+- **Line 22:** Reads the JSON reply, or null if the reply is not JSON.
+- **Line 23:** A failed status becomes an Error with a friendly message.
+- **Line 24:** Returns the reply data on success.
+- **Line 25:** Closes the preceding block (function, object, or statement body).
+
+### Lines 26–50
+
+```text
+26 |
+27 | export async function getAuthConfig() {
+28 |   try {
+29 |     const response = await fetch('/api/auth-config');
+30 |     const data = await response.json();
+31 |     return { google: data.google === true, mail: data.mail };
+32 |   } catch {
+33 |     return { google: false, mail: 'unknown' };
+34 |   }
+35 | }
+36 |
+37 | export async function getSession() {
+38 |   const data = await call('/get-session', { method: 'GET' });
+39 |   return data?.user ? { id: data.user.id, name: data.user.name, email: data.user.email } : null;
+40 | }
+41 |
+42 | export const signUp = ({ name, email, password }) => call('/sign-up/email', { body: { name: name.trim(), email: email.trim(), password } });
+43 | export const signIn = ({ email, password }) => call('/sign-in/email', { body: { email: email.trim(), password } });
+44 | export const signOut = () => call('/sign-out', { body: {} });
+45 | export const requestReset = email => call('/request-password-reset', { body: { email: email.trim(), redirectTo: '/reset-password' } });
+46 | export const resetPassword = ({ token, newPassword }) => call('/reset-password', { body: { token, newPassword } });
+47 |
+48 | export async function startGoogleSignIn() {
+49 |   const data = await call('/sign-in/social', { body: { provider: 'google', callbackURL: '/' } });
+50 |   if (typeof data?.url !== 'string' || !data.url.startsWith('https://accounts.google.com/')) throw new Error('Google sign-in is not available right now.');
+```
+
+- **Line 26:** Blank line separates related sections for readability; it performs no operation.
+- **Line 27:** Exports getAuthConfig, which asks which sign-in options exist.
+- **Line 28:** Starts the guarded request.
+- **Line 29:** Requests the public settings (no sign-in needed).
+- **Line 30:** Reads the reply.
+- **Line 31:** Returns whether Google sign-in is configured and the mail mode.
+- **Line 32:** If anything fails…
+- **Line 33:** …assumes no Google and an unknown mail mode, so the login page still works.
+- **Line 34:** Closes the preceding block (function, object, or statement body).
+- **Line 35:** Closes the preceding block (function, object, or statement body).
+- **Line 36:** Blank line separates related sections for readability; it performs no operation.
+- **Line 37:** Exports getSession: asks the server whether the browser has a valid session.
+- **Line 38:** Calls get-session; the server answers null when nobody is signed in.
+- **Line 39:** Returns the coach’s id, name and email, or null.
+- **Line 40:** Closes the preceding block (function, object, or statement body).
+- **Line 41:** Blank line separates related sections for readability; it performs no operation.
+- **Line 42:** signUp: sends the registration (name, email, password).
+- **Line 43:** signIn: sends the email and password; on success the server sets the session cookie.
+- **Line 44:** signOut: ends the session on the server and clears the cookie.
+- **Line 45:** requestReset: asks for a password reset link; redirectTo says the link should lead back to the /reset-password page.
+- **Line 46:** resetPassword: sends the one-time token and the new password.
+- **Line 47:** Blank line separates related sections for readability; it performs no operation.
+- **Line 48:** Exports startGoogleSignIn.
+- **Line 49:** Asks the server for Google’s sign-in address.
+- **Line 50:** Only follows the address if it starts with https://accounts.google.com/, so a tampered answer cannot send the coach anywhere else.
+
+### Lines 51–63
+
+```text
+51 |   window.location.assign(data.url);
+52 | }
+53 |
+54 | export function installUnauthorizedHandler(handler) {
+55 |   const original = window.fetch;
+56 |   window.fetch = async (input, init) => {
+57 |     const response = await original(input, init);
+58 |     const address = typeof input === 'string' ? input : input?.url ?? '';
+59 |     if (response.status === 401 && address.startsWith('/api/') && !address.startsWith('/api/auth')) handler();
+60 |     return response;
+61 |   };
+62 |   return () => { window.fetch = original; };
+63 | }
+```
+
+- **Line 51:** Moves the browser to Google.
+- **Line 52:** Closes the preceding block (function, object, or statement body).
+- **Line 53:** Blank line separates related sections for readability; it performs no operation.
+- **Line 54:** Exports installUnauthorizedHandler. It wraps fetch so the dashboard learns when the server stops accepting the session.
+- **Line 55:** Remembers the original fetch.
+- **Line 56:** Replaces window.fetch with a version that adds one check.
+- **Line 57:** Makes the real request.
+- **Line 58:** Reads the address that was requested.
+- **Line 59:** If a CoachLab data route (not a login route) answers 401, calls the handler, which returns the coach to the login screen with an explanation.
+- **Line 60:** Returns the response unchanged.
+- **Line 61:** Closes the preceding block and ends the statement.
+- **Line 62:** Returns a function that puts the original fetch back.
+- **Line 63:** Closes the preceding block (function, object, or statement body).
+
+## client/src/password-policy.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\password-policy.js`
+
+Rules for names, email addresses and passwords. The same file is used by the browser (to show friendly messages while typing) and by the server (which enforces them again before an account is created or a password is reset), so the two can never disagree.
+
+### Lines 1–25
+
+```text
+1 | export const passwordLimits = { min: 10, max: 128 };
+2 |
+3 | const common = new Set(['password', 'password1', 'password123', 'passw0rd', 'qwertyuiop', 'qwerty123', 'qwertyuiop1', '1234567890', '12345678910', '0123456789', 'iloveyou12', 'letmein123', 'welcome123', 'admin12345', 'changeme123', 'coachlab123', 'trustno1234', 'abc1234567', 'football123', 'baseball123']);
+4 |
+5 | export function passwordProblem(password, email = '') {
+6 |   if (typeof password !== 'string') return 'Enter a password.';
+7 |   if (password.length < passwordLimits.min) return `Use at least ${passwordLimits.min} characters.`;
+8 |   if (password.length > passwordLimits.max) return `Use at most ${passwordLimits.max} characters.`;
+9 |   if (common.has(password.toLowerCase())) return 'That password is too common. Choose something harder to guess.';
+10 |   if (/^(.)\1+$/.test(password) || /^\d+$/.test(password)) return 'Use a mix of characters, not just one repeated character or only digits.';
+11 |   const local = String(email).split('@')[0].toLowerCase();
+12 |   if (local.length >= 4 && password.toLowerCase().includes(local)) return 'Do not include your email name in your password.';
+13 |   return null;
+14 | }
+15 |
+16 | export function validateName(name) {
+17 |   if (typeof name !== 'string' || !name.trim()) return 'Enter your name.';
+18 |   if (name.trim().length > 80) return 'Use at most 80 characters for your name.';
+19 |   if (/[<>\u0000-\u001f]/.test(name)) return 'Your name cannot contain angle brackets or control characters.';
+20 |   return null;
+21 | }
+22 |
+23 | export function validateEmail(email) {
+24 |   if (typeof email !== 'string' || !email.trim()) return 'Enter your email address.';
+25 |   const value = email.trim();
+```
+
+- **Line 1:** Exports the allowed password length: 10 to 128 characters. Long passwords are encouraged; the maximum only stops absurd sizes.
+- **Line 2:** Blank line separates related sections for readability; it performs no operation.
+- **Line 3:** A small set of very common passwords (lowercase) that are refused. Better Auth hashes passwords safely, but a guessable password is still guessable.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Exports passwordProblem, which returns a plain-language reason a password is not acceptable, or null when it is fine. The email is optional and used for one extra check.
+- **Line 6:** Rejects values that are not text.
+- **Line 7:** Rejects passwords shorter than the minimum.
+- **Line 8:** Rejects passwords longer than the maximum.
+- **Line 9:** Rejects passwords found in the common list, ignoring upper and lower case.
+- **Line 10:** Rejects one repeated character (for example aaaaaaaaaaaa) and passwords made only of digits. The regular expression /^(.)\1+$/ means “one character repeated to the end”.
+- **Line 11:** Takes the part of the email before the @ sign, lowercased.
+- **Line 12:** Rejects passwords that contain that email name (when it is at least four characters long), because attackers try it first.
+- **Line 13:** Returns null: the password is acceptable.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Exports validateName for the “Your name” field.
+- **Line 17:** A name is required and cannot be only spaces.
+- **Line 18:** At most 80 characters.
+- **Line 19:** No angle brackets or control characters. React escapes text anyway; this keeps odd markup out of the database and out of email messages.
+- **Line 20:** Returns null: the name is fine.
+- **Line 21:** Closes the preceding block (function, object, or statement body).
+- **Line 22:** Blank line separates related sections for readability; it performs no operation.
+- **Line 23:** Exports validateEmail for every email field.
+- **Line 24:** An email is required.
+- **Line 25:** Works with the trimmed text.
+
+### Lines 26–28
+
+```text
+26 |   if (value.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(value)) return 'Enter a valid email address, for example name@example.com.';
+27 |   return null;
+28 | }
+```
+
+- **Line 26:** Allows at most 254 characters (the standard limit) and requires the shape name@domain.tld with no spaces or angle brackets. It is a sanity check, not proof that the address exists.
+- **Line 27:** Returns null: the address looks valid.
+- **Line 28:** Closes the preceding block (function, object, or statement body).
+
+## prisma/migrations/20261016150000_add_accounts_and_ownership/migration.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\20261016150000_add_accounts_and_ownership\migration.sql`
+
+PostgreSQL migration for accounts and ownership. It only ADDS things: five new auth tables, a nullable owner_id column on lessons and on lesson_media, and their indexes and foreign keys. It never changes or deletes an existing lesson or attachment, which is why lessons that existed before accounts simply have an empty owner. It runs in one transaction. It was verified in a disposable schema first, then applied to the Development database after a verified backup (the lesson fingerprint was identical before and after).
+
+### Lines 1–25
+
+```text
+1 | BEGIN;
+2 | CREATE TABLE "auth_users" (
+3 |   "id" TEXT NOT NULL,
+4 |   "name" TEXT NOT NULL,
+5 |   "email" TEXT NOT NULL,
+6 |   "email_verified" BOOLEAN NOT NULL DEFAULT false,
+7 |   "image" TEXT,
+8 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+9 |   "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+10 |   CONSTRAINT "auth_users_pkey" PRIMARY KEY ("id"),
+11 |   CONSTRAINT "auth_users_email_lowercase_check" CHECK ("email" = lower("email"))
+12 | );
+13 | CREATE UNIQUE INDEX "auth_users_email_key" ON "auth_users"("email");
+14 |
+15 | CREATE TABLE "auth_sessions" (
+16 |   "id" TEXT NOT NULL,
+17 |   "expires_at" TIMESTAMPTZ(3) NOT NULL,
+18 |   "token" TEXT NOT NULL,
+19 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+20 |   "updated_at" TIMESTAMPTZ(3) NOT NULL,
+21 |   "ip_address" TEXT,
+22 |   "user_agent" TEXT,
+23 |   "user_id" TEXT NOT NULL,
+24 |   CONSTRAINT "auth_sessions_pkey" PRIMARY KEY ("id"),
+25 |   CONSTRAINT "auth_sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth_users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+```
+
+- **Line 1:** Starts one transaction so every statement below succeeds together or none does.
+- **Line 2:** Creates the auth_users table: one row per coach.
+- **Line 3:** Text primary key chosen by the login library.
+- **Line 4:** The coach’s display name; required.
+- **Line 5:** The coach’s email address; required.
+- **Line 6:** Whether the email was verified; false by default.
+- **Line 7:** Optional profile image address.
+- **Line 8:** Creation time with time zone, filled in automatically.
+- **Line 9:** Last-changed time, also filled in automatically on creation.
+- **Line 10:** Declares id as the primary key.
+- **Line 11:** Database-level rule: the stored email must already be lowercase, so “Ana@x.com” and “ana@x.com” can never become two accounts, whatever code writes the row.
+- **Line 12:** Closes the parenthesised expression or call and ends the statement.
+- **Line 13:** Unique index on email: the database itself refuses a second account with the same email.
+- **Line 14:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Creates auth_sessions: one row per signed-in browser.
+- **Line 16:** Text primary key.
+- **Line 17:** When the session expires.
+- **Line 18:** The random session token stored in the browser cookie (signed).
+- **Line 19:** When the session started.
+- **Line 20:** When it was last refreshed (set by the library).
+- **Line 21:** Network address of the sign-in, kept for audit.
+- **Line 22:** Browser description of the sign-in.
+- **Line 23:** The coach the session belongs to; required.
+- **Line 24:** Primary key on id.
+- **Line 25:** Foreign key to auth_users; deleting a coach deletes their sessions (CASCADE).
+
+### Lines 26–50
+
+```text
+26 | );
+27 | CREATE UNIQUE INDEX "auth_sessions_token_key" ON "auth_sessions"("token");
+28 | CREATE INDEX "auth_sessions_user_id_idx" ON "auth_sessions"("user_id");
+29 |
+30 | CREATE TABLE "auth_accounts" (
+31 |   "id" TEXT NOT NULL,
+32 |   "account_id" TEXT NOT NULL,
+33 |   "provider_id" TEXT NOT NULL,
+34 |   "user_id" TEXT NOT NULL,
+35 |   "access_token" TEXT,
+36 |   "refresh_token" TEXT,
+37 |   "id_token" TEXT,
+38 |   "access_token_expires_at" TIMESTAMPTZ(3),
+39 |   "refresh_token_expires_at" TIMESTAMPTZ(3),
+40 |   "scope" TEXT,
+41 |   "password" TEXT,
+42 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+43 |   "updated_at" TIMESTAMPTZ(3) NOT NULL,
+44 |   CONSTRAINT "auth_accounts_pkey" PRIMARY KEY ("id"),
+45 |   CONSTRAINT "auth_accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth_users"("id") ON DELETE CASCADE ON UPDATE CASCADE
+46 | );
+47 | CREATE INDEX "auth_accounts_user_id_idx" ON "auth_accounts"("user_id");
+48 |
+49 | CREATE TABLE "auth_verifications" (
+50 |   "id" TEXT NOT NULL,
+```
+
+- **Line 26:** Closes the parenthesised expression or call and ends the statement.
+- **Line 27:** Unique index on the token, so one token can only ever identify one session, and lookups are fast.
+- **Line 28:** Index for finding all sessions of one coach.
+- **Line 29:** Blank line separates related sections for readability; it performs no operation.
+- **Line 30:** Creates auth_accounts: the ways a coach can sign in.
+- **Line 31:** Text primary key.
+- **Line 32:** The id of the account at the provider.
+- **Line 33:** Provider name: credential (email and password) or google.
+- **Line 34:** The coach this sign-in method belongs to.
+- **Line 35:** Optional Google access token.
+- **Line 36:** Optional Google refresh token.
+- **Line 37:** Optional Google identity token.
+- **Line 38:** Expiry of the access token.
+- **Line 39:** Expiry of the refresh token.
+- **Line 40:** Permissions granted by Google.
+- **Line 41:** The password hash for email-and-password sign-in (salted scrypt); never the password.
+- **Line 42:** Creation time.
+- **Line 43:** Last-changed time.
+- **Line 44:** Primary key on id.
+- **Line 45:** Foreign key to auth_users with CASCADE deletion.
+- **Line 46:** Closes the parenthesised expression or call and ends the statement.
+- **Line 47:** Index for finding a coach’s sign-in methods.
+- **Line 48:** Blank line separates related sections for readability; it performs no operation.
+- **Line 49:** Creates auth_verifications: one-time tokens such as password reset requests.
+- **Line 50:** Text primary key.
+
+### Lines 51–75
+
+```text
+51 |   "identifier" TEXT NOT NULL,
+52 |   "value" TEXT NOT NULL,
+53 |   "expires_at" TIMESTAMPTZ(3) NOT NULL,
+54 |   "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+55 |   "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+56 |   CONSTRAINT "auth_verifications_pkey" PRIMARY KEY ("id")
+57 | );
+58 | CREATE INDEX "auth_verifications_identifier_idx" ON "auth_verifications"("identifier");
+59 |
+60 | CREATE TABLE "auth_rate_limits" (
+61 |   "id" TEXT NOT NULL,
+62 |   "key" TEXT NOT NULL,
+63 |   "count" INTEGER NOT NULL,
+64 |   "last_request" BIGINT NOT NULL,
+65 |   CONSTRAINT "auth_rate_limits_pkey" PRIMARY KEY ("id")
+66 | );
+67 | CREATE UNIQUE INDEX "auth_rate_limits_key_key" ON "auth_rate_limits"("key");
+68 |
+69 | ALTER TABLE "lessons" ADD COLUMN "owner_id" TEXT;
+70 | ALTER TABLE "lessons" ADD CONSTRAINT "lessons_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth_users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+71 | CREATE INDEX "lessons_owner_id_idx" ON "lessons"("owner_id");
+72 |
+73 | ALTER TABLE "lesson_media" ADD COLUMN "owner_id" TEXT;
+74 | ALTER TABLE "lesson_media" ADD CONSTRAINT "lesson_media_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth_users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+75 | CREATE INDEX "lesson_media_owner_id_idx" ON "lesson_media"("owner_id");
+```
+
+- **Line 51:** What the token is for.
+- **Line 52:** The token value or its data.
+- **Line 53:** When it expires.
+- **Line 54:** Creation time.
+- **Line 55:** Last-changed time.
+- **Line 56:** Primary key on id.
+- **Line 57:** Closes the parenthesised expression or call and ends the statement.
+- **Line 58:** Index for looking tokens up by purpose.
+- **Line 59:** Blank line separates related sections for readability; it performs no operation.
+- **Line 60:** Creates auth_rate_limits: counters that slow down repeated requests.
+- **Line 61:** Text primary key.
+- **Line 62:** Key combining the request path and client address.
+- **Line 63:** Requests counted in the current window.
+- **Line 64:** Time of the last request in milliseconds; BIGINT is a large whole number.
+- **Line 65:** Primary key on id.
+- **Line 66:** Closes the parenthesised expression or call and ends the statement.
+- **Line 67:** Unique index so each key has exactly one counter.
+- **Line 68:** Blank line separates related sections for readability; it performs no operation.
+- **Line 69:** Adds the owner column to lessons. It is nullable, so every existing lesson keeps working and simply has no owner yet.
+- **Line 70:** Foreign key from lessons.owner_id to auth_users. ON DELETE RESTRICT stops an account that still owns lessons from being deleted; ON UPDATE CASCADE would follow an id change.
+- **Line 71:** Index so one coach’s lessons are found quickly.
+- **Line 72:** Blank line separates related sections for readability; it performs no operation.
+- **Line 73:** Adds the owner column to attachments, again nullable.
+- **Line 74:** Foreign key from lesson_media.owner_id to auth_users with the same Restrict rule.
+- **Line 75:** Index for one coach’s attachments.
+
+### Lines 76–76
+
+```text
+76 | COMMIT;
+```
+
+- **Line 76:** Commits the transaction, making all of the above permanent at once.
+
+## server/auth.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\auth.js`
+
+The login system. It configures the Better Auth library (a well-maintained, MIT-licensed authentication library) for CoachLab: email and password with scrypt hashing done by the library, optional Google sign-in, HttpOnly session cookies stored server-side, rate limits kept in the database, a per-account lockout, password rules, and reset links. createAuth returns the pieces the Express app needs: a request handler, a getUser function that turns a session cookie into a coach, and a prepare function for SQLite tables.
+
+### Lines 1–25
+
+```text
+1 | import { betterAuth } from 'better-auth';
+2 | import { prismaAdapter } from 'better-auth/adapters/prisma';
+3 | import { APIError, createAuthMiddleware } from 'better-auth/api';
+4 | import { getMigrations } from 'better-auth/db/migration';
+5 | import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
+6 | import { passwordProblem, validateEmail, validateName } from '../client/src/password-policy.js';
+7 |
+8 | const generic = 'Invalid email or password';
+9 | const tooMany = 'Too many sign-in attempts. Wait a few minutes and try again, or reset your password.';
+10 |
+11 | export function attemptLimiter({ max, windowMs, now = Date.now }) {
+12 |   const entries = new Map();
+13 |   const fresh = key => {
+14 |     const list = (entries.get(key) || []).filter(time => now() - time < windowMs);
+15 |     if (list.length) entries.set(key, list); else entries.delete(key);
+16 |     return list;
+17 |   };
+18 |   return {
+19 |     blocked: key => fresh(key).length >= max,
+20 |     hit: key => { const list = fresh(key); list.push(now()); entries.set(key, list); },
+21 |     clear: key => entries.delete(key),
+22 |   };
+23 | }
+24 |
+25 | const normalize = email => String(email ?? '').trim().toLowerCase();
+```
+
+- **Line 1:** Imports the main Better Auth function.
+- **Line 2:** Imports the adapter that lets Better Auth store accounts through the Prisma client (PostgreSQL).
+- **Line 3:** Imports APIError (to refuse a request with a status code) and createAuthMiddleware (to write hooks that run before and after Better Auth’s own routes).
+- **Line 4:** Imports getMigrations, used to create the login tables in SQLite.
+- **Line 5:** Imports the helpers that connect Better Auth to Node’s HTTP objects: toNodeHandler for Express and fromNodeHeaders to read cookies.
+- **Line 6:** Imports the shared name, email and password rules, so the server enforces the same rules as the browser.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** The single message used for every failed sign-in, so a wrong password and an unknown email look identical (this prevents learning which emails have accounts).
+- **Line 9:** The message shown when one account is temporarily locked after too many wrong passwords.
+- **Line 10:** Blank line separates related sections for readability; it performs no operation.
+- **Line 11:** Exports attemptLimiter, a small in-memory counter: at most max events per key within windowMs. The now function can be replaced in tests.
+- **Line 12:** A Map from a key (an email) to the times of its recent events.
+- **Line 13:** Defines fresh, which returns the still-recent events for a key.
+- **Line 14:** Keeps only events newer than the window.
+- **Line 15:** Stores the trimmed list, or forgets the key when it is empty so memory does not grow.
+- **Line 16:** Returns the recent events.
+- **Line 17:** Closes the preceding block and ends the statement.
+- **Line 18:** Returns the three limiter functions.
+- **Line 19:** blocked: true when the key already has max recent events.
+- **Line 20:** hit: records one more event now.
+- **Line 21:** clear: forgets the key (used after a successful sign-in).
+- **Line 22:** Closes the preceding block and ends the statement.
+- **Line 23:** Closes the preceding block (function, object, or statement body).
+- **Line 24:** Blank line separates related sections for readability; it performs no operation.
+- **Line 25:** Defines normalize: trims and lowercases an email so limits and lookups treat Ana@x.com and ana@x.com as one account.
+
+### Lines 26–50
+
+```text
+26 |
+27 | export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, mailer, env = {}, loginLimiter = attemptLimiter({ max: 8, windowMs: 15 * 60 * 1000 }), resetLimiter = attemptLimiter({ max: 3, windowMs: 60 * 60 * 1000 }) }) {
+28 |   if (typeof secret !== 'string' || secret.length < 32) throw new Error('A random authentication secret of at least 32 characters is required.');
+29 |   const google = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : null;
+30 |   const sqlite = !prisma;
+31 |   const auth = betterAuth({
+32 |     database: prisma ? prismaAdapter(prisma, { provider: 'postgresql' }) : database,
+33 |     secret,
+34 |     baseURL,
+35 |     trustedOrigins,
+36 |     emailAndPassword: {
+37 |       enabled: true,
+38 |       autoSignIn: false,
+39 |       minPasswordLength: 10,
+40 |       maxPasswordLength: 128,
+41 |       resetPasswordTokenExpiresIn: 60 * 60,
+42 |       revokeSessionsOnPasswordReset: true,
+43 |       sendResetPassword: async ({ user, url }) => {
+44 |         const key = normalize(user.email);
+45 |         if (resetLimiter.blocked(key)) return;
+46 |         resetLimiter.hit(key);
+47 |         await mailer.sendPasswordReset({ to: user.email, url });
+48 |       },
+49 |       onExistingUserSignUp: async ({ user }) => { await mailer.sendExistingAccountNotice({ to: user.email }); },
+50 |     },
+```
+
+- **Line 26:** Blank line separates related sections for readability; it performs no operation.
+- **Line 27:** Exports createAuth. It takes either a SQLite database or a Prisma client, the secret, the public address, the trusted origins, a mailer, the environment (for Google keys) and two replaceable limiters (eight wrong passwords per account per 15 minutes; three reset emails per account per hour).
+- **Line 28:** Refuses to start without a random secret of at least 32 characters. The secret signs session cookies; a weak or missing one would make sessions forgeable.
+- **Line 29:** Enables Google sign-in only when both Google credentials are present in the server environment.
+- **Line 30:** Remembers whether this is the SQLite flavour (no Prisma client).
+- **Line 31:** Builds the Better Auth instance with the options below.
+- **Line 32:** Chooses where accounts live: the Prisma adapter for PostgreSQL, or the SQLite database directly.
+- **Line 33:** The signing secret.
+- **Line 34:** The public address of the site; reset links and cookie security are derived from it.
+- **Line 35:** The browser origins allowed to send sign-in requests. Better Auth rejects others as INVALID_ORIGIN, which blocks cross-site request forgery on the login routes.
+- **Line 36:** Email and password settings follow.
+- **Line 37:** Turns email-and-password sign-in on.
+- **Line 38:** Registration does not sign the new coach in automatically. This also makes a registration with an already-used email indistinguishable from a new one, because the library then returns the same response for both (no account enumeration).
+- **Line 39:** Minimum password length of 10 (the shared rules apply as well).
+- **Line 40:** Maximum password length of 128, which also bounds hashing work.
+- **Line 41:** Reset links work for 60 * 60 seconds, one hour.
+- **Line 42:** After a password reset, every existing session of that coach is ended, so someone who stole an old session loses access.
+- **Line 43:** Called when a reset is requested for a real account; it receives the coach and the one-time link.
+- **Line 44:** Makes the lowercase email key for the limiter.
+- **Line 45:** If three reset emails were already sent to this account within the hour, silently sends nothing. The response to the requester stays the same, so nobody can flood an inbox or learn anything.
+- **Line 46:** Records this send.
+- **Line 47:** Sends the link through the mailer (printed locally until an email provider exists).
+- **Line 48:** Closes the object or block and continues the surrounding list.
+- **Line 49:** Called when someone registers with an email that already has an account: it sends the real owner a notice. The person registering sees the same success message as anyone else.
+- **Line 50:** Closes the object or block and continues the surrounding list.
+
+### Lines 51–75
+
+```text
+51 |     socialProviders: google ? { google } : undefined,
+52 |     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
+53 |     advanced: {
+54 |       cookiePrefix: 'coachlab',
+55 |       useSecureCookies: baseURL.startsWith('https://'),
+56 |       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
+57 |     },
+58 |     rateLimit: {
+59 |       enabled: true,
+60 |       storage: 'database',
+61 |       window: 60,
+62 |       max: 120,
+63 |       customRules: {
+64 |         '/sign-in/email': { window: 300, max: 10 },
+65 |         '/sign-up/email': { window: 3600, max: 10 },
+66 |         '/request-password-reset': { window: 3600, max: 5 },
+67 |         '/reset-password': { window: 900, max: 10 },
+68 |       },
+69 |     },
+70 |     hooks: {
+71 |       before: createAuthMiddleware(async context => {
+72 |         const body = context.body ?? {};
+73 |         if (context.path === '/sign-up/email') {
+74 |           const problem = validateName(body.name) || validateEmail(body.email) || passwordProblem(body.password, body.email);
+75 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'INVALID_REGISTRATION' });
+```
+
+- **Line 51:** Adds Google as a sign-in option only when configured; otherwise undefined (no Google).
+- **Line 52:** Sessions last seven days and are refreshed at most once a day (both in seconds). They are stored in the database, so they can be revoked at any time.
+- **Line 53:** Advanced settings follow.
+- **Line 54:** Prefixes cookie names with “coachlab”, e.g. coachlab.session_token.
+- **Line 55:** Marks cookies Secure (HTTPS only) whenever the public address is https. Local http://127.0.0.1 cannot use Secure cookies, which browsers would drop.
+- **Line 56:** Reads the client address for rate limiting from x-forwarded-for, which the CoachLab dev proxy sets from the real connection (the backend only listens on this computer).
+- **Line 57:** Closes the object or block and continues the surrounding list.
+- **Line 58:** Rate limiting settings follow.
+- **Line 59:** Turns rate limiting on in every environment (the library only does so in production by default).
+- **Line 60:** Keeps the counters in the database, so restarting the server does not reset them.
+- **Line 61:** Default window of 60 seconds.
+- **Line 62:** Default limit of 120 requests per window per client.
+- **Line 63:** Stricter rules for the sensitive routes follow.
+- **Line 64:** Sign-in: at most 10 attempts per 5 minutes per client address.
+- **Line 65:** Registration: at most 10 per hour.
+- **Line 66:** Reset requests: at most 5 per hour.
+- **Line 67:** Completing a reset: at most 10 per 15 minutes.
+- **Line 68:** Closes the object or block and continues the surrounding list.
+- **Line 69:** Closes the object or block and continues the surrounding list.
+- **Line 70:** Hooks that run around Better Auth’s own routes.
+- **Line 71:** Before every request: validate and throttle.
+- **Line 72:** The request body (empty object when missing).
+- **Line 73:** For registration…
+- **Line 74:** …checks the name, email and password with the shared rules.
+- **Line 75:** If any rule fails, refuses with a 400 and the plain-language reason.
+
+### Lines 76–100
+
+```text
+76 |         }
+77 |         if (context.path === '/reset-password') {
+78 |           const problem = passwordProblem(body.newPassword);
+79 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'WEAK_PASSWORD' });
+80 |         }
+81 |         if (context.path === '/sign-in/email') {
+82 |           const problem = validateEmail(body.email);
+83 |           if (problem || typeof body.password !== 'string') throw new APIError('UNAUTHORIZED', { message: generic, code: 'INVALID_EMAIL_OR_PASSWORD' });
+84 |           if (loginLimiter.blocked(normalize(body.email))) throw new APIError('TOO_MANY_REQUESTS', { message: tooMany, code: 'TOO_MANY_ATTEMPTS' });
+85 |         }
+86 |       }),
+87 |       after: createAuthMiddleware(async context => {
+88 |         if (context.path !== '/sign-in/email') return;
+89 |         const key = normalize(context.body?.email);
+90 |         if (context.context.returned instanceof APIError) { if (context.context.returned.statusCode === 401) loginLimiter.hit(key); } else loginLimiter.clear(key);
+91 |       }),
+92 |     },
+93 |   });
+94 |   return {
+95 |     auth,
+96 |     google: !!google,
+97 |     mailMode: mailer.mode,
+98 |     handler: toNodeHandler(auth),
+99 |     async getUser(request) {
+100 |       const result = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+```
+
+- **Line 76:** Closes the preceding block (function, object, or statement body).
+- **Line 77:** For finishing a password reset…
+- **Line 78:** …checks the new password with the same password rules.
+- **Line 79:** Refuses weak passwords with a 400.
+- **Line 80:** Closes the preceding block (function, object, or statement body).
+- **Line 81:** For sign-in…
+- **Line 82:** …checks the email shape.
+- **Line 83:** A malformed email or missing password gets the same generic 401 as a wrong password.
+- **Line 84:** If this account already had too many recent failures, refuses with 429 before any password is checked, whatever the client address. This stops slow password guessing spread over many addresses.
+- **Line 85:** Closes the preceding block (function, object, or statement body).
+- **Line 86:** Ends the before hook.
+- **Line 87:** After every request: update the failure counters.
+- **Line 88:** Only sign-in is of interest.
+- **Line 89:** The lowercase email of the attempt.
+- **Line 90:** A 401 failure counts against the account; a successful sign-in clears the counter.
+- **Line 91:** Ends the after hook.
+- **Line 92:** Closes the object or block and continues the surrounding list.
+- **Line 93:** Closes the callback body and the function call that received it.
+- **Line 94:** Returns what the rest of CoachLab needs.
+- **Line 95:** The raw Better Auth object, for tests and advanced use.
+- **Line 96:** Tells the app whether Google sign-in is configured.
+- **Line 97:** Tells the app which mail mode is active.
+- **Line 98:** The Express-compatible request handler for all /api/auth routes.
+- **Line 99:** getUser turns the cookies of a request into the signed-in coach, or null.
+- **Line 100:** Asks Better Auth to look the session up on the server; an expired, revoked or forged cookie gives no session.
+
+### Lines 101–109
+
+```text
+101 |       return result?.user ? { id: result.user.id, email: result.user.email, name: result.user.name } : null;
+102 |     },
+103 |     async prepare() {
+104 |       if (!sqlite) return;
+105 |       const { runMigrations } = await getMigrations(auth.options);
+106 |       await runMigrations();
+107 |     },
+108 |   };
+109 | }
+```
+
+- **Line 101:** Returns only the id, email and name that the rest of the app needs.
+- **Line 102:** Closes the object or block and continues the surrounding list.
+- **Line 103:** prepare creates the login tables when running on SQLite.
+- **Line 104:** PostgreSQL tables come from the reviewed Prisma migration instead, so nothing is done there.
+- **Line 105:** Asks the library which tables are missing.
+- **Line 106:** Creates them.
+- **Line 107:** Closes the object or block and continues the surrounding list.
+- **Line 108:** Closes the preceding block and ends the statement.
+- **Line 109:** Closes the preceding block (function, object, or statement body).
+
+## server/auth.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\auth.test.js`
+
+End-to-end tests of the login system against a real temporary SQLite database and a real local HTTP server, using the real Better Auth library and a mail collector instead of email. They act like a browser (cookies, Origin header, client address) and prove registration, sign in and out, sessions, brute-force limits, cross-site protection, password reset, per-coach privacy and that lessons from before accounts stay hidden.
+
+### Lines 1–25
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { once } from 'node:events';
+4 | import { randomBytes } from 'node:crypto';
+5 | import Database from 'better-sqlite3';
+6 | import { createApp } from './app.js';
+7 | import { migrate } from './migrations.js';
+8 | import { createAuth, attemptLimiter } from './auth.js';
+9 | import { memoryMailer } from './mailer.js';
+10 | import { passwordProblem, validateEmail, validateName } from '../client/src/password-policy.js';
+11 | import { png } from './media-fixtures.js';
+12 | import { cookieClient } from './test-auth.js';
+13 |
+14 | const origin = 'http://coachlab.test';
+15 | const goodPassword = 'violet-harbor-ladder-92';
+16 |
+17 | async function fixture(t, extra = {}) {
+18 |   const database = new Database(':memory:');
+19 |   migrate(database);
+20 |   const mailer = memoryMailer();
+21 |   const auth = createAuth({ database, secret: randomBytes(32).toString('hex'), baseURL: origin, trustedOrigins: [origin], mailer, ...extra });
+22 |   await auth.prepare();
+23 |   const server = createApp(database, { auth, allowedOrigins: [origin], verifyLink: async url => ({ kind: 'image', url, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
+24 |   await once(server, 'listening');
+25 |   const base = `http://127.0.0.1:${server.address().port}`;
+```
+
+- **Line 1:** Imports Node’s test function.
+- **Line 2:** Imports strict assertions.
+- **Line 3:** Imports once, which waits for an event such as “listening”.
+- **Line 4:** Imports a random byte generator for secrets.
+- **Line 5:** Imports the SQLite driver.
+- **Line 6:** Imports the app factory.
+- **Line 7:** Imports the SQLite migrations.
+- **Line 8:** Imports the login system and the attempt limiter under test.
+- **Line 9:** Imports the in-memory mailer.
+- **Line 10:** Imports the shared password, email and name rules.
+- **Line 11:** Imports the fake PNG file.
+- **Line 12:** Imports the cookie-aware browser stand-in.
+- **Line 13:** Blank line separates related sections for readability; it performs no operation.
+- **Line 14:** The fake website address that every “browser” in these tests claims to come from.
+- **Line 15:** A strong sample password used by the tests.
+- **Line 16:** Blank line separates related sections for readability; it performs no operation.
+- **Line 17:** Defines the fixture that builds a complete fresh app for each test; extra options can override login settings.
+- **Line 18:** Creates an in-memory SQLite database.
+- **Line 19:** Applies the lesson, media and ownership migrations.
+- **Line 20:** Creates the mail collector.
+- **Line 21:** Builds the real login system with a random 64-character secret.
+- **Line 22:** Creates the login tables in SQLite.
+- **Line 23:** Starts the real app on a random free port on this computer only, with a fake link checker.
+- **Line 24:** Waits until the server is listening.
+- **Line 25:** Remembers the server’s address.
+
+### Lines 26–50
+
+```text
+26 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); });
+27 |   const client = cookieClient(base, origin);
+28 |   return { base, database, mailer, auth, client };
+29 | }
+30 |
+31 | const register = (api, email, password = goodPassword, name = 'Coach') => api('/api/auth/sign-up/email', { method: 'POST', body: { name, email, password } });
+32 | const signIn = (api, email, password = goodPassword) => api('/api/auth/sign-in/email', { method: 'POST', body: { email, password } });
+33 | async function signedIn(f, email, ip) {
+34 |   const api = f.client(ip);
+35 |   assert.equal((await register(api, email)).status, 200);
+36 |   assert.equal((await signIn(api, email)).status, 200);
+37 |   return api;
+38 | }
+39 |
+40 | test('password and profile rules reject weak, common and personal passwords with clear reasons', () => {
+41 |   assert.equal(passwordProblem(goodPassword, 'a@example.com'), null);
+42 |   for (const [password, email, expected] of [['short1', '', /at least 10/], ['x'.repeat(129), '', /at most 128/], ['password123', '', /too common/], ['aaaaaaaaaaaa', '', /mix of characters/], ['12345678901', '', /mix of characters/], ['mysterycoach-2026', 'mysterycoach@example.com', /email name/], [42, '', /Enter a password/]]) assert.match(passwordProblem(password, email), expected, String(password));
+43 |   assert.equal(validateEmail('coach@example.com'), null);
+44 |   for (const bad of ['', 'nope', 'a@b', 'a b@example.com', '<x>@example.com', 'a@example.com<script>']) assert.ok(validateEmail(bad), bad);
+45 |   assert.equal(validateName('Ana Silva'), null);
+46 |   for (const bad of ['', '   ', 'x'.repeat(81), '<b>Ana</b>', 'Ana\u0007']) assert.ok(validateName(bad), JSON.stringify(bad));
+47 | });
+48 |
+49 | test('the server refuses to start authentication without a long random secret', () => {
+50 |   const settings = { database: new Database(':memory:'), baseURL: origin, trustedOrigins: [origin], mailer: memoryMailer() };
+```
+
+- **Line 26:** After the test, closes the server and database.
+- **Line 27:** Creates the browser stand-in factory for this server.
+- **Line 28:** Returns everything a test needs.
+- **Line 29:** Closes the preceding block (function, object, or statement body).
+- **Line 30:** Blank line separates related sections for readability; it performs no operation.
+- **Line 31:** Helper: registers an account through the real API.
+- **Line 32:** Helper: signs in through the real API.
+- **Line 33:** Helper: registers and signs in a coach and returns that coach’s browser stand-in.
+- **Line 34:** Makes a stand-in with its own client address.
+- **Line 35:** Registering must succeed (200).
+- **Line 36:** Signing in must succeed (200).
+- **Line 37:** Returns the signed-in stand-in.
+- **Line 38:** Closes the preceding block (function, object, or statement body).
+- **Line 39:** Blank line separates related sections for readability; it performs no operation.
+- **Line 40:** Test: the shared rules reject weak passwords, names and emails with clear reasons.
+- **Line 41:** A strong password passes.
+- **Line 42:** Short, too long, common, repeated-character, digits-only, email-name and non-text passwords are each refused with the matching message.
+- **Line 43:** A normal email passes.
+- **Line 44:** Malformed emails are refused, including ones with angle brackets.
+- **Line 45:** A normal name passes.
+- **Line 46:** Empty, blank, too long, markup and control-character names are refused.
+- **Line 47:** Closes the callback body and the function call that received it.
+- **Line 48:** Blank line separates related sections for readability; it performs no operation.
+- **Line 49:** Test: the server will not start the login system without a long random secret.
+- **Line 50:** Shared settings for the next checks.
+
+### Lines 51–75
+
+```text
+51 |   assert.throws(() => createAuth({ ...settings, secret: undefined }), /secret/);
+52 |   assert.throws(() => createAuth({ ...settings, secret: 'too short' }), /secret/);
+53 |   assert.throws(() => createApp(new Database(':memory:'), {}), /authentication adapter is required/);
+54 | });
+55 |
+56 | test('registration validates input, hides whether an email already exists and never stores a plain password', async t => {
+57 |   const f = await fixture(t);
+58 |   const api = f.client();
+59 |   for (const [body, expected] of [[{ name: 'Ana', email: 'ana@example.com', password: 'short' }, /at least 10/], [{ name: 'Ana', email: 'nope', password: goodPassword }, /valid email/], [{ name: '', email: 'ana@example.com', password: goodPassword }, /Enter your name/], [{ name: 'Ana', email: 'ana@example.com', password: 'password123' }, /too common/]]) {
+60 |     const response = await api('/api/auth/sign-up/email', { method: 'POST', body });
+61 |     assert.equal(response.status, 400);
+62 |     assert.match(response.json.message, expected);
+63 |   }
+64 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 0);
+65 |   const first = await register(api, 'Ana@Example.com');
+66 |   assert.equal(first.status, 200);
+67 |   assert.equal(first.setCookie.length, 0);
+68 |   const again = await register(f.client('203.0.113.11'), 'ana@example.com', 'another-long-password-7');
+69 |   assert.equal(again.status, 200);
+70 |   assert.deepEqual(Object.keys(again.json.user).sort(), Object.keys(first.json.user).sort());
+71 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 1);
+72 |   assert.deepEqual(f.mailer.outbox, [{ kind: 'existing', to: 'ana@example.com' }]);
+73 |   const account = f.database.prepare("SELECT password FROM account WHERE providerId = 'credential'").get();
+74 |   assert.ok(account.password && !account.password.includes(goodPassword) && /^[0-9a-f]+:[0-9a-f]+$/.test(account.password));
+75 |   assert.equal(f.database.prepare('SELECT email FROM user').get().email, 'ana@example.com');
+```
+
+- **Line 51:** A missing secret is refused.
+- **Line 52:** A too-short secret is refused.
+- **Line 53:** The app itself cannot be created without a login adapter.
+- **Line 54:** Closes the callback body and the function call that received it.
+- **Line 55:** Blank line separates related sections for readability; it performs no operation.
+- **Line 56:** Test: registration validates input, hides whether an email exists and never stores a plain password.
+- **Line 57:** Builds the fixture.
+- **Line 58:** Makes a browser stand-in.
+- **Line 59:** Lists four bad registrations (short password, bad email, empty name, common password) with the message each must contain.
+- **Line 60:** Sends each one.
+- **Line 61:** Each must be refused with 400.
+- **Line 62:** The message must name the reason.
+- **Line 63:** Closes the preceding block (function, object, or statement body).
+- **Line 64:** No account was created by the failed attempts.
+- **Line 65:** Registers a real account; the email is typed with capital letters.
+- **Line 66:** Succeeds with 200.
+- **Line 67:** Registration sets no cookie: nobody is signed in automatically.
+- **Line 68:** Registers the same email again from another address with a different password.
+- **Line 69:** The answer is also 200, so the page cannot tell that the email was taken.
+- **Line 70:** The answer has exactly the same fields as the first registration.
+- **Line 71:** Still only one account exists, and the second password was not applied.
+- **Line 72:** The real owner received one “someone tried to register” notice.
+- **Line 73:** Reads the stored credential row.
+- **Line 74:** The stored value is not the password and looks like a salted hash (salt:hash in hexadecimal).
+- **Line 75:** The email was stored in lowercase.
+
+### Lines 76–100
+
+```text
+76 | });
+77 |
+78 | test('sign in uses one error for wrong passwords and unknown emails, sets a safe session cookie and survives refresh', async t => {
+79 |   const f = await fixture(t);
+80 |   await register(f.client(), 'coach@example.com');
+81 |   const api = f.client();
+82 |   const wrong = await signIn(api, 'coach@example.com', 'wrong-password-123');
+83 |   const unknown = await signIn(api, 'nobody@example.com', 'wrong-password-123');
+84 |   assert.equal(wrong.status, 401);
+85 |   assert.equal(unknown.status, 401);
+86 |   assert.deepEqual(wrong.json, unknown.json);
+87 |   assert.equal(wrong.json.message, 'Invalid email or password');
+88 |   assert.equal((await signIn(api, 'not-an-email', 'whatever-123456')).status, 401);
+89 |   const ok = await signIn(api, 'COACH@example.com');
+90 |   assert.equal(ok.status, 200);
+91 |   const cookie = ok.setCookie.find(line => line.startsWith('coachlab.session_token='));
+92 |   assert.ok(cookie && /HttpOnly/i.test(cookie) && /SameSite=Lax/i.test(cookie) && /Path=\//.test(cookie) && /Max-Age=604800/.test(cookie));
+93 |   assert.ok(!/Secure/i.test(cookie), 'plain http local development cannot use Secure cookies');
+94 |   assert.equal(ok.text.includes(goodPassword), false);
+95 |   for (let refresh = 0; refresh < 3; refresh++) {
+96 |     const session = await api('/api/auth/get-session');
+97 |     assert.equal(session.json.user.email, 'coach@example.com');
+98 |     assert.equal((await api('/api/lessons')).status, 200);
+99 |   }
+100 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 1);
+```
+
+- **Line 76:** Closes the callback body and the function call that received it.
+- **Line 77:** Blank line separates related sections for readability; it performs no operation.
+- **Line 78:** Test: sign in uses one error for wrong passwords and unknown emails, sets a safe cookie and survives refresh.
+- **Line 79:** Builds the fixture.
+- **Line 80:** Registers a coach.
+- **Line 81:** Makes a new browser stand-in.
+- **Line 82:** Signs in with a wrong password.
+- **Line 83:** Signs in with an unknown email.
+- **Line 84:** The wrong password gives 401.
+- **Line 85:** The unknown email gives 401.
+- **Line 86:** Both answers are identical, so nothing reveals which emails exist.
+- **Line 87:** The message is the generic one.
+- **Line 88:** A malformed email gets 401 as well.
+- **Line 89:** Signs in correctly (the email in capital letters still works).
+- **Line 90:** Succeeds.
+- **Line 91:** Finds the session cookie.
+- **Line 92:** The cookie is HttpOnly (JavaScript cannot read it), SameSite=Lax (not sent on cross-site posts), site-wide and lasts seven days.
+- **Line 93:** Over plain http the cookie is not marked Secure (browsers would drop it); it becomes Secure under https.
+- **Line 94:** The answer does not contain the password.
+- **Line 95:** Simulates three page refreshes.
+- **Line 96:** Asks for the session.
+- **Line 97:** The same coach is returned every time.
+- **Line 98:** Protected data is reachable every time.
+- **Line 99:** Closes the preceding block (function, object, or statement body).
+- **Line 100:** Only one session row exists, so refreshing does not create sessions.
+
+### Lines 101–125
+
+```text
+101 | });
+102 |
+103 | test('repeated wrong passwords lock one account for a while even from different addresses, and IP rate limits stop floods', async t => {
+104 |   const f = await fixture(t);
+105 |   await register(f.client(), 'target@example.com');
+106 |   for (let attempt = 0; attempt < 8; attempt++) assert.equal((await signIn(f.client(`198.51.100.${attempt + 1}`), 'target@example.com', 'wrong-password-123')).status, 401);
+107 |   const locked = await signIn(f.client('198.51.100.99'), 'target@example.com', goodPassword);
+108 |   assert.equal(locked.status, 429);
+109 |   assert.match(locked.json.message, /Too many sign-in attempts/);
+110 |   const flood = f.client('198.51.100.200');
+111 |   const statuses = [];
+112 |   for (let attempt = 0; attempt < 12; attempt++) statuses.push((await signIn(flood, `nobody${attempt}@example.com`, 'wrong-password-123')).status);
+113 |   assert.ok(statuses.includes(429), statuses.join());
+114 |   const limiter = attemptLimiter({ max: 2, windowMs: 1000, now: (() => { let time = 0; return () => time; })() });
+115 |   limiter.hit('k'); limiter.hit('k');
+116 |   assert.equal(limiter.blocked('k'), true);
+117 |   limiter.clear('k');
+118 |   assert.equal(limiter.blocked('k'), false);
+119 | });
+120 |
+121 | test('protected routes reject anonymous users, logout ends the session on the server and old cookies stop working', async t => {
+122 |   const f = await fixture(t);
+123 |   const anonymous = f.client();
+124 |   for (const [method, path, body] of [['GET', '/api/lessons'], ['POST', '/api/lessons', { title: 'x', discipline: 'Boxing' }], ['PUT', '/api/lessons/1', { title: 'x', discipline: 'Boxing' }], ['DELETE', '/api/lessons/1'], ['GET', '/api/lesson-media'], ['GET', '/api/media/1/file'], ['DELETE', '/api/media/1'], ['POST', '/api/media/verify', { url: 'https://example.com/a.png' }], ['POST', '/api/media/suggest', { discipline: 'Boxing', sections: [] }], ['POST', '/api/ai/lesson-draft', {}], ['GET', '/api/nothing-here']]) {
+125 |     const response = await anonymous(path, { method, body });
+```
+
+- **Line 101:** Closes the callback body and the function call that received it.
+- **Line 102:** Blank line separates related sections for readability; it performs no operation.
+- **Line 103:** Test: repeated wrong passwords lock one account, even from different addresses, and address-based limits stop floods.
+- **Line 104:** Builds the fixture.
+- **Line 105:** Registers the target account.
+- **Line 106:** Eight wrong passwords, each from a different address, all get 401.
+- **Line 107:** The next attempt, from yet another address and with the CORRECT password, is refused.
+- **Line 108:** It gets 429 (too many requests).
+- **Line 109:** With the lockout message.
+- **Line 110:** One address that will flood the server.
+- **Line 111:** Collects the statuses.
+- **Line 112:** Twelve attempts on different emails from that one address.
+- **Line 113:** At least one must be answered 429, proving the per-address limit.
+- **Line 114:** Creates a limiter with a fake clock that never moves.
+- **Line 115:** Records two events.
+- **Line 116:** The key is now blocked.
+- **Line 117:** Clearing it…
+- **Line 118:** …unblocks it.
+- **Line 119:** Closes the callback body and the function call that received it.
+- **Line 120:** Blank line separates related sections for readability; it performs no operation.
+- **Line 121:** Test: protected routes reject anonymous users and logout really ends the session.
+- **Line 122:** Builds the fixture.
+- **Line 123:** A browser stand-in that is not signed in.
+- **Line 124:** Eleven protected routes, including an unknown one: lessons, media, uploads, link checks, suggestions, AI and a made-up route.
+- **Line 125:** Calls each without signing in.
+
+### Lines 126–150
+
+```text
+126 |     assert.equal(response.status, 401, `${method} ${path}`);
+127 |     assert.equal(response.json.error, 'Please sign in to continue.');
+128 |   }
+129 |   assert.equal((await anonymous('/api/health')).status, 200);
+130 |   assert.deepEqual((await anonymous('/api/auth-config')).json, { google: false, mail: 'memory' });
+131 |   const api = await signedIn(f, 'coach@example.com');
+132 |   const staleCookie = [...api.jar].map(([name, value]) => `${name}=${value}`).join('; ');
+133 |   assert.equal((await api('/api/lessons')).status, 200);
+134 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {} })).status, 200);
+135 |   assert.equal((await api('/api/lessons')).status, 401);
+136 |   const replay = await f.client()('/api/lessons', { headers: { cookie: staleCookie } });
+137 |   assert.equal(replay.status, 401);
+138 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 0);
+139 |   const forged = await f.client()('/api/lessons', { headers: { cookie: 'coachlab.session_token=forged.value' } });
+140 |   assert.equal(forged.status, 401);
+141 | });
+142 |
+143 | test('cross-site requests are blocked and private responses are never cached', async t => {
+144 |   const f = await fixture(t);
+145 |   const api = await signedIn(f, 'coach@example.com');
+146 |   for (const sent of [null, 'http://evil.example', 'null']) {
+147 |     const response = await api('/api/lessons', { method: 'POST', origin: sent, body: { title: 'Planted', discipline: 'Boxing' } });
+148 |     assert.equal(response.status, 403, String(sent));
+149 |   }
+150 |   assert.equal((await api('/api/lessons', { method: 'DELETE', origin: 'http://evil.example' })).status, 403);
+```
+
+- **Line 126:** Each must answer 401.
+- **Line 127:** With the standard message.
+- **Line 128:** Closes the preceding block (function, object, or statement body).
+- **Line 129:** The health check stays public.
+- **Line 130:** The public settings route works and shows no secrets.
+- **Line 131:** Signs in a coach.
+- **Line 132:** Copies the session cookie, as an attacker who stole it would.
+- **Line 133:** The coach can read lessons.
+- **Line 134:** Logs out.
+- **Line 135:** Lessons are no longer reachable with the same browser.
+- **Line 136:** Replays the stolen old cookie from a different browser stand-in.
+- **Line 137:** It is rejected: logout ended the session on the server, not just in the browser.
+- **Line 138:** No session rows remain.
+- **Line 139:** A forged cookie value…
+- **Line 140:** …is rejected too.
+- **Line 141:** Closes the callback body and the function call that received it.
+- **Line 142:** Blank line separates related sections for readability; it performs no operation.
+- **Line 143:** Test: cross-site requests are blocked and private responses are not cached.
+- **Line 144:** Builds the fixture.
+- **Line 145:** Signs in a coach.
+- **Line 146:** Tries three forged posts: no Origin header, an evil site and the string “null”.
+- **Line 147:** Sends each as the signed-in coach.
+- **Line 148:** Each must be refused with 403.
+- **Line 149:** Closes the preceding block (function, object, or statement body).
+- **Line 150:** A delete from an evil origin is refused.
+
+### Lines 151–175
+
+```text
+151 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {}, origin: 'http://evil.example' })).status, 403);
+152 |   assert.equal((await api('/api/lessons')).json.length, 0);
+153 |   const lessons = await api('/api/lessons');
+154 |   assert.equal(lessons.headers.get('cache-control'), 'no-store');
+155 |   assert.equal(lessons.headers.get('x-content-type-options'), 'nosniff');
+156 |   assert.equal(lessons.headers.get('x-powered-by'), null);
+157 |   const created = await api('/api/lessons', { method: 'POST', body: { title: 'Mine', discipline: 'Boxing' } });
+158 |   assert.equal(created.status, 201);
+159 | });
+160 |
+161 | test('password reset gives the same answer for every email, sends one single-use link, and ends old sessions', async t => {
+162 |   const f = await fixture(t);
+163 |   const api = await signedIn(f, 'coach@example.com');
+164 |   const other = f.client('203.0.113.50');
+165 |   const known = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
+166 |   const unknown = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'nobody@example.com', redirectTo: '/reset-password' } });
+167 |   assert.equal(known.status, 200);
+168 |   assert.deepEqual(known.json, unknown.json);
+169 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 1);
+170 |   const link = new URL(f.mailer.outbox.find(mail => mail.kind === 'reset').url);
+171 |   assert.equal(link.origin, origin);
+172 |   const opened = await other(link.pathname + link.search, { redirect: 'manual' });
+173 |   assert.equal(opened.status, 302);
+174 |   const token = new URL(opened.headers.get('location'), origin).searchParams.get('token');
+175 |   assert.ok(token && token.length > 10);
+```
+
+- **Line 151:** A sign-out from an evil origin is refused by the login library.
+- **Line 152:** Nothing was created by the forged requests.
+- **Line 153:** Reads the lesson list normally.
+- **Line 154:** The answer must not be cacheable.
+- **Line 155:** MIME sniffing is disabled.
+- **Line 156:** The server does not announce that it is Express.
+- **Line 157:** A genuine request from CoachLab’s own origin works.
+- **Line 158:** It creates the lesson.
+- **Line 159:** Closes the callback body and the function call that received it.
+- **Line 160:** Blank line separates related sections for readability; it performs no operation.
+- **Line 161:** Test: password reset gives the same answer for every email, sends one single-use link and ends old sessions.
+- **Line 162:** Builds the fixture.
+- **Line 163:** Signs in a coach.
+- **Line 164:** A separate browser asks for the reset.
+- **Line 165:** Requests a reset for the real account.
+- **Line 166:** Requests a reset for an unknown email.
+- **Line 167:** The real request succeeds.
+- **Line 168:** Both answers are identical.
+- **Line 169:** Only one email was “sent”, for the real account.
+- **Line 170:** Reads the reset link from the collector.
+- **Line 171:** The link points at CoachLab’s public address.
+- **Line 172:** Opens the link without following the redirect.
+- **Line 173:** It redirects (302) to the reset page.
+- **Line 174:** Reads the one-time token from the redirect.
+- **Line 175:** The token is a real, long value.
+
+### Lines 176–200
+
+```text
+176 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'short', token } })).status, 400);
+177 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'password123', token } })).status, 400);
+178 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token: 'invalid-token' } })).status, 400);
+179 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token } })).status, 200);
+180 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'another-new-password-9', token } })).status, 400);
+181 |   assert.equal((await api('/api/lessons')).status, 401, 'sessions from before the reset must end');
+182 |   assert.equal((await signIn(f.client('203.0.113.51'), 'coach@example.com', goodPassword)).status, 401);
+183 |   assert.equal((await signIn(f.client('203.0.113.52'), 'coach@example.com', 'blue-lantern-orchard-55')).status, 200);
+184 | });
+185 |
+186 | test('password reset links cannot be requested over and over to flood one inbox', async t => {
+187 |   const f = await fixture(t);
+188 |   await register(f.client(), 'coach@example.com');
+189 |   for (let request = 0; request < 5; request++) await f.client(`203.0.113.${60 + request}`)('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
+190 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 3);
+191 | });
+192 |
+193 | test('each coach sees only their own lessons and media; guesses return 404 and never reveal another coach', async t => {
+194 |   const f = await fixture(t);
+195 |   const a = await signedIn(f, 'a@example.com', '203.0.113.21');
+196 |   const b = await signedIn(f, 'b@example.com', '203.0.113.22');
+197 |   const upload = await (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'secret.png' } })).json;
+198 |   assert.ok(upload.id);
+199 |   const lesson = (await a('/api/lessons', { method: 'POST', body: { title: 'A private plan', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog', media: [{ id: upload.id, title: 'A picture', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/a.png', title: 'A link' }] } })).json;
+200 |   assert.ok(lesson.id);
+```
+
+- **Line 176:** A too-short new password is refused.
+- **Line 177:** A common new password is refused.
+- **Line 178:** A fake token is refused.
+- **Line 179:** A good password with the real token works.
+- **Line 180:** Using the same token again fails, so reset links are single-use.
+- **Line 181:** The coach’s earlier session no longer works: a reset signs out everyone.
+- **Line 182:** The old password no longer works.
+- **Line 183:** The new password works.
+- **Line 184:** Closes the callback body and the function call that received it.
+- **Line 185:** Blank line separates related sections for readability; it performs no operation.
+- **Line 186:** Test: reset links cannot be requested over and over to flood one inbox.
+- **Line 187:** Builds the fixture.
+- **Line 188:** Registers a coach.
+- **Line 189:** Requests five resets from five different addresses.
+- **Line 190:** Only three messages were sent, so one inbox cannot be flooded.
+- **Line 191:** Closes the callback body and the function call that received it.
+- **Line 192:** Blank line separates related sections for readability; it performs no operation.
+- **Line 193:** Test: each coach sees only their own lessons and media; guesses return 404.
+- **Line 194:** Builds the fixture.
+- **Line 195:** Signs in coach A.
+- **Line 196:** Signs in coach B.
+- **Line 197:** Coach A uploads a picture.
+- **Line 198:** The upload has an id.
+- **Line 199:** Coach A creates a lesson with that picture and a link attached.
+- **Line 200:** The lesson has an id.
+
+### Lines 201–225
+
+```text
+201 |   const orphan = (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'unsaved.png' } })).json;
+202 |   assert.equal((await a('/api/lessons')).json.length, 1);
+203 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
+204 |   assert.equal((await a(`/api/media/${upload.id}/file`)).status, 200);
+205 |   assert.deepEqual((await b('/api/lessons')).json, []);
+206 |   assert.deepEqual((await b('/api/lesson-media')).json, []);
+207 |   for (const id of [upload.id, orphan.id]) {
+208 |     assert.equal((await b(`/api/media/${id}/file`)).status, 404);
+209 |     assert.equal((await b(`/api/media/${id}`, { method: 'DELETE' })).status, 404);
+210 |   }
+211 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'PUT', body: { title: 'Hijacked', discipline: 'MMA', media: [] } })).status, 404);
+212 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 404);
+213 |   const stolen = await b('/api/lessons', { method: 'POST', body: { title: 'Steal media', discipline: 'MMA', media: [{ id: upload.id }] } });
+214 |   assert.equal(stolen.status, 400);
+215 |   const stolenOrphan = await b('/api/lessons', { method: 'POST', body: { title: 'Steal upload', discipline: 'MMA', media: [{ id: orphan.id }] } });
+216 |   assert.equal(stolenOrphan.status, 400);
+217 |   const own = (await b('/api/lessons', { method: 'POST', body: { title: 'B plan', discipline: 'Wrestling' } })).json;
+218 |   assert.equal((await b(`/api/lessons/${own.id}`, { method: 'PUT', body: { title: 'B plan 2', discipline: 'Wrestling', media: [{ id: upload.id }] } })).status, 400);
+219 |   assert.equal((await b('/api/lessons')).json.map(item => item.title).join(), 'B plan');
+220 |   const survivors = (await a('/api/lessons')).json;
+221 |   assert.equal(survivors[0].title, 'A private plan');
+222 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
+223 |   assert.equal((await a(`/api/media/${orphan.id}`, { method: 'DELETE' })).status, 204);
+224 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM lessons WHERE owner_id IS NULL').get().n, 0);
+225 |   assert.equal((await a(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 204);
+```
+
+- **Line 201:** Coach A uploads a second picture that is not attached to any lesson.
+- **Line 202:** Coach A sees exactly one lesson.
+- **Line 203:** And two attachments.
+- **Line 204:** Coach A can download the picture.
+- **Line 205:** Coach B sees no lessons.
+- **Line 206:** Coach B sees no attachments.
+- **Line 207:** For both of A’s uploads (attached and unattached)…
+- **Line 208:** …coach B cannot download them (404, not 403, so their existence is not revealed)…
+- **Line 209:** …and cannot delete them.
+- **Line 210:** Closes the preceding block (function, object, or statement body).
+- **Line 211:** Coach B cannot change A’s lesson.
+- **Line 212:** Coach B cannot delete A’s lesson.
+- **Line 213:** Coach B tries to attach A’s upload to a new lesson of their own…
+- **Line 214:** …and is refused.
+- **Line 215:** Same attempt with A’s unattached upload…
+- **Line 216:** …also refused.
+- **Line 217:** Coach B creates their own lesson.
+- **Line 218:** B cannot attach A’s upload by editing their own lesson either.
+- **Line 219:** B still sees only their own lesson.
+- **Line 220:** Reads A’s lessons again.
+- **Line 221:** A’s lesson is untouched.
+- **Line 222:** A’s attachments are untouched.
+- **Line 223:** A can delete their own unsaved upload.
+- **Line 224:** No lesson in the database lacks an owner.
+- **Line 225:** A can delete their own lesson.
+
+### Lines 226–250
+
+```text
+226 |   assert.equal((await b('/api/lessons')).json.length, 1);
+227 | });
+228 |
+229 | test('lessons that existed before accounts have no owner, stay untouched in the database and are invisible to every coach', async t => {
+230 |   const f = await fixture(t);
+231 |   f.database.prepare("INSERT INTO lessons (title, discipline, drills) VALUES ('Old lesson', 'Boxing', 'Warm-up — 5 minutes')").run();
+232 |   f.database.prepare("INSERT INTO lesson_media (kind, origin, url, title) VALUES ('youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Old video')").run();
+233 |   const api = await signedIn(f, 'new@example.com');
+234 |   assert.deepEqual((await api('/api/lessons')).json, []);
+235 |   assert.deepEqual((await api('/api/lesson-media')).json, []);
+236 |   assert.equal((await api('/api/lessons/1', { method: 'DELETE' })).status, 404);
+237 |   assert.equal((await api('/api/lessons/1', { method: 'PUT', body: { title: 'Taken', discipline: 'MMA' } })).status, 404);
+238 |   assert.equal(f.database.prepare('SELECT title FROM lessons WHERE id = 1').get().title, 'Old lesson');
+239 |   assert.equal(f.database.prepare('SELECT owner_id FROM lessons WHERE id = 1').get().owner_id, null);
+240 | });
+241 |
+242 | test('Google sign-in is offered only when its credentials are configured on the server', async t => {
+243 |   const without = await fixture(t);
+244 |   assert.equal((await without.client()('/api/auth-config')).json.google, false);
+245 |   const withGoogle = await fixture(t, { env: { GOOGLE_CLIENT_ID: 'client-id.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'client-secret-value' } });
+246 |   assert.equal((await withGoogle.client()('/api/auth-config')).json.google, true);
+247 |   const start = await withGoogle.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
+248 |   assert.equal(start.status, 200);
+249 |   assert.match(start.json.url, /^https:\/\/accounts\.google\.com\//);
+250 |   assert.ok(!start.text.includes('client-secret-value'));
+```
+
+- **Line 226:** B’s lesson is unaffected.
+- **Line 227:** Closes the callback body and the function call that received it.
+- **Line 228:** Blank line separates related sections for readability; it performs no operation.
+- **Line 229:** Test: lessons that existed before accounts have no owner and stay hidden and untouched.
+- **Line 230:** Builds the fixture.
+- **Line 231:** Inserts an old lesson directly into the database with no owner.
+- **Line 232:** Inserts an old attachment with no owner.
+- **Line 233:** Signs in a brand-new coach.
+- **Line 234:** The new coach sees no lessons, so old lessons are not assigned to the first account.
+- **Line 235:** The new coach sees no attachments.
+- **Line 236:** The new coach cannot delete the old lesson.
+- **Line 237:** The new coach cannot edit it either.
+- **Line 238:** The old lesson is unchanged in the database.
+- **Line 239:** And it still has no owner.
+- **Line 240:** Closes the callback body and the function call that received it.
+- **Line 241:** Blank line separates related sections for readability; it performs no operation.
+- **Line 242:** Test: Google sign-in is offered only when its credentials are configured on the server.
+- **Line 243:** Builds a fixture without Google keys.
+- **Line 244:** It reports that Google is not available.
+- **Line 245:** Builds a fixture with fake Google keys.
+- **Line 246:** It reports that Google is available.
+- **Line 247:** Starts a Google sign-in.
+- **Line 248:** The server answers 200.
+- **Line 249:** The answer is a Google sign-in address (https://accounts.google.com/…).
+- **Line 250:** The Google client secret is not in the answer.
+
+### Lines 251–253
+
+```text
+251 |   const refused = await without.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
+252 |   assert.ok(refused.status >= 400);
+253 | });
+```
+
+- **Line 251:** Starting Google sign-in without keys…
+- **Line 252:** …is refused.
+- **Line 253:** Closes the callback body and the function call that received it.
+
+## server/claim-lessons.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\claim-lessons.js`
+
+Command-line wrapper around claimLessons, run with npm run claim-lessons. It opens the same database as the server (SQLite or the verified Development PostgreSQL), reads the options, and prints what it does. Without --confirm it only shows what would change.
+
+### Lines 1–25
+
+```text
+1 | import { parseArgs } from 'node:util';
+2 | import { claimLessons, defaultBackupRoot, prismaClaimStore, sqliteClaimStore } from './claim.js';
+3 |
+4 | const { values } = parseArgs({ options: { email: { type: 'string' }, lessons: { type: 'string' }, 'all-unclaimed': { type: 'boolean' }, confirm: { type: 'boolean' }, 'backup-dir': { type: 'string' } } });
+5 | let close = async () => {};
+6 | try {
+7 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
+8 |   let store;
+9 |   if (selected === 'sqlite') {
+10 |     const { openDatabase } = await import('./database.js');
+11 |     const { migrate } = await import('./migrations.js');
+12 |     const database = openDatabase();
+13 |     migrate(database);
+14 |     close = async () => database.close();
+15 |     store = sqliteClaimStore(database);
+16 |   } else if (selected === 'postgresql') {
+17 |     const { createDevelopmentClient } = await import('./prisma-development.js');
+18 |     const client = createDevelopmentClient();
+19 |     close = () => client.$disconnect();
+20 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
+21 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
+22 |     store = prismaClaimStore(client);
+23 |   } else {
+24 |     throw new Error('Unsupported database selection.');
+25 |   }
+```
+
+- **Line 1:** Imports Node’s built-in command-line option parser.
+- **Line 2:** Imports the claim function, the default backup folder and the two database adapters.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Reads the allowed options: --email, --lessons, --all-unclaimed, --confirm and --backup-dir. Anything else is rejected by parseArgs.
+- **Line 5:** A function that closes the database; replaced once a database is open.
+- **Line 6:** Starts the guarded block so every error is reported plainly.
+- **Line 7:** Chooses the database exactly like the server: SQLite by default, PostgreSQL only when explicitly selected.
+- **Line 8:** Will hold the database adapter.
+- **Line 9:** SQLite branch.
+- **Line 10:** Loads the SQLite opener.
+- **Line 11:** Loads the migration function.
+- **Line 12:** Opens the database.
+- **Line 13:** Makes sure all migrations (including ownership) are applied.
+- **Line 14:** Remembers how to close it.
+- **Line 15:** Creates the SQLite claim adapter.
+- **Line 16:** PostgreSQL branch.
+- **Line 17:** Loads the guarded Development client factory, which refuses anything but the verified Development target.
+- **Line 18:** Creates the client.
+- **Line 19:** Remembers how to disconnect it.
+- **Line 20:** Reads the real database name.
+- **Line 21:** Stops if it is not the expected Development database.
+- **Line 22:** Creates the PostgreSQL claim adapter.
+- **Line 23:** Any other database choice is refused.
+- **Line 24:** Throws an error for any unsupported database choice, so there is no silent fallback to another database.
+- **Line 25:** Closes the preceding block (function, object, or statement body).
+
+### Lines 26–35
+
+```text
+26 |   const lessonIds = values.lessons ? values.lessons.split(',').map(value => Number(value.trim())) : undefined;
+27 |   if (lessonIds?.some(id => !Number.isInteger(id) || id < 1)) throw new Error('--lessons must be a comma-separated list of lesson numbers.');
+28 |   const result = await claimLessons({ store, email: values.email, lessonIds, allUnclaimed: values['all-unclaimed'], confirm: values.confirm, backupRoot: values['backup-dir'] || defaultBackupRoot, log: console.log });
+29 |   if (!result.changed && !result.dryRun) process.exitCode = 1;
+30 | } catch (error) {
+31 |   console.error(`Claim failed: ${error.message}`);
+32 |   process.exitCode = 1;
+33 | } finally {
+34 |   await close().catch(() => {});
+35 | }
+```
+
+- **Line 26:** Turns “8,9” into the numbers 8 and 9.
+- **Line 27:** Rejects anything that is not a positive whole number.
+- **Line 28:** Runs the claim process, printing progress to the terminal.
+- **Line 29:** Sets a failing exit code when nothing was claimed and it was not a dry run.
+- **Line 30:** Reports any error without a stack trace.
+- **Line 31:** Prints the error message (without a stack trace) to the terminal.
+- **Line 32:** Sets a failing exit code so scripts can tell the claim did not succeed.
+- **Line 33:** Always closes the database at the end.
+- **Line 34:** Closes it, ignoring close errors.
+- **Line 35:** Closes the preceding block (function, object, or statement body).
+
+## server/claim.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\claim.js`
+
+The safe process for handing lessons that existed before accounts to one registered coach. Those lessons have no owner, so nobody can see them. Because CoachLab has no way to prove who wrote a lesson, the proof of ownership is control of the computer and its database: only someone who can run this command with the real .env can claim. It defaults to a dry run, only ever touches unowned lessons, writes a verified backup first, changes everything in one transaction and verifies the result.
+
+### Lines 1–25
+
+```text
+1 | import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+2 | import { homedir } from 'node:os';
+3 | import path from 'node:path';
+4 |
+5 | // Lessons that existed before accounts have no owner and nobody can see them. This module lets the person who controls the
+6 | // computer and the database (the only proof of ownership CoachLab can check) hand chosen lessons to one registered coach.
+7 |
+8 | export const defaultBackupRoot = path.join(homedir(), 'CoachLab-backups');
+9 |
+10 | export function assertSafeBackupDirectory(directory) {
+11 |   const resolved = path.resolve(directory);
+12 |   if (resolved.split(path.sep).some(part => /^onedrive(?:\s|$)/i.test(part))) throw new Error('Backups must be stored outside OneDrive.');
+13 |   return resolved;
+14 | }
+15 |
+16 | export function sqliteClaimStore(database) {
+17 |   return {
+18 |     findUser: email => database.prepare('SELECT id, name, email FROM user WHERE email = ?').get(email.trim().toLowerCase()) || null,
+19 |     unclaimed: () => database.prepare('SELECT l.id, l.title, l.discipline, l.created_at, (SELECT count(*) FROM lesson_media m WHERE m.lesson_id = l.id) AS media FROM lessons l WHERE l.owner_id IS NULL ORDER BY l.id').all(),
+20 |     snapshot: ids => ({
+21 |       lessons: database.prepare(`SELECT * FROM lessons WHERE owner_id IS NULL AND id IN (${ids.map(() => '?').join(',')})`).all(...ids),
+22 |       media: database.prepare(`SELECT * FROM lesson_media WHERE owner_id IS NULL AND lesson_id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(row => ({ ...row, data: row.data ? Buffer.from(row.data).toString('base64') : null })),
+23 |     }),
+24 |     claim: database.transaction((userId, ids) => {
+25 |       const marks = ids.map(() => '?').join(',');
+```
+
+- **Line 1:** Imports the file functions used to write and verify the backup.
+- **Line 2:** Imports homedir to find the user’s home folder.
+- **Line 3:** Imports path helpers.
+- **Line 4:** Blank line separates related sections for readability; it performs no operation.
+- **Line 5:** Comment: lessons from before accounts have no owner and are invisible to everyone.
+- **Line 6:** Comment: control of the computer and database is the only proof of ownership CoachLab can check.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** Exports the default backup folder: CoachLab-backups inside the home folder, which is outside OneDrive.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** Exports assertSafeBackupDirectory, which refuses backup folders inside OneDrive (so private lesson backups are not uploaded).
+- **Line 11:** Resolves the folder to an absolute path.
+- **Line 12:** Throws if any part of the path is a folder named OneDrive (or “OneDrive - Company”).
+- **Line 13:** Returns the safe absolute path.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Exports sqliteClaimStore: the database operations the claim process needs, written for SQLite.
+- **Line 17:** Returns an object of functions.
+- **Line 18:** findUser: finds the registered coach by lowercase email.
+- **Line 19:** unclaimed: lists lessons with no owner, with how many attachments each has.
+- **Line 20:** snapshot: returns the full rows that are about to change, for the backup.
+- **Line 21:** The unowned lessons among the chosen ids (the question marks are filled in safely by the driver).
+- **Line 22:** Their unowned attachments, with file bytes converted to base64 text so they fit in a JSON backup.
+- **Line 23:** Ends snapshot.
+- **Line 24:** claim: runs inside a transaction, so both updates succeed or neither does.
+- **Line 25:** Builds the right number of question marks for the id list.
+
+### Lines 26–50
+
+```text
+26 |       const lessons = database.prepare(`UPDATE lessons SET owner_id = ? WHERE owner_id IS NULL AND id IN (${marks})`).run(userId, ...ids).changes;
+27 |       const media = database.prepare(`UPDATE lesson_media SET owner_id = ? WHERE owner_id IS NULL AND lesson_id IN (${marks})`).run(userId, ...ids).changes;
+28 |       return { lessons, media };
+29 |     }),
+30 |     owned: (userId, ids) => database.prepare(`SELECT count(*) AS n FROM lessons WHERE owner_id = ? AND id IN (${ids.map(() => '?').join(',')})`).get(userId, ...ids).n,
+31 |   };
+32 | }
+33 |
+34 | export function prismaClaimStore(client) {
+35 |   return {
+36 |     findUser: async email => await client.user.findUnique({ where: { email: email.trim().toLowerCase() }, select: { id: true, name: true, email: true } }),
+37 |     unclaimed: async () => (await client.lesson.findMany({ where: { owner_id: null }, orderBy: { id: 'asc' }, select: { id: true, title: true, discipline: true, created_at: true, _count: { select: { media: true } } } })).map(row => ({ id: row.id, title: row.title, discipline: row.discipline, created_at: row.created_at.toISOString(), media: row._count.media })),
+38 |     snapshot: async ids => ({
+39 |       lessons: (await client.lesson.findMany({ where: { owner_id: null, id: { in: ids } } })).map(row => ({ ...row, created_at: row.created_at.toISOString() })),
+40 |       media: (await client.lessonMedia.findMany({ where: { owner_id: null, lesson_id: { in: ids } } })).map(row => ({ ...row, created_at: row.created_at.toISOString(), data: row.data ? Buffer.from(row.data).toString('base64') : null })),
+41 |     }),
+42 |     claim: (userId, ids) => client.$transaction(async tx => ({
+43 |       lessons: (await tx.lesson.updateMany({ where: { owner_id: null, id: { in: ids } }, data: { owner_id: userId } })).count,
+44 |       media: (await tx.lessonMedia.updateMany({ where: { owner_id: null, lesson_id: { in: ids } }, data: { owner_id: userId } })).count,
+45 |     }), { timeout: 30000 }),
+46 |     owned: (userId, ids) => client.lesson.count({ where: { owner_id: userId, id: { in: ids } } }),
+47 |   };
+48 | }
+49 |
+50 | export async function claimLessons({ store, email, lessonIds, allUnclaimed = false, confirm = false, backupRoot = defaultBackupRoot, now = () => new Date(), log = () => {} }) {
+```
+
+- **Line 26:** Gives the chosen lessons to the coach, but only where owner_id IS NULL, so a lesson that already belongs to someone can never be taken.
+- **Line 27:** Gives the attachments of those lessons to the coach, again only unowned ones.
+- **Line 28:** Returns how many rows changed.
+- **Line 29:** Ends the transaction function.
+- **Line 30:** owned: counts how many of the chosen lessons now belong to the coach, for verification.
+- **Line 31:** Closes the preceding block and ends the statement.
+- **Line 32:** Closes the preceding block (function, object, or statement body).
+- **Line 33:** Blank line separates related sections for readability; it performs no operation.
+- **Line 34:** Exports prismaClaimStore: the same operations for PostgreSQL through Prisma.
+- **Line 35:** Returns an object of functions.
+- **Line 36:** findUser through Prisma, by lowercase email.
+- **Line 37:** unclaimed: lessons with owner_id null, with an attachment count, with dates turned into text.
+- **Line 38:** snapshot: the rows that are about to change.
+- **Line 39:** The unowned chosen lessons, dates as text.
+- **Line 40:** Their unowned attachments, with file bytes as base64 text.
+- **Line 41:** Ends snapshot.
+- **Line 42:** claim runs in a Prisma transaction with a 30-second limit.
+- **Line 43:** Updates only lessons whose owner is still null and whose id is chosen.
+- **Line 44:** Updates only unowned attachments of those lessons.
+- **Line 45:** Ends the transaction.
+- **Line 46:** owned: counts the coach’s lessons among the chosen ids.
+- **Line 47:** Closes the preceding block and ends the statement.
+- **Line 48:** Closes the preceding block (function, object, or statement body).
+- **Line 49:** Blank line separates related sections for readability; it performs no operation.
+- **Line 50:** Exports claimLessons, the whole process. Options: the store, the coach’s email, either explicit lesson ids or all unclaimed lessons, confirm (false means dry run), the backup folder, and replaceable clock and log functions.
+
+### Lines 51–75
+
+```text
+51 |   if (!email) throw new Error('Give the registered coach’s email with --email.');
+52 |   if (!allUnclaimed && !lessonIds?.length) throw new Error('Choose the lessons to claim with --lessons 8,9 or use --all-unclaimed.');
+53 |   const user = await store.findUser(email);
+54 |   if (!user) throw new Error('No registered coach has that email. Register (and sign in once) in CoachLab first.');
+55 |   const available = await store.unclaimed();
+56 |   const chosen = allUnclaimed ? available : available.filter(lesson => lessonIds.includes(lesson.id));
+57 |   const missing = (lessonIds || []).filter(id => !available.some(lesson => lesson.id === id));
+58 |   if (missing.length) throw new Error(`Lesson${missing.length > 1 ? 's' : ''} ${missing.join(', ')} not found among unclaimed lessons (already owned or missing). Nothing was changed.`);
+59 |   log(`Coach: ${user.name} <${user.email}>`);
+60 |   log(`Unclaimed lessons to hand over (${chosen.length}):`);
+61 |   for (const lesson of chosen) log(`  #${lesson.id}  ${lesson.title}  [${lesson.discipline}, ${lesson.media} attachment${lesson.media === 1 ? '' : 's'}, created ${lesson.created_at}]`);
+62 |   if (!chosen.length) return { changed: false, claimed: 0, reason: 'Nothing to claim.' };
+63 |   if (!confirm) { log('Dry run: nothing was changed. Run again with --confirm to hand these lessons to this coach.'); return { changed: false, claimed: 0, dryRun: true, lessons: chosen }; }
+64 |   const ids = chosen.map(lesson => lesson.id);
+65 |   const directory = path.join(assertSafeBackupDirectory(backupRoot), `claim-${now().toISOString().replace(/[:.]/g, '-')}`);
+66 |   mkdirSync(directory, { recursive: true });
+67 |   const file = path.join(directory, 'claimed-lessons-before.json');
+68 |   const snapshot = await store.snapshot(ids);
+69 |   writeFileSync(file, JSON.stringify({ takenAt: now().toISOString(), coach: user, ...snapshot }, null, 1));
+70 |   const reread = JSON.parse(readFileSync(file, 'utf8'));
+71 |   if (reread.lessons.length !== ids.length) throw new Error('The backup could not be verified, so nothing was changed.');
+72 |   log(`Backup written and verified: ${file}`);
+73 |   const result = await store.claim(user.id, ids);
+74 |   const verified = await store.owned(user.id, ids);
+75 |   if (verified !== ids.length || result.lessons !== ids.length) throw new Error(`Verification failed: expected ${ids.length} lessons, found ${verified}. Restore from ${file}.`);
+```
+
+- **Line 51:** An email is required.
+- **Line 52:** The operator must name lessons or explicitly choose all unclaimed ones; there is no accidental default.
+- **Line 53:** Looks up the coach.
+- **Line 54:** If no registered coach has that email, stops with advice to register first.
+- **Line 55:** Lists lessons that have no owner.
+- **Line 56:** Chooses all of them or the requested ones.
+- **Line 57:** Finds requested ids that are not unowned lessons.
+- **Line 58:** If any requested lesson is already owned or does not exist, stops and changes nothing.
+- **Line 59:** Shows which coach will receive the lessons.
+- **Line 60:** Shows how many lessons will be handed over.
+- **Line 61:** Prints one line per lesson with its id, title, discipline, attachment count and creation date so the operator can check them.
+- **Line 62:** Nothing to claim: returns without changes.
+- **Line 63:** Dry run (the default): prints what would happen and changes nothing.
+- **Line 64:** The ids that will change.
+- **Line 65:** Builds a timestamped backup folder name inside the safe backup root.
+- **Line 66:** Creates the folder.
+- **Line 67:** The backup file path.
+- **Line 68:** Reads the rows as they are right now.
+- **Line 69:** Writes them, with the coach and time, to the backup file.
+- **Line 70:** Reads the file back.
+- **Line 71:** If the backup does not contain every lesson, stops before changing anything.
+- **Line 72:** Tells the operator where the verified backup is.
+- **Line 73:** Hands the lessons and their attachments to the coach in one transaction.
+- **Line 74:** Counts how many chosen lessons the coach now owns.
+- **Line 75:** If the counts are not exactly right, reports failure and the backup path for restoring.
+
+### Lines 76–78
+
+```text
+76 |   log(`Done: ${result.lessons} lesson${result.lessons === 1 ? '' : 's'} and ${result.media} attachment${result.media === 1 ? '' : 's'} now belong to ${user.email}.`);
+77 |   return { changed: true, claimed: result.lessons, media: result.media, backup: file };
+78 | }
+```
+
+- **Line 76:** Reports success with counts.
+- **Line 77:** Returns the result, including the backup path.
+- **Line 78:** Closes the preceding block (function, object, or statement body).
+
+## server/claim.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\claim.test.js`
+
+Tests of the claim process (handing lessons from before accounts to one coach) against a temporary in-memory SQLite database: dry run, backup, ownership rules and refusals.
+
+### Lines 1–25
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
+4 | import { tmpdir, homedir } from 'node:os';
+5 | import path from 'node:path';
+6 | import Database from 'better-sqlite3';
+7 | import { migrate } from './migrations.js';
+8 | import { sqliteLessons } from './lesson-store.js';
+9 | import { claimLessons, sqliteClaimStore, assertSafeBackupDirectory } from './claim.js';
+10 |
+11 | function fixture(t) {
+12 |   const database = new Database(':memory:');
+13 |   migrate(database);
+14 |   database.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT, email TEXT)`);
+15 |   database.prepare('INSERT INTO user VALUES (?, ?, ?)').run('coach-1', 'Coach One', 'one@example.com');
+16 |   database.prepare('INSERT INTO user VALUES (?, ?, ?)').run('coach-2', 'Coach Two', 'two@example.com');
+17 |   const insert = database.prepare('INSERT INTO lessons (title, discipline, drills, owner_id) VALUES (?, ?, ?, ?)');
+18 |   insert.run('Old lesson A', 'Boxing', 'Warm-up — 5 minutes', null);
+19 |   insert.run('Old lesson B', 'MMA', '', null);
+20 |   insert.run('Coach Two plan', 'Wrestling', '', 'coach-2');
+21 |   database.prepare("INSERT INTO lesson_media (lesson_id, kind, origin, url, title) VALUES (1, 'youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Old video')").run();
+22 |   database.prepare("INSERT INTO lesson_media (lesson_id, owner_id, kind, origin, url, title) VALUES (3, 'coach-2', 'youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Theirs')").run();
+23 |   const backupRoot = mkdtempSync(path.join(tmpdir(), 'coachlab-claim-'));
+24 |   t.after(() => { database.close(); rmSync(backupRoot, { recursive: true, force: true }); });
+25 |   return { database, store: sqliteClaimStore(database), backupRoot };
+```
+
+- **Line 1:** Imports Node’s test function.
+- **Line 2:** Imports strict assertions.
+- **Line 3:** Imports file helpers for temporary folders and reading backups.
+- **Line 4:** Imports the temporary and home folder locations.
+- **Line 5:** Imports path helpers.
+- **Line 6:** Imports SQLite.
+- **Line 7:** Imports the migrations.
+- **Line 8:** Imports the SQLite lesson store, to check what coaches see afterwards.
+- **Line 9:** Imports the claim functions under test.
+- **Line 10:** Blank line separates related sections for readability; it performs no operation.
+- **Line 11:** Defines the fixture shared by the tests.
+- **Line 12:** Creates an in-memory database.
+- **Line 13:** Applies the migrations.
+- **Line 14:** Creates a minimal stand-in for the accounts table (the real login tables are not needed here).
+- **Line 15:** Adds coach one.
+- **Line 16:** Adds coach two.
+- **Line 17:** Prepares a lesson insert.
+- **Line 18:** Adds an unowned lesson A.
+- **Line 19:** Adds an unowned lesson B.
+- **Line 20:** Adds a lesson already owned by coach two.
+- **Line 21:** Adds an unowned attachment on lesson A.
+- **Line 22:** Adds an attachment owned by coach two.
+- **Line 23:** Creates a temporary backup folder.
+- **Line 24:** After the test, closes the database and deletes the folder.
+- **Line 25:** Returns the database, the claim store and the backup folder.
+
+### Lines 26–50
+
+```text
+26 | }
+27 |
+28 | test('a dry run lists what would be claimed and changes nothing', async t => {
+29 |   const { database, store, backupRoot } = fixture(t);
+30 |   const lines = [];
+31 |   const result = await claimLessons({ store, email: 'ONE@example.com', allUnclaimed: true, backupRoot, log: line => lines.push(line) });
+32 |   assert.equal(result.dryRun, true);
+33 |   assert.equal(result.changed, false);
+34 |   assert.ok(lines.some(line => line.includes('Old lesson A') && line.includes('1 attachment')));
+35 |   assert.ok(lines.some(line => line.includes('Dry run')));
+36 |   assert.equal(database.prepare('SELECT count(*) AS n FROM lessons WHERE owner_id IS NULL').get().n, 2);
+37 |   assert.equal(existsSync(path.join(backupRoot, 'anything')), false);
+38 | });
+39 |
+40 | test('confirming writes a verified backup first, then hands only the chosen unclaimed lessons and their media to that coach', async t => {
+41 |   const { database, store, backupRoot } = fixture(t);
+42 |   const result = await claimLessons({ store, email: 'one@example.com', lessonIds: [1], confirm: true, backupRoot });
+43 |   assert.deepEqual({ changed: result.changed, claimed: result.claimed, media: result.media }, { changed: true, claimed: 1, media: 1 });
+44 |   const backup = JSON.parse(readFileSync(result.backup, 'utf8'));
+45 |   assert.equal(backup.lessons.length, 1);
+46 |   assert.equal(backup.lessons[0].title, 'Old lesson A');
+47 |   assert.equal(backup.lessons[0].owner_id, null);
+48 |   assert.equal(backup.media.length, 1);
+49 |   assert.equal(database.prepare('SELECT owner_id FROM lessons WHERE id = 1').get().owner_id, 'coach-1');
+50 |   assert.equal(database.prepare('SELECT owner_id FROM lesson_media WHERE lesson_id = 1').get().owner_id, 'coach-1');
+```
+
+- **Line 26:** Closes the preceding block (function, object, or statement body).
+- **Line 27:** Blank line separates related sections for readability; it performs no operation.
+- **Line 28:** Test: a dry run lists what would be claimed and changes nothing.
+- **Line 29:** Builds the fixture.
+- **Line 30:** Collects printed lines.
+- **Line 31:** Runs the claim for coach one (email in capital letters) without --confirm.
+- **Line 32:** The result says it was a dry run.
+- **Line 33:** Nothing changed.
+- **Line 34:** The output lists lesson A with its attachment.
+- **Line 35:** The output says it was a dry run.
+- **Line 36:** Both unowned lessons are still unowned.
+- **Line 37:** No backup was written.
+- **Line 38:** Closes the callback body and the function call that received it.
+- **Line 39:** Blank line separates related sections for readability; it performs no operation.
+- **Line 40:** Test: confirming writes a verified backup first and then hands over only the chosen unowned lessons.
+- **Line 41:** Builds the fixture.
+- **Line 42:** Claims lesson 1 for coach one with confirmation.
+- **Line 43:** One lesson and one attachment changed.
+- **Line 44:** Reads the backup file.
+- **Line 45:** It holds the lesson.
+- **Line 46:** With its original title…
+- **Line 47:** …and its original empty owner.
+- **Line 48:** And its attachment.
+- **Line 49:** Lesson 1 now belongs to coach one.
+- **Line 50:** Its attachment too.
+
+### Lines 51–74
+
+```text
+51 |   assert.equal(database.prepare('SELECT owner_id FROM lessons WHERE id = 2').get().owner_id, null);
+52 |   assert.equal(database.prepare('SELECT owner_id FROM lessons WHERE id = 3').get().owner_id, 'coach-2');
+53 |   const lessons = sqliteLessons(database);
+54 |   assert.deepEqual(lessons.list('coach-1').map(item => item.title), ['Old lesson A']);
+55 |   assert.equal(lessons.media.list('coach-1').length, 1);
+56 |   assert.deepEqual(lessons.list('coach-2').map(item => item.title), ['Coach Two plan']);
+57 | });
+58 |
+59 | test('lessons that already belong to someone can never be claimed, and bad requests change nothing', async t => {
+60 |   const { database, store, backupRoot } = fixture(t);
+61 |   await assert.rejects(claimLessons({ store, email: 'one@example.com', lessonIds: [3], confirm: true, backupRoot }), /not found among unclaimed/);
+62 |   await assert.rejects(claimLessons({ store, email: 'nobody@example.com', allUnclaimed: true, confirm: true, backupRoot }), /No registered coach/);
+63 |   await assert.rejects(claimLessons({ store, email: 'one@example.com', confirm: true, backupRoot }), /Choose the lessons/);
+64 |   await assert.rejects(claimLessons({ store, lessonIds: [1], confirm: true, backupRoot }), /--email/);
+65 |   await assert.rejects(claimLessons({ store, email: 'one@example.com', allUnclaimed: true, confirm: true, backupRoot: path.join(homedir(), 'OneDrive', 'Desktop', 'backups') }), /outside OneDrive/);
+66 |   assert.equal(database.prepare('SELECT count(*) AS n FROM lessons WHERE owner_id IS NULL').get().n, 2);
+67 |   assert.equal(database.prepare('SELECT owner_id FROM lessons WHERE id = 3').get().owner_id, 'coach-2');
+68 |   assert.throws(() => assertSafeBackupDirectory(path.join(homedir(), 'OneDrive - Company', 'x')), /outside OneDrive/);
+69 |   assert.equal(assertSafeBackupDirectory(path.join(homedir(), 'CoachLab-backups')), path.join(homedir(), 'CoachLab-backups'));
+70 |   const again = await claimLessons({ store, email: 'one@example.com', allUnclaimed: true, confirm: true, backupRoot });
+71 |   assert.equal(again.claimed, 2);
+72 |   const none = await claimLessons({ store, email: 'two@example.com', allUnclaimed: true, confirm: true, backupRoot });
+73 |   assert.equal(none.changed, false);
+74 | });
+```
+
+- **Line 51:** Lesson 2 (not chosen) is still unowned.
+- **Line 52:** Coach two’s lesson is untouched.
+- **Line 53:** Creates the real lesson store on the same database.
+- **Line 54:** Coach one now sees lesson A.
+- **Line 55:** And its attachment.
+- **Line 56:** Coach two still sees only their own lesson.
+- **Line 57:** Closes the callback body and the function call that received it.
+- **Line 58:** Blank line separates related sections for readability; it performs no operation.
+- **Line 59:** Test: lessons that already belong to someone can never be claimed, and bad requests change nothing.
+- **Line 60:** Builds the fixture.
+- **Line 61:** Claiming coach two’s lesson is refused.
+- **Line 62:** An unknown email is refused.
+- **Line 63:** Giving no lessons and no --all-unclaimed is refused.
+- **Line 64:** Giving no email is refused.
+- **Line 65:** A backup folder inside OneDrive is refused.
+- **Line 66:** Both unowned lessons are still unowned after all the refusals.
+- **Line 67:** Coach two still owns their lesson.
+- **Line 68:** A folder named like OneDrive - Company is refused.
+- **Line 69:** A normal folder in the home directory is accepted.
+- **Line 70:** Claiming everything unowned for coach one now works.
+- **Line 71:** Both unowned lessons were claimed.
+- **Line 72:** Running it again for coach two finds nothing to claim…
+- **Line 73:** …and changes nothing.
+- **Line 74:** Closes the callback body and the function call that received it.
+
+## server/mailer.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\mailer.js`
+
+Sending email is kept behind one tiny interface so a real provider can be added later without changing the login code. For now the console mailer prints messages in the backend window (local development only) and the memory mailer collects them for tests. No email leaves this computer.
+
+### Lines 1–24
+
+```text
+1 | // Email sending stays behind this small interface so a real provider can be added later without touching the login code.
+2 | // Until a provider is configured, messages are printed to the backend console (local development only) and never leave this computer.
+3 |
+4 | export function consoleMailer(log = console.log) {
+5 |   return {
+6 |     mode: 'console',
+7 |     async sendPasswordReset({ to, url }) {
+8 |       log(`[CoachLab mail — local only] Password reset requested for ${to}. Open this link within one hour: ${url}`);
+9 |     },
+10 |     async sendExistingAccountNotice({ to }) {
+11 |       log(`[CoachLab mail — local only] Someone tried to create a new account with ${to}, which already has one. Nothing was changed.`);
+12 |     },
+13 |   };
+14 | }
+15 |
+16 | export function memoryMailer() {
+17 |   const outbox = [];
+18 |   return {
+19 |     mode: 'memory',
+20 |     outbox,
+21 |     async sendPasswordReset({ to, url }) { outbox.push({ kind: 'reset', to, url }); },
+22 |     async sendExistingAccountNotice({ to }) { outbox.push({ kind: 'existing', to }); },
+23 |   };
+24 | }
+```
+
+- **Line 1:** Comment: explains why email sits behind this interface.
+- **Line 2:** Comment: until a provider exists, messages are only printed locally.
+- **Line 3:** Blank line separates related sections for readability; it performs no operation.
+- **Line 4:** Exports consoleMailer; the log function can be replaced (tests do this).
+- **Line 5:** Returns the mailer object.
+- **Line 6:** Names the mode so the website can tell coaches where the reset link will appear.
+- **Line 7:** The function that “sends” a password reset message.
+- **Line 8:** Prints the recipient and the one-hour reset link in the backend window.
+- **Line 9:** Closes the object or block and continues the surrounding list.
+- **Line 10:** The function that notifies an existing coach that someone tried to register with their email.
+- **Line 11:** Prints that notice. Nothing was changed for the existing account.
+- **Line 12:** Closes the object or block and continues the surrounding list.
+- **Line 13:** Closes the preceding block and ends the statement.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Exports memoryMailer, used by tests.
+- **Line 17:** The list where “sent” messages are kept.
+- **Line 18:** Returns the mailer object.
+- **Line 19:** Names this mode memory.
+- **Line 20:** Exposes the list so a test can read the messages.
+- **Line 21:** Stores a reset message instead of sending it.
+- **Line 22:** Stores an “existing account” notice.
+- **Line 23:** Closes the preceding block and ends the statement.
+- **Line 24:** Closes the preceding block (function, object, or statement body).
+
+## server/migrations/003_add_ownership.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations\003_add_ownership.sql`
+
+Third SQLite migration. It adds an owner column to lessons and attachments. Existing rows keep an empty owner, which means nobody can see them until they are deliberately claimed.
+
+### Lines 1–4
+
+```text
+1 | ALTER TABLE lessons ADD COLUMN owner_id TEXT;
+2 | ALTER TABLE lesson_media ADD COLUMN owner_id TEXT;
+3 | CREATE INDEX lessons_owner_id_idx ON lessons (owner_id);
+4 | CREATE INDEX lesson_media_owner_id_idx ON lesson_media (owner_id);
+```
+
+- **Line 1:** Adds owner_id (the id of the coach who owns the lesson) to lessons. TEXT matches Better Auth’s text user ids. Existing rows get NULL (no owner).
+- **Line 2:** Adds owner_id to attachments, so an unsaved upload also belongs to someone.
+- **Line 3:** Index so listing one coach’s lessons stays fast.
+- **Line 4:** Index so listing one coach’s attachments stays fast.
+
+## server/postgres-auth.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\postgres-auth.test.js`
+
+Opt-in integration test of the real login system on PostgreSQL. It creates a disposable schema on the verified Development database, applies every migration, runs real Better Auth through the Prisma adapter, and proves registration, private lessons and media, claiming old lessons, password reset and logout. The schema is dropped at the end and the public tables are never touched.
+
+### Lines 1–25
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { once } from 'node:events';
+4 | import { randomBytes, randomUUID } from 'node:crypto';
+5 | import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+6 | import { tmpdir } from 'node:os';
+7 | import path from 'node:path';
+8 | import pg from 'pg';
+9 | import { createApp } from './app.js';
+10 | import { createAuth } from './auth.js';
+11 | import { memoryMailer } from './mailer.js';
+12 | import { prismaLessons } from './lesson-store.js';
+13 | import { prismaClaimStore, claimLessons } from './claim.js';
+14 | import { createDevelopmentClient } from './prisma-development.js';
+15 | import { cookieClient } from './test-auth.js';
+16 | import { png } from './media-fixtures.js';
+17 |
+18 | const origin = 'http://coachlab.test';
+19 | const password = 'violet-harbor-ladder-92';
+20 |
+21 | test('PostgreSQL accounts: real Better Auth through Prisma, private lessons and media, claiming old lessons, reset and logout', { skip: process.env.COACHLAB_RUN_POSTGRES_TESTS !== 'verified-development', timeout: 240000 }, async t => {
+22 |   const env = process.env;
+23 |   assert.equal(env.COACHLAB_DEV_PROJECT_ID, 'rapid-firefly-98778665');
+24 |   assert.equal(env.COACHLAB_DEV_BRANCH_ID, 'br-flat-fog-b5t1m0vy');
+25 |   const schema = 'coachlab_test_' + randomUUID().replaceAll('-', '');
+```
+
+- **Line 1:** Imports Node’s test function.
+- **Line 2:** Imports strict assertions.
+- **Line 3:** Imports once, which waits for an event.
+- **Line 4:** Imports random byte and id generators.
+- **Line 5:** Imports file functions to read migrations and manage a temporary backup folder.
+- **Line 6:** Imports the temporary folder location.
+- **Line 7:** Imports path helpers.
+- **Line 8:** Imports the PostgreSQL driver for administration.
+- **Line 9:** Imports the app factory.
+- **Line 10:** Imports the login system.
+- **Line 11:** Imports the memory mailer.
+- **Line 12:** Imports the PostgreSQL lesson store.
+- **Line 13:** Imports the PostgreSQL claim store and the claim function.
+- **Line 14:** Imports the guarded Development client factory.
+- **Line 15:** Imports the browser stand-in.
+- **Line 16:** Imports the fake PNG.
+- **Line 17:** Blank line separates related sections for readability; it performs no operation.
+- **Line 18:** The fake website address.
+- **Line 19:** The sample password.
+- **Line 20:** Blank line separates related sections for readability; it performs no operation.
+- **Line 21:** Registers the test, skipped unless COACHLAB_RUN_POSTGRES_TESTS has the value verified-development, with a 4-minute timeout.
+- **Line 22:** Shortcut for the environment.
+- **Line 23:** Checks the project id is the verified Development project.
+- **Line 24:** Checks the branch id is the verified Development branch.
+- **Line 25:** Makes a random disposable schema name.
+
+### Lines 26–50
+
+```text
+26 |   const direct = new URL(env.COACHLAB_DEV_DIRECT_URL);
+27 |   assert.ok(direct.hostname.startsWith('ep-long-bird-b50l2nhb.') && direct.hostname === env.COACHLAB_DEV_EXPECTED_HOST.replace('-pooler.', '.'));
+28 |   assert.equal(direct.pathname, '/neondb');
+29 |   direct.search = '';
+30 |   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 30000 });
+31 |   const backupRoot = mkdtempSync(path.join(tmpdir(), 'coachlab-pgclaim-'));
+32 |   let client, server, created = false;
+33 |   try {
+34 |     await admin.connect();
+35 |     assert.equal((await admin.query('SELECT current_database() AS name')).rows[0].name, 'neondb');
+36 |     await admin.query(`CREATE SCHEMA "${schema}"`);
+37 |     created = true;
+38 |     await admin.query('BEGIN');
+39 |     await admin.query(`SET LOCAL search_path TO "${schema}"`);
+40 |     for (const name of readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()) {
+41 |       await admin.query(readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8').replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
+42 |     }
+43 |     await admin.query("INSERT INTO lessons (title, discipline, drills) VALUES ('Lesson from before accounts', 'Boxing', 'Warm-up — 5 minutes')");
+44 |     await admin.query("INSERT INTO lesson_media (lesson_id, kind, origin, url, title) VALUES (1, 'youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Old video')");
+45 |     await admin.query('COMMIT');
+46 |     client = createDevelopmentClient(env, schema);
+47 |     const mailer = memoryMailer();
+48 |     const auth = createAuth({ prisma: client, secret: randomBytes(32).toString('hex'), baseURL: origin, trustedOrigins: [origin], mailer });
+49 |     server = createApp(prismaLessons(client), { auth, allowedOrigins: [origin], verifyLink: async url => ({ kind: 'image', url, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
+50 |     await once(server, 'listening');
+```
+
+- **Line 26:** Reads the direct connection address (never printed).
+- **Line 27:** Checks the host is the verified Development endpoint.
+- **Line 28:** Checks the database name.
+- **Line 29:** Removes query options.
+- **Line 30:** Creates an administration connection with strict TLS.
+- **Line 31:** Creates a temporary folder for the claim backup.
+- **Line 32:** Variables for the client, server and a flag for cleanup.
+- **Line 33:** Starts the guarded body.
+- **Line 34:** Connects.
+- **Line 35:** Checks the connected database name.
+- **Line 36:** Creates the disposable schema.
+- **Line 37:** Remembers that it exists, so cleanup drops it.
+- **Line 38:** Starts a transaction.
+- **Line 39:** Points the transaction at the disposable schema only.
+- **Line 40:** Loops over every migration folder in order.
+- **Line 41:** Applies each migration (without its own BEGIN and COMMIT).
+- **Line 42:** Closes the preceding block (function, object, or statement body).
+- **Line 43:** Inserts a lesson as it existed before accounts, with no owner.
+- **Line 44:** Inserts an attachment for it, also without an owner.
+- **Line 45:** Commits.
+- **Line 46:** Creates the Prisma client for the disposable schema.
+- **Line 47:** Creates the mail collector.
+- **Line 48:** Builds the real login system on the Prisma client.
+- **Line 49:** Starts the real app on a random local port.
+- **Line 50:** Waits for it to listen.
+
+### Lines 51–75
+
+```text
+51 |     const base = `http://127.0.0.1:${server.address().port}`;
+52 |     const clientFor = cookieClient(base, origin);
+53 |     const join = async (email, ip) => {
+54 |       const api = clientFor(ip);
+55 |       assert.equal((await api('/api/auth/sign-up/email', { method: 'POST', body: { name: 'Coach', email, password } })).status, 200);
+56 |       assert.equal((await api('/api/auth/sign-in/email', { method: 'POST', body: { email, password } })).status, 200);
+57 |       return api;
+58 |     };
+59 |     const a = await join('a@example.com', '203.0.113.31');
+60 |     const b = await join('b@example.com', '203.0.113.32');
+61 |     assert.equal((await clientFor('203.0.113.33')('/api/lessons')).status, 401);
+62 |     assert.equal((await a('/api/auth/get-session')).json.user.email, 'a@example.com');
+63 |     assert.deepEqual((await a('/api/lessons')).json, [], 'a lesson from before accounts must stay hidden');
+64 |     const stored = (await admin.query(`SELECT a.password FROM "${schema}".auth_accounts a JOIN "${schema}".auth_users u ON u.id = a.user_id WHERE u.email = 'a@example.com'`)).rows[0].password;
+65 |     assert.ok(!stored.includes(password) && /^[0-9a-f]+:[0-9a-f]+$/.test(stored));
+66 |     assert.equal((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".auth_sessions`)).rows[0].n, 2);
+67 |     const upload = (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'private.png' } })).json;
+68 |     const lesson = (await a('/api/lessons', { method: 'POST', body: { title: 'A private plan', discipline: 'Boxing', media: [{ id: upload.id, title: 'Mine' }, { url: 'https://example.com/a.png', title: 'Link' }] } })).json;
+69 |     assert.equal(Object.keys(lesson).join(), 'id,title,discipline,skill_level,duration_minutes,goal,drills,coaching_notes,created_at');
+70 |     assert.equal((await a('/api/lesson-media')).json.length, 2);
+71 |     assert.deepEqual((await b('/api/lessons')).json, []);
+72 |     assert.deepEqual((await b('/api/lesson-media')).json, []);
+73 |     assert.equal((await b(`/api/media/${upload.id}/file`)).status, 404);
+74 |     assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'PUT', body: { title: 'Hijack', discipline: 'MMA', media: [] } })).status, 404);
+75 |     assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 404);
+```
+
+- **Line 51:** The server address.
+- **Line 52:** The browser stand-in factory.
+- **Line 53:** Helper that registers and signs in a coach.
+- **Line 54:** Makes a stand-in.
+- **Line 55:** Registers (must be 200).
+- **Line 56:** Signs in (must be 200).
+- **Line 57:** Returns the signed-in stand-in.
+- **Line 58:** Closes the preceding block and ends the statement.
+- **Line 59:** Coach A joins.
+- **Line 60:** Coach B joins.
+- **Line 61:** An anonymous request to the lessons route is refused with 401.
+- **Line 62:** A’s session shows A’s email.
+- **Line 63:** A’s lesson list is empty: the lesson from before accounts stays hidden.
+- **Line 64:** Reads A’s stored credential directly from PostgreSQL.
+- **Line 65:** It is a salted hash, not the password.
+- **Line 66:** Two session rows exist, one per signed-in coach.
+- **Line 67:** A uploads a picture.
+- **Line 68:** A creates a lesson with that picture and a link.
+- **Line 69:** The lesson response still has exactly the original nine fields.
+- **Line 70:** A sees two attachments.
+- **Line 71:** B sees no lessons.
+- **Line 72:** B sees no attachments.
+- **Line 73:** B cannot download A’s picture.
+- **Line 74:** B cannot change A’s lesson.
+- **Line 75:** B cannot delete A’s lesson.
+
+### Lines 76–100
+
+```text
+76 |     assert.equal((await b('/api/lessons', { method: 'POST', body: { title: 'Steal', discipline: 'MMA', media: [{ id: upload.id }] } })).status, 400);
+77 |     assert.equal((await a(`/api/media/${upload.id}/file`)).status, 200);
+78 |     assert.equal((await a('/api/lessons', { method: 'POST', origin: 'http://evil.example', body: { title: 'x', discipline: 'MMA' } })).status, 403);
+79 |     const store = prismaClaimStore(client);
+80 |     const dry = await claimLessons({ store, email: 'b@example.com', allUnclaimed: true, backupRoot });
+81 |     assert.equal(dry.dryRun, true);
+82 |     assert.deepEqual((await b('/api/lessons')).json, []);
+83 |     await assert.rejects(claimLessons({ store, email: 'b@example.com', lessonIds: [lesson.id], confirm: true, backupRoot }), /not found among unclaimed/);
+84 |     const claimed = await claimLessons({ store, email: 'b@example.com', allUnclaimed: true, confirm: true, backupRoot });
+85 |     assert.deepEqual({ claimed: claimed.claimed, media: claimed.media }, { claimed: 1, media: 1 });
+86 |     assert.equal((await b('/api/lessons')).json[0].title, 'Lesson from before accounts');
+87 |     assert.equal((await b('/api/lesson-media')).json.length, 1);
+88 |     assert.equal((await a('/api/lessons')).json.length, 1);
+89 |     const reset = clientFor('203.0.113.34');
+90 |     assert.equal((await reset('/api/auth/request-password-reset', { method: 'POST', body: { email: 'a@example.com', redirectTo: '/reset-password' } })).status, 200);
+91 |     const link = new URL(mailer.outbox.find(mail => mail.kind === 'reset').url);
+92 |     const token = new URL((await reset(link.pathname + link.search, { redirect: 'manual' })).headers.get('location'), origin).searchParams.get('token');
+93 |     assert.equal((await reset('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token } })).status, 200);
+94 |     assert.equal((await a('/api/lessons')).status, 401, 'reset must end old sessions');
+95 |     assert.equal((await clientFor('203.0.113.35')('/api/auth/sign-in/email', { method: 'POST', body: { email: 'a@example.com', password: 'blue-lantern-orchard-55' } })).status, 200);
+96 |     assert.equal((await b('/api/auth/sign-out', { method: 'POST', body: {} })).status, 200);
+97 |     assert.equal((await b('/api/lessons')).status, 401);
+98 |     assert.ok((await admin.query(`SELECT count(*)::int AS n FROM "${schema}".auth_rate_limits`)).rows[0].n > 0, 'rate limits are stored in the database');
+99 |     t.diagnostic('Real Better Auth on PostgreSQL: isolation, claiming, reset and logout verified in a disposable schema.');
+100 |   } finally {
+```
+
+- **Line 76:** B cannot attach A’s picture to a new lesson.
+- **Line 77:** A can still download it.
+- **Line 78:** A post from an evil origin is blocked.
+- **Line 79:** Creates the PostgreSQL claim store.
+- **Line 80:** A dry run for coach B.
+- **Line 81:** It changed nothing.
+- **Line 82:** B still sees nothing.
+- **Line 83:** Claiming A’s lesson is refused because it is already owned.
+- **Line 84:** Claims every unowned lesson for B.
+- **Line 85:** One lesson and one attachment were handed over.
+- **Line 86:** B now sees the old lesson.
+- **Line 87:** B sees its attachment.
+- **Line 88:** A still sees only A’s lesson.
+- **Line 89:** A third browser asks for a reset.
+- **Line 90:** The request is accepted.
+- **Line 91:** Reads the reset link from the collector.
+- **Line 92:** Opens it and reads the one-time token from the redirect.
+- **Line 93:** Sets a new password with the token.
+- **Line 94:** A’s old session is dead after the reset.
+- **Line 95:** A can sign in with the new password.
+- **Line 96:** B logs out.
+- **Line 97:** B’s session no longer works.
+- **Line 98:** Rate-limit counters were stored in the PostgreSQL table.
+- **Line 99:** Records a summary in the test report.
+- **Line 100:** Cleanup follows whatever happened.
+
+### Lines 101–108
+
+```text
+101 |     if (server?.listening) await new Promise(resolve => server.close(resolve));
+102 |     await client?.$disconnect();
+103 |     await admin.query('ROLLBACK').catch(() => {});
+104 |     if (created) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+105 |     await admin.end();
+106 |     rmSync(backupRoot, { recursive: true, force: true });
+107 |   }
+108 | });
+```
+
+- **Line 101:** Closes the server.
+- **Line 102:** Disconnects Prisma.
+- **Line 103:** Rolls back any open transaction.
+- **Line 104:** Drops the disposable schema and everything in it.
+- **Line 105:** Ends the administration connection.
+- **Line 106:** Removes the temporary backup folder.
+- **Line 107:** Closes the preceding block (function, object, or statement body).
+- **Line 108:** Closes the callback body and the function call that received it.
+
+## server/test-auth.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\test-auth.js`
+
+Test-only helpers. The real application always uses server/auth.js (Better Auth); these fakes let the older lesson, media and AI tests run as a signed-in coach without a login round trip, and a small cookie-aware client stands in for a browser in the authentication tests.
+
+### Lines 1–25
+
+```text
+1 | // Test-only helpers. The real application always uses server/auth.js (Better Auth); these fakes let the older lesson and media tests run as a signed-in coach without a login round trip.
+2 | export const TEST_ORIGIN = 'http://coachlab.test';
+3 | export const testUsers = {
+4 |   'user-a': { id: 'user-a', email: 'a@example.com', name: 'Coach A' },
+5 |   'user-b': { id: 'user-b', email: 'b@example.com', name: 'Coach B' },
+6 | };
+7 |
+8 | export const testAuth = {
+9 |   google: false,
+10 |   mailMode: 'memory',
+11 |   async getUser(request) {
+12 |     const requested = request.headers['x-test-user'];
+13 |     if (requested === 'anonymous') return null;
+14 |     return testUsers[requested || 'user-a'] ?? null;
+15 |   },
+16 | };
+17 |
+18 | export const testOptions = { auth: testAuth, allowedOrigins: [TEST_ORIGIN] };
+19 |
+20 | export function authedFetch(url, options = {}) {
+21 |   return globalThis.fetch(url, { ...options, headers: { origin: TEST_ORIGIN, ...options.headers } });
+22 | }
+23 |
+24 | // A tiny browser stand-in: it remembers cookies, sends the Origin header and returns parsed JSON.
+25 | export function cookieClient(base, origin = TEST_ORIGIN) {
+```
+
+- **Line 1:** Comment: these helpers are for tests only.
+- **Line 2:** The fake website origin used in tests.
+- **Line 3:** Two fake coaches.
+- **Line 4:** Coach A.
+- **Line 5:** Coach B.
+- **Line 6:** Closes the preceding block and ends the statement.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** A fake login adapter with the same shape as the real one.
+- **Line 9:** No Google in tests.
+- **Line 10:** Mail mode is memory.
+- **Line 11:** getUser decides who is signed in from a header the tests set.
+- **Line 12:** Reads the x-test-user header.
+- **Line 13:** “anonymous” means nobody is signed in.
+- **Line 14:** Otherwise returns the named coach, defaulting to coach A, or null for an unknown name.
+- **Line 15:** Closes the object or block and continues the surrounding list.
+- **Line 16:** Closes the preceding block and ends the statement.
+- **Line 17:** Blank line separates related sections for readability; it performs no operation.
+- **Line 18:** The options older tests pass to createApp: the fake adapter and the allowed origin.
+- **Line 19:** Blank line separates related sections for readability; it performs no operation.
+- **Line 20:** A fetch that adds the Origin header, because the app rejects changes without it.
+- **Line 21:** Calls the real fetch with the Origin header merged in.
+- **Line 22:** Closes the preceding block (function, object, or statement body).
+- **Line 23:** Blank line separates related sections for readability; it performs no operation.
+- **Line 24:** Comment: describes the browser stand-in.
+- **Line 25:** Exports cookieClient, a function that makes browser stand-ins for a server address.
+
+### Lines 26–43
+
+```text
+26 |   return (ip = '203.0.113.10') => {
+27 |     const jar = new Map();
+28 |     const api = async (path, { method = 'GET', body, headers = {}, origin: sent = origin, raw, redirect } = {}) => {
+29 |       const cookie = [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
+30 |       const response = await globalThis.fetch(base + path, { method, redirect, headers: { 'x-forwarded-for': ip, ...(sent ? { origin: sent } : {}), ...(cookie ? { cookie } : {}), ...(body !== undefined && !raw ? { 'content-type': 'application/json' } : {}), ...headers }, body: raw ? body : body === undefined ? undefined : JSON.stringify(body) });
+31 |       for (const line of response.headers.getSetCookie()) {
+32 |         const [pair, ...attributes] = line.split(';');
+33 |         const [name, ...value] = pair.split('=');
+34 |         if (attributes.some(attribute => /^\s*max-age=0/i.test(attribute)) || value.join('=') === '') jar.delete(name); else jar.set(name, value.join('='));
+35 |       }
+36 |       const text = await response.text();
+37 |       let json = null; try { json = JSON.parse(text); } catch { /* not JSON */ }
+38 |       return { status: response.status, json, text, headers: response.headers, setCookie: response.headers.getSetCookie() };
+39 |     };
+40 |     api.jar = jar;
+41 |     return api;
+42 |   };
+43 | }
+```
+
+- **Line 26:** Each stand-in has its own client address (sent as x-forwarded-for) so rate limits can be tested.
+- **Line 27:** The cookie jar.
+- **Line 28:** The request function: method, JSON body, extra headers, the Origin to send (null sends none), raw bodies and redirect handling.
+- **Line 29:** Builds the Cookie header from the jar.
+- **Line 30:** Sends the request with the Origin, cookie and JSON headers.
+- **Line 31:** Looks at every Set-Cookie answer.
+- **Line 32:** Splits the cookie into its name/value pair and attributes.
+- **Line 33:** Splits the pair into name and value.
+- **Line 34:** Deletes the cookie from the jar when the server expires it (Max-Age=0 or empty), otherwise stores it.
+- **Line 35:** Closes the preceding block (function, object, or statement body).
+- **Line 36:** Reads the answer text.
+- **Line 37:** Tries to parse it as JSON.
+- **Line 38:** Returns status, parsed JSON, text, headers and Set-Cookie lines.
+- **Line 39:** Closes the preceding block and ends the statement.
+- **Line 40:** Exposes the cookie jar so a test can inspect or copy it.
+- **Line 41:** Returns the request function.
+- **Line 42:** Closes the preceding block and ends the statement.
+- **Line 43:** Closes the preceding block (function, object, or statement body).

@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { png } from './media-fixtures.js';
+import { testOptions, authedFetch as fetch } from './test-auth.js';
 import pg from 'pg';
 import { createApp } from './app.js';
 import { prismaLessons } from './lesson-store.js';
@@ -32,7 +33,7 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
   };
   const start = async () => {
     client = createDevelopmentClient(env, schema);
-    server = createApp(prismaLessons(client), { provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
+    server = createApp(prismaLessons(client), { ...testOptions, provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
     await once(server, 'listening');
     url = `http://127.0.0.1:${server.address().port}`;
   };
@@ -52,6 +53,7 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
       const sql = readFileSync(new URL(`../prisma/migrations/${name}/migration.sql`, import.meta.url), 'utf8');
       await admin.query(sql.replace(/^BEGIN;\s*/, '').replace(/COMMIT;\s*$/, ''));
     }
+    await admin.query("INSERT INTO auth_users (id, name, email) VALUES ('user-a', 'Coach A', 'a@example.com'), ('user-b', 'Coach B', 'b@example.com')");
     await admin.query('COMMIT');
     await start();
     assert.deepEqual(await get(), []);
@@ -108,7 +110,7 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
     assert.equal((await get()).length, 6);
     assert.ok(!(await get()).some(row => row.id === saved.id));
     await stop();
-    server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }).listen(0, '127.0.0.1');
+    server = createApp({ list: async () => { throw new Error('private database detail'); }, create: async () => { throw new Error('private database detail'); } }, testOptions).listen(0, '127.0.0.1');
     await once(server, 'listening');
     url = `http://127.0.0.1:${server.address().port}`;
     for (const response of [await fetch(url + '/api/lessons'), await post('/api/lessons', { title: 'Failure probe', discipline: 'Boxing' })]) {

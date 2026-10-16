@@ -4199,3 +4199,90 @@ Report the root cause, fixes, and test results.
 ### Response and outcome
 
 Traced the attachment from the form through the API, the Prisma store and PostgreSQL; the server path was correct. Reproduced one cause in the browser: media fields sat inside the lesson form, so Enter in the caption field saved the lesson without the unadded attachment and returned to the list. The exact button-click sequence (and the jump to the top) could not be reproduced on desktop or at 375 px, on copies of the real lessons, so this is reported as the reproduced cause plus several related loss paths rather than a confirmed single cause. Fixes: detached media fields, a save guard for unfinished media panels, Edit reads fresh attachments and refuses to open if they cannot be loaded, functional (newest-list) updates, a sticky save confirmation that re-reads the stored count, scroll to the saved card without reordering the list, and backend error logging. Tests: npm test 53/53, test:prisma 5/5, build, audit 0, opt-in PostgreSQL test pass, walkthrough 54 files / 2,971 lines; browser tests on a disposable schema holding copies of the real lessons, and a no-save check on the real app. Genuine mistakes: shell quoting turned `\b` into a backspace character in a new test (caught by the failing test and repaired); a shell-patched assertion helper earlier did the same kind of damage and was likewise caught. No real lesson or attachment was changed. Committed locally; nothing pushed. Details: MEDIA_SAVE_FIX_REPORT.md.
+
+## 2026-10-16 — Secure login and user accounts
+
+### Exact user prompt
+
+```text
+COACHLAB — SECURE LOGIN AND USER ACCOUNTS
+
+GOAL:
+Add a secure login system to CoachLab using the existing React, Express, Prisma, and Neon PostgreSQL architecture.
+
+FEATURES:
+1. Create account with email and password.
+2. Log in and log out.
+3. Optional Google sign-in if it can be integrated securely.
+4. Password reset.
+5. Keep users signed in securely.
+6. Give each coach a private dashboard.
+7. Each coach can access only their own lessons and media.
+8. Protect API routes from unauthorized access.
+9. Provide clear login and registration error messages.
+10. Make login and registration mobile-friendly.
+
+SECURITY:
+- Use a well-maintained authentication library or provider.
+- Hash passwords securely; never store plaintext passwords.
+- Use secure, HttpOnly session cookies.
+- Protect against session hijacking, CSRF, brute-force login attempts, and account enumeration.
+- Validate user input.
+- Never expose credentials or secrets.
+- Never commit private .env files.
+- Keep Neon production untouched.
+
+DATABASE:
+- Add the necessary Prisma user, session, and authentication models.
+- Associate lessons and media with their owners.
+- Preserve all existing lessons.
+- Do not automatically assign existing lessons to a new account.
+- Create and verify database migrations.
+- Provide a safe process for claiming existing lessons after ownership verification.
+- Back up and verify data before migrations.
+
+WORKFLOW:
+1. Read AGENTS.md and inspect the existing application.
+2. Select a compatible authentication approach.
+3. Review migration risks before changing data.
+4. Implement registration, login, logout, and protected routes.
+5. Add per-user access controls.
+6. Test authentication and data isolation.
+7. Verify existing lesson creation, editing, deletion, AI generation, and media still work.
+8. Update PROMPT_LOG.md and CODE_WALKTHROUGH.md.
+9. Review diffs and security checks.
+10. Commit verified changes locally.
+11. Do not push without approval.
+
+TEST:
+- Register and log in.
+- Log out and attempt to access protected data.
+- Refresh while signed in.
+- Test invalid passwords.
+- Test password reset.
+- Confirm User A cannot access User B's lessons or media.
+- Verify existing lessons remain intact.
+- Run all regression tests and npm audit.
+
+IMPORTANT:
+Do not rebuild CoachLab.
+Do not introduce paid services without approval.
+Do not deploy publicly.
+If authentication design or migration safety is uncertain, stop and explain the blocker before modifying the database.
+
+FINAL REPORT:
+- Authentication features completed
+- Database changes
+- Security verification
+- Tests passed and failed
+- Existing lesson preservation
+- Remaining issues
+- Git commit hash
+
+GOAL:
+Deliver a secure, tested login system that supports multiple coaches without exposing anyone's private lessons.
+```
+
+### Response and outcome
+
+Chose Better Auth 1.7.10 (MIT, maintained, 0 audit findings, works with Express 5, Prisma 7 and SQLite). Added registration, sign in and out, 7-day server-side sessions in HttpOnly SameSite=Lax cookies, single-use one-hour reset links (printed in the backend window until an email provider exists), optional Google sign-in (not exercised live), password rules, per-address rate limits stored in the database and a per-account lockout, enumeration-safe sign-in, sign-up and reset, an Origin check on every changing request, an owner on every lesson, upload and attachment with owner-filtered queries (foreign ids answer 404), protected routes, mobile-friendly login screens, and the `npm run claim-lessons` process for lessons from before accounts (dry run by default, verified backup, unowned lessons only). Database: additive migration verified on a disposable schema, then applied to Development after a verified backup (5 lessons and 6 attachments, identical fingerprint before and after, no owned rows). Tests: npm test 68/68, test:prisma 5/5, prisma validate, build, npm audit 0, opt-in PostgreSQL tests (existing API and new Better Auth + Prisma isolation, claim, reset and logout) pass, walkthrough 68 files / 4,167 lines; browser tests on a disposable schema. Genuine mistakes: a shell quoting slip repeatedly turned backslashes into other characters in generated patch text (caught by syntax errors and a failing test); a first draft of the claim CLI explanations numbered one line wrongly (found by a side-by-side review); the browser first appeared stuck on "Loading" because the first session lookup was slow (cold start), not a bug; a signed-in coach opening an invalid reset link saw the dashboard instead of the message (fixed in Gate). The user's previous real database grew from 2 to 5 lessons by their own use; all 5 were backed up and preserved. Committed locally; nothing pushed. Details: AUTH_SECURITY_REPORT.md.

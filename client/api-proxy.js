@@ -6,7 +6,7 @@ export function apiProxy(port) {
     name: 'coachlab-api-proxy',
     configureServer(server) {
       server.middlewares.use('/api', (request, response) => {
-        const upstream = http.request({ host: '127.0.0.1', port, method: request.method, path: request.originalUrl, headers: { ...request.headers, host: `127.0.0.1:${port}` } }, answer => {
+        const upstream = http.request({ host: '127.0.0.1', port, method: request.method, path: request.originalUrl, headers: { ...request.headers, host: `127.0.0.1:${port}`, 'x-forwarded-for': request.socket.remoteAddress } }, answer => {
           response.writeHead(answer.statusCode, answer.headers);
           answer.pipe(response);
         });

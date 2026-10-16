@@ -7,6 +7,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { createApp } from './app.js';
 import { migrate } from './migrations.js';
+import { testOptions, authedFetch as fetch } from './test-auth.js';
 import { MediaLinkError } from './media-verify.js';
 import { png, webm } from './media-fixtures.js';
 
@@ -29,7 +30,7 @@ async function fixture(t, extra = {}) {
   state.start = async () => {
     state.database = new Database(state.filename);
     migrate(state.database);
-    state.server = createApp(state.database, { verifyLink, ...extra }).listen(0, '127.0.0.1');
+    state.server = createApp(state.database, { verifyLink, ...testOptions, ...extra }).listen(0, '127.0.0.1');
     await once(state.server, 'listening');
     state.url = `http://127.0.0.1:${state.server.address().port}`;
   };
@@ -51,6 +52,7 @@ test('uploads are checked by content, stored in the database, served with range 
   assert.equal(file.status, 200);
   assert.equal(file.headers.get('content-type'), 'image/png');
   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(file.headers.get('cache-control'), 'private, no-cache');
   assert.match(file.headers.get('content-security-policy'), /sandbox/);
   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });

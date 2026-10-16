@@ -38,7 +38,7 @@ test('versioned migration, constraints, and persistence across processes', () =>
     const migrationCode = "import './server/migrate.js';";
     assert.equal(run(migrationCode, filename).status, 0);
     database = new Database(filename);
-    assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+    assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id']);
     const title = "Coach's jab; DROP TABLE lessons; --";
     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
     insert.run(title, 'Boxing', 45);
@@ -56,7 +56,7 @@ test('versioned migration, constraints, and persistence across processes', () =>
     assert.equal(reader.status, 0);
     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
     database = new Database(filename);
-    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
+    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   } finally {
     if (database?.open) database.close();

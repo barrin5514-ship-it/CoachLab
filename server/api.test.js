@@ -7,6 +7,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { createApp } from './app.js';
 import { migrate } from './migrations.js';
+import { testOptions, authedFetch as fetch } from './test-auth.js';
 
 async function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-api-'));
@@ -24,7 +25,7 @@ async function fixture(t) {
   state.start = async () => {
     state.database = new Database(state.filename);
     migrate(state.database);
-    state.server = createApp(state.database).listen(0, '127.0.0.1');
+    state.server = createApp(state.database, testOptions).listen(0, '127.0.0.1');
     await once(state.server, 'listening');
     state.url = `http://127.0.0.1:${state.server.address().port}`;
   };
@@ -55,7 +56,9 @@ test('POST saves actual SQLite data, GET orders it, and reopening preserves it',
   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
   assert.deepEqual(saved, { ...input, title: input.title.trim(), id: saved.id, created_at: saved.created_at });
-  assert.deepEqual(state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id), saved);
+  const { owner_id: owner, ...stored } = state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id);
+  assert.equal(owner, 'user-a');
+  assert.deepEqual(stored, saved);
   const secondResponse = await post(state, { title: 'Second lesson', discipline: 'MMA' });
   assert.equal(secondResponse.status, 201);
   const second = await secondResponse.json();
@@ -112,7 +115,7 @@ test('database failures return generic 500 errors for both routes', async t => {
 
 test('fresh database is migrated before app creation without changing the schema', async t => {
   const state = await fixture(t);
-  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }]);
+  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   const unknown = await fetch(`${state.url}/missing`);
   assert.equal(unknown.status, 404);

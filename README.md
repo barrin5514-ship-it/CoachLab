@@ -239,3 +239,12 @@ Every lesson activity has an **Add Media** button (also in AI draft sections and
 - Development note: `client/api-proxy.js` forwards `/api` from the Vite dev server because Vite 8's built-in proxy stalls on responses over about 1 MB.
 - Results, limits and the one unverified item (YouTube playback in the test browser) are in MEDIA_UPGRADE_VERIFICATION.md.
 - **Saving attachments safely (2026-10-16):** media fields cannot submit the lesson form, a save is refused while a link, upload or edit panel is still open, Edit always loads the newest attachments first, and a sticky bar confirms how many attachments were stored after saving. Details: MEDIA_SAVE_FIX_REPORT.md.
+
+## Accounts and login (2026-10-16)
+
+CoachLab now requires an account. Each coach sees only their own lessons and media.
+
+- Uses the Better Auth library: email and password (salted scrypt hashes), HttpOnly session cookies stored server-side, password reset links, optional Google sign-in (set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`).
+- Required setting: `BETTER_AUTH_SECRET` (96 random characters) in the ignored `.env`; the server refuses to start without it. See `.env.example` for all settings.
+- Open the app at `COACHLAB_PUBLIC_URL` (default http://127.0.0.1:5174). Until an email provider is configured, password reset links are printed in the backend window.
+- Lessons from before accounts have no owner and are hidden. Hand them to a registered coach with `npm run claim-lessons -- --email you@example.com --all-unclaimed` (dry run), then add `--confirm`. See AUTH_SECURITY_REPORT.md for the full procedure, security measures, test results and limits.
