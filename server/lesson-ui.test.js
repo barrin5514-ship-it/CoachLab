@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
+import { readFileSync } from 'node:fs';
 import { groupMedia, headingOf } from '../client/src/media.js';
 
 test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
@@ -30,6 +31,17 @@ test('lesson cards place each attachment under the first activity with its headi
   const { byBlock, rest } = groupMedia(media, blocks);
   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
   assert.deepEqual(rest.map(item => item.id), [3, 4]);
+});
+
+test('media fields are detached from the lesson form so Enter can never save the lesson without a pending attachment', () => {
+  const source = readFileSync(new URL('../client/src/MediaEditor.jsx', import.meta.url), 'utf8');
+  const fields = source.match(/<(input|select)\b[^>]*>/g) || [];
+  assert.ok(fields.length >= 5);
+  for (const field of fields) assert.ok(field.includes('form={detached}'), field.slice(0, 60));
+  assert.match(source, /const detached = 'coachlab-media-fields'/);
+  const forms = readFileSync(new URL('../client/src/LessonForm.jsx', import.meta.url), 'utf8') + readFileSync(new URL('../client/src/AiLessonForm.jsx', import.meta.url), 'utf8');
+  assert.ok(!forms.includes('id="coachlab-media-fields"'));
+  assert.ok(forms.includes('registry.count()'));
 });
 
 test('minimal AI requests work for every discipline; optional details remain bounded', () => {

@@ -218,3 +218,7 @@ Claude resumed from commit 7a43695 without rebuilding anything. Browser access w
 ## Update 2026-10-16 (instructional media upgrade)
 
 Added the media upgrade on top of the lesson manager: Add Media (upload or checked link) per activity, preview/edit/remove, automatic verified media for AI drafts, persistence in the new additive `lesson_media` table (migration applied to Development only), mobile layout and a Vite proxy replacement. Evidence, limits and a disclosure about when the migration was applied: MEDIA_UPGRADE_VERIFICATION.md. 52/52 tests pass. Not pushed to GitHub.
+
+## Update 2026-10-16 (media attachment saving fix)
+
+Fixed ways an attachment could be lost on save (Enter in a media field submitted the lesson form; half-added media dropped; stale attachment list on Edit; non-functional list updates), added a sticky save confirmation that re-reads the stored count, and backend error logging. See MEDIA_SAVE_FIX_REPORT.md. 53/53 tests pass. Not pushed.

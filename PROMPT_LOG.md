@@ -4150,3 +4150,52 @@ Report completed features and any remaining issues.
 ### Response and outcome
 
 Implemented Add Media (upload and checked links) with preview, edit and remove; an additive `lesson_media` table for SQLite and PostgreSQL; server-side file-type and link verification (https only, private addresses refused); automatic verified media for AI drafts from the reviewed catalog, Wikimedia Commons and an optional YouTube key; lesson POST/PUT accept a `media` list while GET /api/lessons keeps its nine fields; mobile layout; and a replacement dev proxy. Tests: npm test 52/52, test:prisma 5/5, build, audit 0, opt-in PostgreSQL API test passed, walkthrough 54 files / 2,870 lines. Browser tests ran on a disposable PostgreSQL schema; the main app was only viewed. Found and fixed: Vite's proxy stalling above ~1 MB, jab media wrongly matched to a roundhouse-kick section (found with the live AI), live-applied attachment edits closing their panel, Enter submitting the lesson form from media fields, and one assertion that could never fail. Genuine mistakes: a regex bug in my ignored test helper applied the new media migration to the Development `public` schema once instead of the test schema (additive table only; recorded in `_prisma_migrations`; disclosed in MEDIA_UPGRADE_VERIFICATION.md); several shell-quoting slips that rewrote strings and were caught by syntax errors or failing tests. YouTube playback could not be demonstrated in the test browser. Committed locally; nothing pushed. Details: MEDIA_UPGRADE_VERIFICATION.md.
+
+## 2026-10-16 — Fix media attachment saving
+
+### Exact user prompt
+
+```text
+COACHLAB — FIX MEDIA ATTACHMENT SAVING
+
+Continue working in the existing CoachLab project.
+
+USER-REPORTED BUG:
+1. Open an existing lesson and click Edit.
+2. Click Add Media inside an activity.
+3. Paste a YouTube URL.
+4. Click Check Link.
+5. The video preview appears correctly.
+6. Click Add This to Activity.
+7. The interface jumps to the top of the page.
+8. Click Save Changes.
+9. CoachLab returns to the lesson list.
+10. Reopen the lesson: the video attachment is missing.
+
+TASKS:
+- Reproduce the issue in the browser.
+- Trace the media attachment from the frontend
+  through the API, Prisma, and PostgreSQL.
+- Identify and fix the actual root cause.
+- Ensure attachments persist after saving,
+  refreshing, reopening, and restarting.
+- Prevent unnecessary jumps to the top.
+- Display a clear save-success confirmation.
+- Preserve all existing lessons and media.
+
+VERIFICATION:
+- Test YouTube attachments on existing lessons.
+- Test uploading images and videos.
+- Test editing and deleting attachments.
+- Test desktop and mobile layouts.
+- Run automated and regression tests.
+- Do not modify production data.
+- Commit verified changes locally.
+- Do not push without permission.
+
+Report the root cause, fixes, and test results.
+```
+
+### Response and outcome
+
+Traced the attachment from the form through the API, the Prisma store and PostgreSQL; the server path was correct. Reproduced one cause in the browser: media fields sat inside the lesson form, so Enter in the caption field saved the lesson without the unadded attachment and returned to the list. The exact button-click sequence (and the jump to the top) could not be reproduced on desktop or at 375 px, on copies of the real lessons, so this is reported as the reproduced cause plus several related loss paths rather than a confirmed single cause. Fixes: detached media fields, a save guard for unfinished media panels, Edit reads fresh attachments and refuses to open if they cannot be loaded, functional (newest-list) updates, a sticky save confirmation that re-reads the stored count, scroll to the saved card without reordering the list, and backend error logging. Tests: npm test 53/53, test:prisma 5/5, build, audit 0, opt-in PostgreSQL test pass, walkthrough 54 files / 2,971 lines; browser tests on a disposable schema holding copies of the real lessons, and a no-save check on the real app. Genuine mistakes: shell quoting turned `\b` into a backspace character in a new test (caught by the failing test and repaired); a shell-patched assertion helper earlier did the same kind of damage and was likewise caught. No real lesson or attachment was changed. Committed locally; nothing pushed. Details: MEDIA_SAVE_FIX_REPORT.md.

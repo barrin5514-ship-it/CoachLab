@@ -71,3 +71,11 @@ export async function checkLink(url) {
 }
 
 export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
+
+export async function fetchMedia(signal) {
+  const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
+  if (!response.ok) throw new Error('Unable to load media.');
+  const data = await response.json();
+  if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+  return data;
+}

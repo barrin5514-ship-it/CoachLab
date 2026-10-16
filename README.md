@@ -238,3 +238,4 @@ Every lesson activity has an **Add Media** button (also in AI draft sections and
 - The API additions are `GET /api/lesson-media`, `POST /api/media/upload`, `GET|DELETE /api/media/:id`, `POST /api/media/verify` and `POST /api/media/suggest`; lesson POST/PUT accept an optional `media` list. `GET /api/lessons` still returns exactly the original nine fields.
 - Development note: `client/api-proxy.js` forwards `/api` from the Vite dev server because Vite 8's built-in proxy stalls on responses over about 1 MB.
 - Results, limits and the one unverified item (YouTube playback in the test browser) are in MEDIA_UPGRADE_VERIFICATION.md.
+- **Saving attachments safely (2026-10-16):** media fields cannot submit the lesson form, a save is refused while a link, upload or edit panel is still open, Edit always loads the newest attachments first, and a sticky bar confirms how many attachments were stored after saving. Details: MEDIA_SAVE_FIX_REPORT.md.

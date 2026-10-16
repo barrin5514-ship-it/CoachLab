@@ -32,7 +32,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media 
     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
     finally { setBusy(false); }
   }
-  return <article className="lesson-card">
+  return <article className="lesson-card" id={`lesson-${lesson.id}`}>
     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
     <h4>Training goal</h4><CoachingText text={lesson.goal} />

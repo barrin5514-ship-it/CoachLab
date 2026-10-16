@@ -25,3 +25,5 @@ Emergency handoff (2026-10-15): the user stopped new development in this Codex s
 Resumed 2026-10-16 in Claude under the user's "Complete Unfinished Development" request: finish and verify the lesson manager, preserve data and backups, never touch production, do not push to GitHub unless explicitly instructed. See LESSON_MANAGER_VERIFICATION.md.
 
 Media upgrade 2026-10-16 (user request "Instructional Media Upgrade"): additive lesson_media table, uploads, verified links and AI media discovery were authorized for implementation and local commits only. Do not push without permission; do not modify Production. See MEDIA_UPGRADE_VERIFICATION.md.
+
+Media saving fix 2026-10-16 (user request "Fix Media Attachment Saving"): local fixes and commits only; do not push without permission; do not modify Production or real lessons. See MEDIA_SAVE_FIX_REPORT.md.

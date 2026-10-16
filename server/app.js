@@ -26,6 +26,7 @@ function sendFile(request, response, file) {
 
 export function createApp(database, options = {}) {
   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
+  const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
   const app = express();
   app.use(express.json({ limit: '32kb' }));
   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
@@ -158,6 +159,7 @@ export function createApp(database, options = {}) {
   });
   app.use((error, request, response, next) => {
     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+    if (status === 500) logError(error);
     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
     response.status(status).json({ error: messages[status] });
   });

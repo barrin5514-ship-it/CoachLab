@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
 import { activityMinutes } from './activities.js';
+import { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
 
 const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
@@ -13,6 +14,7 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(false);
+  const [registry] = useState(pendingRegistry);
 
   function change(event) {
     const { name, value } = event.target;
@@ -24,6 +26,11 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
     if (submitting.current) return;
     setError('');
     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+    if (registry.count()) {
+      setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+      document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+      return;
+    }
     submitting.current = true;
     setSaving(true);
     try {
@@ -33,7 +40,7 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
       const data = await response.json();
       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
-      onSaved(data);
+      onSaved(data, body.media?.length);
     } catch (failure) {
       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
     } finally {
@@ -43,6 +50,7 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
   }
 
   return (
+    <PendingMedia.Provider value={registry}>
     <section className="form-panel" aria-labelledby="new-heading">
       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
       <p>Title and discipline are required. Add the details that help you coach.</p>
@@ -64,5 +72,6 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
         {error && <p className="error" role="alert">{error}</p>}
       </form>
     </section>
+    </PendingMedia.Provider>
   );
 }

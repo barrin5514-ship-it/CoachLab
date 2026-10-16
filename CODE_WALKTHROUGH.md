@@ -86,7 +86,7 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Browser application state and dashboard. It loads lessons from Express and coordinates create, AI draft, edit and delete callbacks.
+Browser application state and dashboard. It loads lessons and their attachments from Express, always re-reads the newest attachments before a lesson is opened for editing and after it is saved, confirms how many attachments were stored in a sticky message bar, and coordinates create, AI draft, edit and delete callbacks.
 
 ### Lines 1–25
 
@@ -95,194 +95,258 @@ Browser application state and dashboard. It loads lessons from Express and coord
 2 | import LessonForm from './LessonForm.jsx';
 3 | import LessonCard from './LessonCard.jsx';
 4 | import AiLessonForm from './AiLessonForm.jsx';
-5 |
-6 | export default function App() {
-7 |   const [lessons, setLessons] = useState([]);
-8 |   const [loading, setLoading] = useState(true);
-9 |   const [error, setError] = useState('');
-10 |   const [notice, setNotice] = useState('');
-11 |   const [formOpen, setFormOpen] = useState(false);
-12 |   const [reload, setReload] = useState(0);
-13 |   const [editing, setEditing] = useState(null);
-14 |   const [media, setMedia] = useState([]);
-15 |   const [mediaError, setMediaError] = useState('');
-16 |   const [mediaReload, setMediaReload] = useState(0);
-17 |
-18 |   useEffect(() => {
-19 |     const controller = new AbortController();
-20 |     async function loadLessons() {
-21 |       setLoading(true);
-22 |       setError('');
-23 |       try {
-24 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-25 |         if (!response.ok) throw new Error('Unable to load lessons.');
+5 | import { fetchMedia } from './media.js';
+6 |
+7 | export default function App() {
+8 |   const [lessons, setLessons] = useState([]);
+9 |   const [loading, setLoading] = useState(true);
+10 |   const [error, setError] = useState('');
+11 |   const [notice, setNotice] = useState(null);
+12 |   const [opening, setOpening] = useState(false);
+13 |   const [formOpen, setFormOpen] = useState(false);
+14 |   const [reload, setReload] = useState(0);
+15 |   const [editing, setEditing] = useState(null);
+16 |   const [media, setMedia] = useState([]);
+17 |   const [mediaError, setMediaError] = useState('');
+18 |   const [mediaReload, setMediaReload] = useState(0);
+19 |
+20 |   useEffect(() => {
+21 |     const controller = new AbortController();
+22 |     async function loadLessons() {
+23 |       setLoading(true);
+24 |       setError('');
+25 |       try {
 ```
 
 - **Line 1:** Imports React for JSX plus effect and state hooks from the installed React package.
 - **Line 2:** Imports the neighboring form component as LessonForm.
 - **Line 3:** Imports the neighboring card component as LessonCard.
 - **Line 4:** Imports the new browser component for requesting, reviewing and approving an AI draft.
-- **Line 5:** Blank line separates related sections; it performs no operation.
-- **Line 6:** Exports the App component as this module's default; braces begin its function body.
-- **Line 7:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 8:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 9:** Stores the list error message; empty text means no error.
-- **Line 10:** Stores the server-confirmed success notice.
-- **Line 11:** Stores whether the form is mounted; false initially hides it.
-- **Line 12:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 13:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 14:** State for every saved attachment returned by the server.
-- **Line 15:** State for an error message when attachments could not be loaded.
-- **Line 16:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 17:** Blank line separates related sections; it performs no operation.
-- **Line 18:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 19:** Creates a request cancellation controller scoped to this effect run.
-- **Line 20:** Declares an async helper, allowing await inside its braces.
-- **Line 21:** Marks the list request as running.
-- **Line 22:** Clears the previous list error before retrying.
-- **Line 23:** Starts a try block for request and JSON errors.
-- **Line 24:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 25:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 5:** Imports the shared function that loads attachments.
+- **Line 6:** Blank line separates related sections; it performs no operation.
+- **Line 7:** Exports the App component as this module's default; braces begin its function body.
+- **Line 8:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 9:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 10:** Stores the list error message; empty text means no error.
+- **Line 11:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 12:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 13:** Stores whether the form is mounted; false initially hides it.
+- **Line 14:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 15:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 16:** State for every saved attachment returned by the server.
+- **Line 17:** State for an error message when attachments could not be loaded.
+- **Line 18:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 19:** Blank line separates related sections; it performs no operation.
+- **Line 20:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 21:** Creates a request cancellation controller scoped to this effect run.
+- **Line 22:** Declares an async helper, allowing await inside its braces.
+- **Line 23:** Marks the list request as running.
+- **Line 24:** Clears the previous list error before retrying.
+- **Line 25:** Starts a try block for request and JSON errors.
 
 ### Lines 26–50
 
 ```text
-26 |         const data = await response.json();
-27 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-28 |         setLessons(data);
-29 |       } catch (failure) {
-30 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-31 |       } finally {
-32 |         if (!controller.signal.aborted) setLoading(false);
-33 |       }
-34 |     }
-35 |     loadLessons();
-36 |     return () => controller.abort();
-37 |   }, [reload]);
-38 |
-39 |   useEffect(() => {
-40 |     const controller = new AbortController();
-41 |     async function loadMedia() {
-42 |       try {
-43 |         const response = await fetch('/api/lesson-media', { signal: controller.signal });
-44 |         if (!response.ok) throw new Error('Unable to load media.');
-45 |         const data = await response.json();
-46 |         if (!Array.isArray(data)) throw new Error('Unexpected media response.');
-47 |         setMedia(data);
-48 |         setMediaError('');
-49 |       } catch (failure) {
-50 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+26 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+27 |         if (!response.ok) throw new Error('Unable to load lessons.');
+28 |         const data = await response.json();
+29 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+30 |         setLessons(data);
+31 |       } catch (failure) {
+32 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+33 |       } finally {
+34 |         if (!controller.signal.aborted) setLoading(false);
+35 |       }
+36 |     }
+37 |     loadLessons();
+38 |     return () => controller.abort();
+39 |   }, [reload]);
+40 |
+41 |   useEffect(() => {
+42 |     const controller = new AbortController();
+43 |     async function loadMedia() {
+44 |       try {
+45 |         const data = await fetchMedia(controller.signal);
+46 |         setMedia(data);
+47 |         setMediaError('');
+48 |       } catch (failure) {
+49 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+50 |       }
 ```
 
-- **Line 26:** Awaits parsing the JSON body into a JavaScript value.
-- **Line 27:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 28:** Stores the backend records, triggering a render.
-- **Line 29:** Closes try and catches failures under the name failure.
-- **Line 30:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 31:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 32:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 33:** Closes finally.
-- **Line 34:** Closes the async helper.
-- **Line 35:** Starts the helper; its own try/catch handles its failures.
-- **Line 36:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 37:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 38:** Blank line separates related sections; it performs no operation.
-- **Line 39:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 40:** Creates a request cancellation controller scoped to this effect run.
-- **Line 41:** Declares the loader for attachments inside the effect.
-- **Line 42:** Starts a try block for request and JSON errors.
-- **Line 43:** Fetches the list of attached media from the server, cancellable through the abort signal.
-- **Line 44:** A non-success status becomes an error handled below.
-- **Line 45:** Awaits parsing the JSON body into a JavaScript value.
-- **Line 46:** Rejects replies that are not a list.
-- **Line 47:** Stores the attachments.
-- **Line 48:** Clears any earlier error.
-- **Line 49:** Closes try and catches failures under the name failure.
-- **Line 50:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 26:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 27:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 28:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 29:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 30:** Stores the backend records, triggering a render.
+- **Line 31:** Closes try and catches failures under the name failure.
+- **Line 32:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 33:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 34:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 35:** Closes finally.
+- **Line 36:** Closes the async helper.
+- **Line 37:** Starts the helper; its own try/catch handles its failures.
+- **Line 38:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 39:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 40:** Blank line separates related sections; it performs no operation.
+- **Line 41:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 42:** Creates a request cancellation controller scoped to this effect run.
+- **Line 43:** Declares the loader for attachments inside the effect.
+- **Line 44:** Starts a try block for request and JSON errors.
+- **Line 45:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 46:** Stores the attachments.
+- **Line 47:** Clears any earlier error.
+- **Line 48:** Closes try and catches failures under the name failure.
+- **Line 49:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 50:** Closes finally.
 
 ### Lines 51–75
 
 ```text
-51 |       }
-52 |     }
-53 |     loadMedia();
-54 |     return () => controller.abort();
-55 |   }, [reload, mediaReload]);
-56 |
-57 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
-58 |
-59 |   function handleSaved(lesson) {
-60 |     setLessons(current => [lesson, ...current.filter(item => item.id !== lesson.id)]);
-61 |     setNotice(`Saved “${lesson.title}”.`);
-62 |     setFormOpen(false);
-63 |     setEditing(null);
-64 |     setMediaReload(value => value + 1);
-65 |   }
-66 |
-67 |   return (
-68 |     <main>
-69 |       <header className="hero">
-70 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
-71 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(''); setFormOpen('ai'); }}>AI lesson draft</button></div>
-72 |       </header>
-73 |       {notice && <p className="success" role="status">{notice}</p>}
-74 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-75 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+51 |     }
+52 |     loadMedia();
+53 |     return () => controller.abort();
+54 |   }, [reload, mediaReload]);
+55 |
+56 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+57 |
+58 |   async function handleEdit(lesson) {
+59 |     setNotice(null);
+60 |     setOpening(true);
+61 |     try {
+62 |       setMedia(await fetchMedia());
+63 |       setMediaError('');
+64 |       setEditing(lesson);
+65 |       setFormOpen('manual');
+66 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+67 |     } catch {
+68 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+69 |     } finally { setOpening(false); }
+70 |   }
+71 |
+72 |   async function handleSaved(lesson, sent) {
+73 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+74 |     setFormOpen(false);
+75 |     setEditing(null);
 ```
 
-- **Line 51:** Closes finally.
-- **Line 52:** Closes the async helper.
-- **Line 53:** Starts the load.
-- **Line 54:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 55:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 56:** Blank line separates related sections; it performs no operation.
-- **Line 57:** Helper that returns only the attachments of one lesson.
-- **Line 58:** Blank line separates related sections; it performs no operation.
-- **Line 59:** Declares the callback receiving the row confirmed by LessonForm's successful POST.
-- **Line 60:** Uses a functional state update: puts the confirmed lesson first, spreads remaining rows, and filters out any existing row with that same ID. Arrow functions take current state and each item.
-- **Line 61:** Sets the success message with a template string that inserts the returned title using dollar-sign/braces interpolation.
-- **Line 62:** Closes the form; unmounting it discards its input state after success.
-- **Line 63:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 64:** After a lesson is saved, asks for the attachments to be loaded again so the new ones appear.
-- **Line 65:** Closes handleSaved.
-- **Line 66:** Blank line separates related sections; it performs no operation.
-- **Line 67:** Begins returning a parenthesized JSX tree.
-- **Line 68:** Opens the semantic main content element.
-- **Line 69:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 70:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
-- **Line 71:** Wraps two buttons in the existing responsive action row. Both disable while loading or either form is open; each clears notices and selects manual or ai form mode. Double negation converts the mode string to a boolean.
-- **Line 72:** Closes the header.
-- **Line 73:** Conditionally renders a success paragraph only when notice is nonempty; && means render the right side when the left side is truthy. role=status announces feedback politely.
-- **Line 74:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
-- **Line 75:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 51:** Closes the async helper.
+- **Line 52:** Starts the load.
+- **Line 53:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 54:** Ends the effect; it re-runs when either reload counter changes.
+- **Line 55:** Blank line separates related sections; it performs no operation.
+- **Line 56:** Helper that returns only the attachments of one lesson.
+- **Line 57:** Blank line separates related sections; it performs no operation.
+- **Line 58:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
+- **Line 59:** Clears any old message.
+- **Line 60:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 61:** Starts the guarded step.
+- **Line 62:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
+- **Line 63:** Clears any earlier media error.
+- **Line 64:** Remembers which lesson is being edited.
+- **Line 65:** Opens the manual form.
+- **Line 66:** Scrolls to the top where the form appears, as before.
+- **Line 67:** If the attachments could not be loaded…
+- **Line 68:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 69:** Always ends the opening state.
+- **Line 70:** Closes handleSaved.
+- **Line 71:** Blank line separates related sections; it performs no operation.
+- **Line 72:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 73:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 74:** Closes the form; unmounting it discards its input state after success.
+- **Line 75:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
 
-### Lines 76–86
+### Lines 76–100
 
 ```text
-76 |       <section aria-labelledby="lessons-heading">
-77 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
-78 |         {loading && <p role="status">Loading lesson plans…</p>}
-79 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-80 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-81 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-82 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen} onEdit={() => { setEditing(lesson); setFormOpen('manual'); setNotice(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setNotice('Lesson deleted.'); }} />)}</div>
-83 |       </section>
-84 |     </main>
-85 |   );
-86 | }
+76 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+77 |     let text = `Saved “${lesson.title}”.`;
+78 |     let tone = 'success';
+79 |     try {
+80 |       const fresh = await fetchMedia();
+81 |       setMedia(fresh);
+82 |       setMediaError('');
+83 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+84 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+85 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+86 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+87 |     } catch {
+88 |       tone = 'warning';
+89 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+90 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+91 |     }
+92 |     setNotice({ tone, text });
+93 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+94 |   }
+95 |
+96 |   return (
+97 |     <main>
+98 |       <header className="hero">
+99 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p></div>
+100 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
 ```
 
-- **Line 76:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 77:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
-- **Line 78:** Conditionally shows loading text as a live status paragraph.
-- **Line 79:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 80:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 81:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 82:** Each lesson card now receives its own attachments; edit and delete callbacks are unchanged.
-- **Line 83:** Closes the lesson section.
-- **Line 84:** Closes main.
-- **Line 85:** Closes the parenthesized return statement with a semicolon.
-- **Line 86:** Closes the App function.
+- **Line 76:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 77:** Starts the final message text.
+- **Line 78:** Starts as a success tone.
+- **Line 79:** Starts the guarded re-check.
+- **Line 80:** Asks the server what attachments are really stored now.
+- **Line 81:** Replaces the page’s attachment list with that fresh copy.
+- **Line 82:** Clears any earlier media error.
+- **Line 83:** Counts the stored attachments of this lesson.
+- **Line 84:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 85:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 86:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 87:** If the re-check itself failed…
+- **Line 88:** …uses a warning tone,
+- **Line 89:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 90:** …and shows the retry banner.
+- **Line 91:** Closes the async helper.
+- **Line 92:** Shows the final message.
+- **Line 93:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 94:** Closes handleSaved.
+- **Line 95:** Blank line separates related sections; it performs no operation.
+- **Line 96:** Begins returning a parenthesized JSX tree.
+- **Line 97:** Opens the semantic main content element.
+- **Line 98:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 99:** Groups the eyebrow paragraph, main heading, and descriptive paragraph in a div; each matching closing tag ends its element.
+- **Line 100:** The New Lesson and AI draft buttons now clear the message with null.
+
+### Lines 101–115
+
+```text
+101 |       </header>
+102 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+103 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+104 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+105 |       <section aria-labelledby="lessons-heading">
+106 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
+107 |         {loading && <p role="status">Loading lesson plans…</p>}
+108 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+109 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+110 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+111 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+112 |       </section>
+113 |     </main>
+114 |   );
+115 | }
+```
+
+- **Line 101:** Closes the header.
+- **Line 102:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 103:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
+- **Line 104:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 105:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 106:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
+- **Line 107:** Conditionally shows loading text as a live status paragraph.
+- **Line 108:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 109:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 110:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 111:** Lesson cards are disabled while a form is open or a lesson is being opened; Edit calls handleEdit; after a delete the lesson’s attachments are also removed from the page’s list and a success message is shown.
+- **Line 112:** Closes the lesson section.
+- **Line 113:** Closes main.
+- **Line 114:** Closes the parenthesized return statement with a semicolon.
+- **Line 115:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -458,7 +522,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 74:** Places the play triangle across the whole button, centered with CSS grid, large and white with a shadow so it is visible on any thumbnail.
 - **Line 75:** Adds padding to the caption area and allows long words or addresses to wrap.
 
-### Lines 76–93
+### Lines 76–98
 
 ```text
 76 | .media-item figcaption small { margin-top: 2px; }
@@ -479,6 +543,11 @@ Current implementation; connections and behavior are explained alongside every s
 91 | }
 92 | .coaching-block ul.media-list { padding-left: 0; }
 93 | .media-list li { margin-bottom: 0; }
+94 | .notice-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 20px; padding: 12px 16px; border-radius: 8px; box-shadow: 0 2px 8px rgba(23, 45, 58, 0.18); overflow-wrap: anywhere; }
+95 | .notice-bar.success { background: #e4f1ed; color: #17584f; border: 1px solid #9cc9bd; }
+96 | .notice-bar.warning { background: #fff7e6; color: #5c3b00; border: 1px solid #e6c98c; }
+97 | .notice-bar button { flex-shrink: 0; padding: 6px 12px; }
+98 | .media-added { margin: 8px 0; padding: 8px 12px; }
 ```
 
 - **Line 76:** Adds a little space between caption lines.
@@ -499,6 +568,11 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 91:** Closes the media-query block.
 - **Line 92:** Removes the left padding that lesson text lists add, so attachment lists inside an activity line up with the card edge.
 - **Line 93:** Removes the extra bottom margin that text list items have.
+- **Line 94:** Styles the save message bar: it sticks to the top of the window while scrolling (position: sticky), sits above other content (z-index), lays out its text and Dismiss button in a row with a gap, and has a soft shadow so it is easy to notice.
+- **Line 95:** Green colours for a success message.
+- **Line 96:** Yellow-brown colours for a warning message.
+- **Line 97:** Keeps the Dismiss button from shrinking and makes it a little smaller.
+- **Line 98:** Gives the “Added …” confirmation inside an activity a compact size and small margins.
 
 ## client/vite.config.js
 
@@ -1393,315 +1467,319 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 26 |
 27 | export function createApp(database, options = {}) {
 28 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
-29 |   const app = express();
-30 |   app.use(express.json({ limit: '32kb' }));
-31 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-32 |   let suggestions = [];
-33 |   let suggesting = false;
-34 |
-35 |   async function verifiedMedia(rawMedia) {
-36 |     const checked = validateMediaList(rawMedia);
-37 |     if (checked.error) return { error: checked.error };
-38 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
-39 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
-40 |     const media = [];
-41 |     for (const [index, result] of results.entries()) {
-42 |       const item = checked.media[index];
-43 |       if (result.status === 'rejected') {
-44 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
-45 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
-46 |       }
-47 |       if (item.id) { media.push(item); continue; }
-48 |       const info = result.value;
-49 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
-50 |     }
+29 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
+30 |   const app = express();
+31 |   app.use(express.json({ limit: '32kb' }));
+32 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+33 |   let suggestions = [];
+34 |   let suggesting = false;
+35 |
+36 |   async function verifiedMedia(rawMedia) {
+37 |     const checked = validateMediaList(rawMedia);
+38 |     if (checked.error) return { error: checked.error };
+39 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+40 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
+41 |     const media = [];
+42 |     for (const [index, result] of results.entries()) {
+43 |       const item = checked.media[index];
+44 |       if (result.status === 'rejected') {
+45 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+46 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+47 |       }
+48 |       if (item.id) { media.push(item); continue; }
+49 |       const info = result.value;
+50 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
 ```
 
 - **Line 26:** Blank line separates related sections; it performs no operation.
 - **Line 27:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
 - **Line 28:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
-- **Line 29:** Creates an Express application object.
-- **Line 30:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
-- **Line 31:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 32:** Remembers the times of recent media searches for rate limiting.
-- **Line 33:** True while a media search is running, so only one runs at a time.
-- **Line 34:** Blank line separates related sections; it performs no operation.
-- **Line 35:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
-- **Line 36:** Validates and cleans the submitted list.
-- **Line 37:** Returns the validation message if it failed.
-- **Line 38:** Stores without media support (such as a test double) refuse media cleanly.
-- **Line 39:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
-- **Line 40:** The verified entries will be collected here.
-- **Line 41:** Walks through the results in order.
-- **Line 42:** The matching submitted entry.
-- **Line 43:** Handles a failed check.
-- **Line 44:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
-- **Line 45:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
-- **Line 46:** Closes the preceding block (function, object, or statement body).
-- **Line 47:** Stored attachments are kept as they are.
-- **Line 48:** The successful check result.
-- **Line 49:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
-- **Line 50:** Closes the preceding block (function, object, or statement body).
+- **Line 29:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
+- **Line 30:** Creates an Express application object.
+- **Line 31:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
+- **Line 32:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 33:** Remembers the times of recent media searches for rate limiting.
+- **Line 34:** True while a media search is running, so only one runs at a time.
+- **Line 35:** Blank line separates related sections; it performs no operation.
+- **Line 36:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 37:** Validates and cleans the submitted list.
+- **Line 38:** Returns the validation message if it failed.
+- **Line 39:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 40:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
+- **Line 41:** The verified entries will be collected here.
+- **Line 42:** Walks through the results in order.
+- **Line 43:** The matching submitted entry.
+- **Line 44:** Handles a failed check.
+- **Line 45:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 46:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 47:** Closes the preceding block (function, object, or statement body).
+- **Line 48:** Stored attachments are kept as they are.
+- **Line 49:** The successful check result.
+- **Line 50:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
 
 ### Lines 51–75
 
 ```text
-51 |     return { media };
-52 |   }
-53 |   async function saveWithMedia(request, response, save) {
-54 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-55 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
-56 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
-57 |     const result = validateLesson(hasMedia ? fields : request.body);
-58 |     if (result.error) return response.status(400).json({ error: result.error });
-59 |     let media;
-60 |     if (hasMedia) {
-61 |       const checked = await verifiedMedia(rawMedia);
-62 |       if (checked.error) return response.status(400).json({ error: checked.error });
-63 |       media = checked.media;
-64 |     }
-65 |     try {
-66 |       return await save(result.lesson, media);
-67 |     } catch (error) {
-68 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
-69 |       throw error;
-70 |     }
-71 |   }
-72 |
-73 |   app.get('/api/health', (request, response) => {
-74 |     response.json({ status: 'ok', service: 'CoachLab API' });
-75 |   });
+51 |     }
+52 |     return { media };
+53 |   }
+54 |   async function saveWithMedia(request, response, save) {
+55 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+56 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+57 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+58 |     const result = validateLesson(hasMedia ? fields : request.body);
+59 |     if (result.error) return response.status(400).json({ error: result.error });
+60 |     let media;
+61 |     if (hasMedia) {
+62 |       const checked = await verifiedMedia(rawMedia);
+63 |       if (checked.error) return response.status(400).json({ error: checked.error });
+64 |       media = checked.media;
+65 |     }
+66 |     try {
+67 |       return await save(result.lesson, media);
+68 |     } catch (error) {
+69 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+70 |       throw error;
+71 |     }
+72 |   }
+73 |
+74 |   app.get('/api/health', (request, response) => {
+75 |     response.json({ status: 'ok', service: 'CoachLab API' });
 ```
 
-- **Line 51:** Returns the verified list.
-- **Line 52:** Closes the preceding block (function, object, or statement body).
-- **Line 53:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
-- **Line 54:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 55:** True when the body is an ordinary object that contains a media key.
-- **Line 56:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
-- **Line 57:** Validates the nine lesson fields exactly as before, without the media key.
-- **Line 58:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 59:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
-- **Line 60:** Only when media was sent.
-- **Line 61:** Validates and verifies it before touching the database.
-- **Line 62:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
-- **Line 63:** Uses the verified list.
-- **Line 64:** Closes the preceding block (function, object, or statement body).
-- **Line 65:** Starts the database step.
-- **Line 66:** Calls the store’s save function (create or update) and returns its response.
-- **Line 67:** Catches store errors.
-- **Line 68:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
-- **Line 69:** Any other error continues to the general safe 500 handler.
-- **Line 70:** Closes the preceding block (function, object, or statement body).
+- **Line 51:** Closes the preceding block (function, object, or statement body).
+- **Line 52:** Returns the verified list.
+- **Line 53:** Closes the preceding block (function, object, or statement body).
+- **Line 54:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 55:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 56:** True when the body is an ordinary object that contains a media key.
+- **Line 57:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 58:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 59:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 60:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 61:** Only when media was sent.
+- **Line 62:** Validates and verifies it before touching the database.
+- **Line 63:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 64:** Uses the verified list.
+- **Line 65:** Closes the preceding block (function, object, or statement body).
+- **Line 66:** Starts the database step.
+- **Line 67:** Calls the store’s save function (create or update) and returns its response.
+- **Line 68:** Catches store errors.
+- **Line 69:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 70:** Any other error continues to the general safe 500 handler.
 - **Line 71:** Closes the preceding block (function, object, or statement body).
-- **Line 72:** Blank line separates related sections; it performs no operation.
-- **Line 73:** Registers the existing GET health route with request/response callback parameters.
-- **Line 74:** Returns the same health JSON as before, normally with HTTP 200.
-- **Line 75:** Closes the error callback and registration.
+- **Line 72:** Closes the preceding block (function, object, or statement body).
+- **Line 73:** Blank line separates related sections; it performs no operation.
+- **Line 74:** Registers the existing GET health route with request/response callback parameters.
+- **Line 75:** Returns the same health JSON as before, normally with HTTP 200.
 
 ### Lines 76–100
 
 ```text
-76 |   app.get('/api/lessons', async (request, response) => {
-77 |     response.json(await lessons.list());
-78 |   });
-79 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(lesson, media))));
-80 |   app.param('id', (request, response, next, value) => {
-81 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-82 |     request.lessonId = Number(value);
-83 |     next();
-84 |   });
-85 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-86 |     const saved = await lessons.update(request.lessonId, lesson, media);
-87 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-88 |     return response.json(saved);
-89 |   }));
-90 |   app.delete('/api/lessons/:id', async (request, response) => {
-91 |     if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
-92 |     response.status(204).end();
-93 |   });
-94 |
-95 |   app.get('/api/lesson-media', async (request, response) => {
-96 |     if (!lessons.media) return response.json([]);
-97 |     response.json(await lessons.media.list());
-98 |   });
-99 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
-100 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+76 |   });
+77 |   app.get('/api/lessons', async (request, response) => {
+78 |     response.json(await lessons.list());
+79 |   });
+80 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(lesson, media))));
+81 |   app.param('id', (request, response, next, value) => {
+82 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+83 |     request.lessonId = Number(value);
+84 |     next();
+85 |   });
+86 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+87 |     const saved = await lessons.update(request.lessonId, lesson, media);
+88 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
+89 |     return response.json(saved);
+90 |   }));
+91 |   app.delete('/api/lessons/:id', async (request, response) => {
+92 |     if (!await lessons.remove(request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+93 |     response.status(204).end();
+94 |   });
+95 |
+96 |   app.get('/api/lesson-media', async (request, response) => {
+97 |     if (!lessons.media) return response.json([]);
+98 |     response.json(await lessons.media.list());
+99 |   });
+100 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
 ```
 
-- **Line 76:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 77:** Waits for the selected store's rows, then serializes them as JSON.
-- **Line 78:** Closes the error callback and registration.
-- **Line 79:** Creating a lesson now goes through saveWithMedia; the success response is still 201 with the saved lesson, which keeps only its nine fields.
-- **Line 80:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 81:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 82:** Converts the validated URL ID to a number and stores it on this request.
-- **Line 83:** Continues from the parameter guard into the matching route handler.
-- **Line 84:** Closes the error callback and registration.
-- **Line 85:** Updating a lesson goes through saveWithMedia as well.
-- **Line 86:** Asks the store to update the lesson and, if media was sent, its attachments, in one transaction.
-- **Line 87:** A missing lesson still returns 404.
-- **Line 88:** Returns the updated lesson.
-- **Line 89:** Closes the handler and the route.
-- **Line 90:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 91:** Deletes through the selected store; returns 404 when no matching row existed.
-- **Line 92:** Finishes a successful deletion response without a JSON body.
-- **Line 93:** Closes the error callback and registration.
-- **Line 94:** Blank line separates related sections; it performs no operation.
-- **Line 95:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
-- **Line 96:** Stores without media support return an empty list.
-- **Line 97:** Returns the list from the store.
-- **Line 98:** Closes the error callback and registration.
-- **Line 99:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
-- **Line 100:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 76:** Closes the error callback and registration.
+- **Line 77:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 78:** Waits for the selected store's rows, then serializes them as JSON.
+- **Line 79:** Closes the error callback and registration.
+- **Line 80:** Creating a lesson now goes through saveWithMedia; the success response is still 201 with the saved lesson, which keeps only its nine fields.
+- **Line 81:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 82:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 83:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 84:** Continues from the parameter guard into the matching route handler.
+- **Line 85:** Closes the error callback and registration.
+- **Line 86:** Updating a lesson goes through saveWithMedia as well.
+- **Line 87:** Asks the store to update the lesson and, if media was sent, its attachments, in one transaction.
+- **Line 88:** A missing lesson still returns 404.
+- **Line 89:** Returns the updated lesson.
+- **Line 90:** Closes the handler and the route.
+- **Line 91:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 92:** Deletes through the selected store; returns 404 when no matching row existed.
+- **Line 93:** Finishes a successful deletion response without a JSON body.
+- **Line 94:** Closes the error callback and registration.
+- **Line 95:** Blank line separates related sections; it performs no operation.
+- **Line 96:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 97:** Stores without media support return an empty list.
+- **Line 98:** Returns the list from the store.
+- **Line 99:** Closes the error callback and registration.
+- **Line 100:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
 
 ### Lines 101–125
 
 ```text
-101 |     next();
-102 |   });
-103 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
-104 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
-105 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-106 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
-107 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-108 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
-109 |     const detected = sniffMedia(data);
-110 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
-111 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
-112 |     let name = '';
-113 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
-114 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
-115 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-116 |     response.status(201).json(await lessons.media.addUpload({ kind: detected.kind, mime: detected.mime, title, data }));
-117 |   });
-118 |   app.get('/api/media/:id/file', async (request, response) => {
-119 |     const file = lessons.media ? await lessons.media.getFile(request.lessonId) : null;
-120 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
-121 |     sendFile(request, response, file);
-122 |   });
-123 |   app.delete('/api/media/:id', async (request, response) => {
-124 |     if (!lessons.media || !await lessons.media.removeOrphan(request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
-125 |     response.status(204).end();
+101 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+102 |     next();
+103 |   });
+104 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+105 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+106 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+107 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+108 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+109 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+110 |     const detected = sniffMedia(data);
+111 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+112 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+113 |     let name = '';
+114 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+115 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+116 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+117 |     response.status(201).json(await lessons.media.addUpload({ kind: detected.kind, mime: detected.mime, title, data }));
+118 |   });
+119 |   app.get('/api/media/:id/file', async (request, response) => {
+120 |     const file = lessons.media ? await lessons.media.getFile(request.lessonId) : null;
+121 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+122 |     sendFile(request, response, file);
+123 |   });
+124 |   app.delete('/api/media/:id', async (request, response) => {
+125 |     if (!lessons.media || !await lessons.media.removeOrphan(request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
 ```
 
-- **Line 101:** Continues from the parameter guard into the matching route handler.
-- **Line 102:** Closes the error callback and registration.
-- **Line 103:** New route: uploads one file. The browser sends the file bytes as the body.
-- **Line 104:** Refuses when the store has no media support.
-- **Line 105:** The type the browser declared, without parameters, in lowercase.
-- **Line 106:** Only the listed picture and video types are accepted (415 otherwise).
-- **Line 107:** The body as a Buffer, or an empty one if nothing usable arrived.
-- **Line 108:** Empty uploads are rejected.
-- **Line 109:** Looks at the file’s real first bytes.
-- **Line 110:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
-- **Line 111:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
-- **Line 112:** Prepares the default caption.
-- **Line 113:** Decodes the file name from the header, ignoring malformed encodings.
-- **Line 114:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
-- **Line 115:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
-- **Line 116:** Stores the file in the database and returns its details with status 201.
-- **Line 117:** Closes the error callback and registration.
-- **Line 118:** New route: sends a stored file to the browser.
-- **Line 119:** Loads the file (the :id parameter was already validated by the app.param rule above).
-- **Line 120:** Unknown file: 404.
-- **Line 121:** Sends it, honoring byte ranges.
-- **Line 122:** Closes the error callback and registration.
-- **Line 123:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
-- **Line 124:** Only uploads that are not attached to any lesson can be deleted this way; anything else returns 404.
-- **Line 125:** Finishes a successful deletion response without a JSON body.
+- **Line 101:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 102:** Continues from the parameter guard into the matching route handler.
+- **Line 103:** Closes the error callback and registration.
+- **Line 104:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 105:** Refuses when the store has no media support.
+- **Line 106:** The type the browser declared, without parameters, in lowercase.
+- **Line 107:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 108:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 109:** Empty uploads are rejected.
+- **Line 110:** Looks at the file’s real first bytes.
+- **Line 111:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 112:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 113:** Prepares the default caption.
+- **Line 114:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 115:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 116:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 117:** Stores the file in the database and returns its details with status 201.
+- **Line 118:** Closes the error callback and registration.
+- **Line 119:** New route: sends a stored file to the browser.
+- **Line 120:** Loads the file (the :id parameter was already validated by the app.param rule above).
+- **Line 121:** Unknown file: 404.
+- **Line 122:** Sends it, honoring byte ranges.
+- **Line 123:** Closes the error callback and registration.
+- **Line 124:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 125:** Only uploads that are not attached to any lesson can be deleted this way; anything else returns 404.
 
 ### Lines 126–150
 
 ```text
-126 |   });
-127 |   app.post('/api/media/verify', async (request, response) => {
-128 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
-129 |     try {
-130 |       response.json(await verifyLink(request.body.url));
-131 |     } catch (error) {
-132 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
-133 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
-134 |     }
-135 |   });
-136 |   app.post('/api/media/suggest', async (request, response) => {
-137 |     const body = request.body;
-138 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
-139 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
-140 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
-141 |     const now = Date.now();
-142 |     suggestions = suggestions.filter(time => now - time < 86400000);
-143 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
-144 |     suggestions.push(now);
-145 |     suggesting = true;
-146 |     try {
-147 |       response.json(await findMedia({ discipline: body.discipline, sections }));
-148 |     } catch {
-149 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
-150 |     } finally {
+126 |     response.status(204).end();
+127 |   });
+128 |   app.post('/api/media/verify', async (request, response) => {
+129 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
+130 |     try {
+131 |       response.json(await verifyLink(request.body.url));
+132 |     } catch (error) {
+133 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+134 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+135 |     }
+136 |   });
+137 |   app.post('/api/media/suggest', async (request, response) => {
+138 |     const body = request.body;
+139 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+140 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+141 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+142 |     const now = Date.now();
+143 |     suggestions = suggestions.filter(time => now - time < 86400000);
+144 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+145 |     suggestions.push(now);
+146 |     suggesting = true;
+147 |     try {
+148 |       response.json(await findMedia({ discipline: body.discipline, sections }));
+149 |     } catch {
+150 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
 ```
 
-- **Line 126:** Closes the error callback and registration.
-- **Line 127:** New route: checks one pasted link.
-- **Line 128:** Requires JSON containing a text url.
-- **Line 129:** Starts the guarded call.
-- **Line 130:** Returns what the checker found.
-- **Line 131:** Handles failures.
-- **Line 132:** A link that cannot be used returns 400 with the explanation.
-- **Line 133:** Unexpected problems return 502 with a neutral message.
-- **Line 134:** Closes the preceding block (function, object, or statement body).
-- **Line 135:** Closes the error callback and registration.
-- **Line 136:** New route: finds and verifies pictures and videos for an AI draft.
-- **Line 137:** The request body.
-- **Line 138:** The sections list, or null if it is missing.
-- **Line 139:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
-- **Line 140:** Invalid requests get a 400.
-- **Line 141:** The current time.
-- **Line 142:** Forgets searches older than one day.
-- **Line 143:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
-- **Line 144:** Records this search.
-- **Line 145:** Marks a search as running.
-- **Line 146:** Starts the guarded search.
-- **Line 147:** Runs the finder and returns its verified results.
-- **Line 148:** Any failure is reported without technical details.
-- **Line 149:** A 502 with advice that media can still be added by hand.
-- **Line 150:** Whatever happened, finishes with…
+- **Line 126:** Finishes a successful deletion response without a JSON body.
+- **Line 127:** Closes the error callback and registration.
+- **Line 128:** New route: checks one pasted link.
+- **Line 129:** Requires JSON containing a text url.
+- **Line 130:** Starts the database step.
+- **Line 131:** Returns what the checker found.
+- **Line 132:** Catches store errors.
+- **Line 133:** A link that cannot be used returns 400 with the explanation.
+- **Line 134:** Unexpected problems return 502 with a neutral message.
+- **Line 135:** Closes the preceding block (function, object, or statement body).
+- **Line 136:** Closes the error callback and registration.
+- **Line 137:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 138:** The request body.
+- **Line 139:** The sections list, or null if it is missing.
+- **Line 140:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 141:** Invalid requests get a 400.
+- **Line 142:** The current time.
+- **Line 143:** Forgets searches older than one day.
+- **Line 144:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 145:** Records this search.
+- **Line 146:** Marks a search as running.
+- **Line 147:** Starts the database step.
+- **Line 148:** Runs the finder and returns its verified results.
+- **Line 149:** Any failure is reported without technical details.
+- **Line 150:** A 502 with advice that media can still be added by hand.
 
-### Lines 151–165
+### Lines 151–167
 
 ```text
-151 |       suggesting = false;
-152 |     }
-153 |   });
-154 |
-155 |   registerAiRoute(app, options);
-156 |   app.use((request, response) => {
-157 |     response.status(404).json({ error: 'Route not found.' });
-158 |   });
-159 |   app.use((error, request, response, next) => {
-160 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-161 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-162 |     response.status(status).json({ error: messages[status] });
-163 |   });
-164 |   return app;
-165 | }
+151 |     } finally {
+152 |       suggesting = false;
+153 |     }
+154 |   });
+155 |
+156 |   registerAiRoute(app, options);
+157 |   app.use((request, response) => {
+158 |     response.status(404).json({ error: 'Route not found.' });
+159 |   });
+160 |   app.use((error, request, response, next) => {
+161 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+162 |     if (status === 500) logError(error);
+163 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+164 |     response.status(status).json({ error: messages[status] });
+165 |   });
+166 |   return app;
+167 | }
 ```
 
-- **Line 151:** …allowing the next search.
-- **Line 152:** Closes the preceding block (function, object, or statement body).
-- **Line 153:** Closes the error callback and registration.
-- **Line 154:** Blank line separates related sections; it performs no operation.
-- **Line 155:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
-- **Line 156:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 157:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 158:** Closes the error callback and registration.
-- **Line 159:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 160:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 161:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 162:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 163:** Closes the error callback and registration.
-- **Line 164:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 165:** Closes createApp.
+- **Line 151:** Whatever happened, finishes with…
+- **Line 152:** …allowing the next search.
+- **Line 153:** Closes the preceding block (function, object, or statement body).
+- **Line 154:** Closes the error callback and registration.
+- **Line 155:** Blank line separates related sections; it performs no operation.
+- **Line 156:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 157:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 158:** Sends HTTP 404 with a short route-not-found JSON error.
+- **Line 159:** Closes the error callback and registration.
+- **Line 160:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 161:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 162:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
+- **Line 163:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 164:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 165:** Closes the error callback and registration.
+- **Line 166:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 167:** Closes createApp.
 
 ## server/api.test.js
 
@@ -2045,153 +2123,177 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 1 | import React, { useRef, useState } from 'react';
 2 | import ActivityEditor from './ActivityEditor.jsx';
 3 | import { activityMinutes } from './activities.js';
-4 | import { discardUpload, mediaPayload, newKey } from './media.js';
-5 |
-6 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-7 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
-8 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
-9 |
-10 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-11 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
-12 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
-13 |   const [saving, setSaving] = useState(false);
-14 |   const [error, setError] = useState('');
-15 |   const submitting = useRef(false);
-16 |
-17 |   function change(event) {
-18 |     const { name, value } = event.target;
-19 |     setValues(current => ({ ...current, [name]: value }));
-20 |   }
-21 |
-22 |   async function submit(event) {
-23 |     event.preventDefault();
-24 |     if (submitting.current) return;
-25 |     setError('');
+4 | import { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
+5 | import { discardUpload, mediaPayload, newKey } from './media.js';
+6 |
+7 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+8 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+9 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
+10 |
+11 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
+12 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
+13 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
+14 |   const [saving, setSaving] = useState(false);
+15 |   const [error, setError] = useState('');
+16 |   const submitting = useRef(false);
+17 |   const [registry] = useState(pendingRegistry);
+18 |
+19 |   function change(event) {
+20 |     const { name, value } = event.target;
+21 |     setValues(current => ({ ...current, [name]: value }));
+22 |   }
+23 |
+24 |   async function submit(event) {
+25 |     event.preventDefault();
 ```
 
 - **Line 1:** Imports React plus useRef for a persistent immediate lock and useState for renderable values.
 - **Line 2:** Imports ActivityEditor from './ActivityEditor.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 3:** Imports activityMinutes so the form can show how many minutes the activity cards add up to.
-- **Line 4:** Imports discardUpload (cleans up unsaved uploads), mediaPayload (turns attachments into the shape the API accepts) and newKey (makes temporary keys) from the new media helper file.
-- **Line 5:** Blank line separates related sections for readability; it performs no operation.
-- **Line 6:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
-- **Line 7:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
-- **Line 8:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
-- **Line 9:** Blank line separates related sections for readability; it performs no operation.
-- **Line 10:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
-- **Line 11:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
-- **Line 12:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
-- **Line 13:** Initializes the saving flag to false.
-- **Line 14:** Initializes the form error message to empty text.
-- **Line 15:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
-- **Line 16:** Blank line separates related sections for readability; it performs no operation.
-- **Line 17:** Begins the shared input-change handler with the browser/React event parameter.
-- **Line 18:** Destructures the changed control's name and string value from event.target.
-- **Line 19:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
-- **Line 20:** Closes submit.
-- **Line 21:** Blank line separates related sections for readability; it performs no operation.
-- **Line 22:** Declares the async form-submit handler.
-- **Line 23:** Prevents ordinary browser form navigation so React can perform the request.
-- **Line 24:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
-- **Line 25:** Clears any earlier error for this save attempt.
+- **Line 4:** Imports the context object and registry helper that track unfinished media panels.
+- **Line 5:** Imports discardUpload (cleans up unsaved uploads), mediaPayload (turns attachments into the shape the API accepts) and newKey (makes temporary keys) from the new media helper file.
+- **Line 6:** Blank line separates related sections for readability; it performs no operation.
+- **Line 7:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
+- **Line 8:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
+- **Line 9:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
+- **Line 10:** Blank line separates related sections for readability; it performs no operation.
+- **Line 11:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
+- **Line 12:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
+- **Line 13:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
+- **Line 14:** Initializes the saving flag to false.
+- **Line 15:** Initializes the form error message to empty text.
+- **Line 16:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
+- **Line 17:** Creates the registry once for this form (the function form of useState runs only on the first render).
+- **Line 18:** Blank line separates related sections for readability; it performs no operation.
+- **Line 19:** Begins the shared input-change handler with the browser/React event parameter.
+- **Line 20:** Destructures the changed control's name and string value from event.target.
+- **Line 21:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
+- **Line 22:** Closes submit.
+- **Line 23:** Blank line separates related sections for readability; it performs no operation.
+- **Line 24:** Declares the async form-submit handler.
+- **Line 25:** Prevents ordinary browser form navigation so React can perform the request.
 
 ### Lines 26–50
 
 ```text
-26 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
-27 |     submitting.current = true;
-28 |     setSaving(true);
-29 |     try {
-30 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
-31 |       if (lesson || media.length) body.media = mediaPayload(media);
-32 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-33 |       const data = await response.json();
-34 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
-35 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
-36 |       onSaved(data);
-37 |     } catch (failure) {
-38 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
-39 |     } finally {
-40 |       submitting.current = false;
-41 |       setSaving(false);
-42 |     }
-43 |   }
-44 |
-45 |   return (
-46 |     <section className="form-panel" aria-labelledby="new-heading">
-47 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
-48 |       <p>Title and discipline are required. Add the details that help you coach.</p>
-49 |       <form onSubmit={submit}>
-50 |         <fieldset disabled={saving}>
+26 |     if (submitting.current) return;
+27 |     setError('');
+28 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+29 |     if (registry.count()) {
+30 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+31 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+32 |       return;
+33 |     }
+34 |     submitting.current = true;
+35 |     setSaving(true);
+36 |     try {
+37 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
+38 |       if (lesson || media.length) body.media = mediaPayload(media);
+39 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+40 |       const data = await response.json();
+41 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
+42 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
+43 |       onSaved(data, body.media?.length);
+44 |     } catch (failure) {
+45 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
+46 |     } finally {
+47 |       submitting.current = false;
+48 |       setSaving(false);
+49 |     }
+50 |   }
 ```
 
-- **Line 26:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
-- **Line 27:** Locks submission synchronously.
-- **Line 28:** Sets saving state so controls disable and progress feedback renders.
-- **Line 29:** Starts a try block around request/parsing/confirmation.
-- **Line 30:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
-- **Line 31:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
-- **Line 32:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
-- **Line 33:** Parses the response body as JSON, awaiting completion.
-- **Line 34:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
-- **Line 35:** Requires an integer returned ID before treating the lesson as confirmed.
-- **Line 36:** Calls the parent's callback with the actual returned record; App adds it and unmounts this form.
-- **Line 37:** Closes try and catches request or response failures.
-- **Line 38:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
-- **Line 39:** Begins finally, which always executes after the attempt.
-- **Line 40:** Releases the immediate lock.
-- **Line 41:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
-- **Line 42:** Closes finally.
-- **Line 43:** Closes submit.
-- **Line 44:** Blank line separates related sections for readability; it performs no operation.
-- **Line 45:** Begins returning the JSX form tree.
-- **Line 46:** Opens a styled section and connects its accessible name to new-heading.
-- **Line 47:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
-- **Line 48:** Explains required fields in a paragraph.
-- **Line 49:** Opens a form and binds submit to its submit event; native constraints run before this handler.
-- **Line 50:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
+- **Line 26:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 27:** Clears any earlier error for this save attempt.
+- **Line 28:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 29:** Before saving, checks whether any media panel still holds unfinished work.
+- **Line 30:** If so, shows a plain message explaining what to do: press Add (or Done) to keep it, or Cancel to discard it.
+- **Line 31:** Scrolls to the first unfinished panel so the coach can see it.
+- **Line 32:** Stops the save. Nothing is sent to the server, so a lesson is never saved while an attachment is half-added.
+- **Line 33:** Closes finally.
+- **Line 34:** Locks submission synchronously.
+- **Line 35:** Sets saving state so controls disable and progress feedback renders.
+- **Line 36:** Starts a try block around request/parsing/confirmation.
+- **Line 37:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
+- **Line 38:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
+- **Line 39:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
+- **Line 40:** Parses the response body as JSON, awaiting completion.
+- **Line 41:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
+- **Line 42:** Requires an integer returned ID before treating the lesson as confirmed.
+- **Line 43:** Tells the parent how many attachments were sent (undefined when none were sent), so it can confirm that the same number arrived in the database.
+- **Line 44:** Closes try and catches request or response failures.
+- **Line 45:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
+- **Line 46:** Begins finally, which always executes after the attempt.
+- **Line 47:** Releases the immediate lock.
+- **Line 48:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
+- **Line 49:** Closes finally.
+- **Line 50:** Closes submit.
 
-### Lines 51–68
+### Lines 51–75
 
 ```text
-51 |           <legend className="sr-only">Lesson details</legend>
-52 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
-53 |           <div className="form-row">
-54 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
-55 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
-56 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
-57 |           </div>
-58 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
-59 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
-60 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
-61 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
-62 |         </fieldset>
-63 |         {saving && <p role="status">Saving your lesson…</p>}
-64 |         {error && <p className="error" role="alert">{error}</p>}
-65 |       </form>
-66 |     </section>
-67 |   );
-68 | }
+51 |
+52 |   return (
+53 |     <PendingMedia.Provider value={registry}>
+54 |     <section className="form-panel" aria-labelledby="new-heading">
+55 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+56 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+57 |       <form onSubmit={submit}>
+58 |         <fieldset disabled={saving}>
+59 |           <legend className="sr-only">Lesson details</legend>
+60 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
+61 |           <div className="form-row">
+62 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+63 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+64 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+65 |           </div>
+66 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+67 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
+68 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+69 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
+70 |         </fieldset>
+71 |         {saving && <p role="status">Saving your lesson…</p>}
+72 |         {error && <p className="error" role="alert">{error}</p>}
+73 |       </form>
+74 |     </section>
+75 |     </PendingMedia.Provider>
 ```
 
-- **Line 51:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
-- **Line 52:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
-- **Line 53:** Opens the responsive row for the three compact controls.
-- **Line 54:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
-- **Line 55:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
-- **Line 56:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
-- **Line 57:** Closes the responsive row.
-- **Line 58:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
-- **Line 59:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
-- **Line 60:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
-- **Line 61:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
-- **Line 62:** Closes the fieldset.
-- **Line 63:** Conditionally displays an accessible saving status via &&.
-- **Line 64:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
-- **Line 65:** Closes the form.
-- **Line 66:** Closes the section.
-- **Line 67:** Closes the JSX return expression and statement.
-- **Line 68:** Closes the component function.
+- **Line 51:** Blank line separates related sections for readability; it performs no operation.
+- **Line 52:** Begins returning the JSX form tree.
+- **Line 53:** Wraps the form so every media component inside can report to the registry.
+- **Line 54:** Opens a styled section and connects its accessible name to new-heading.
+- **Line 55:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
+- **Line 56:** Explains required fields in a paragraph.
+- **Line 57:** Opens a form and binds submit to its submit event; native constraints run before this handler.
+- **Line 58:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
+- **Line 59:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
+- **Line 60:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
+- **Line 61:** Opens the responsive row for the three compact controls.
+- **Line 62:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 63:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 64:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 65:** Closes the responsive row.
+- **Line 66:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 67:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
+- **Line 68:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
+- **Line 69:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
+- **Line 70:** Closes the fieldset.
+- **Line 71:** Conditionally displays an accessible saving status via &&.
+- **Line 72:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
+- **Line 73:** Closes the form.
+- **Line 74:** Closes the section.
+- **Line 75:** Closes the wrapper.
+
+### Lines 76–77
+
+```text
+76 |   );
+77 | }
+```
+
+- **Line 76:** Closes the JSX return expression and statement.
+- **Line 77:** Closes the component function.
 
 ## client/src/LessonCard.jsx
 
@@ -2267,7 +2369,7 @@ Browser display for one saved record. It formats existing text, shows each activ
 32 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
 33 |     finally { setBusy(false); }
 34 |   }
-35 |   return <article className="lesson-card">
+35 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
 36 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
 37 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
 38 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
@@ -2291,7 +2393,7 @@ Browser display for one saved record. It formats existing text, shows each activ
 - **Line 32:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
 - **Line 33:** Always releases the busy state after success or failure.
 - **Line 34:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 35:** Begins the semantic saved-lesson article with its visual card style.
+- **Line 35:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
 - **Line 36:** Displays the discipline badge and lesson title using escaped React expressions.
 - **Line 37:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
 - **Line 38:** Displays the goal section through the shared bullet/expansion formatter.
@@ -2631,7 +2733,7 @@ Browser AI request and editable draft workflow. Optional preferences allow recom
 ```text
 1 | import React, { useRef, useState } from 'react';
 2 | import ActivityEditor from './ActivityEditor.jsx';
-3 | import MediaEditor from './MediaEditor.jsx';
+3 | import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 4 | import { discardUpload, mediaPayload, newKey } from './media.js';
 5 | import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 6 |
@@ -2646,19 +2748,19 @@ Browser AI request and editable draft workflow. Optional preferences allow recom
 15 |   const [busy, setBusy] = useState(false);
 16 |   const [error, setError] = useState('');
 17 |   const locked = useRef(false);
-18 |   function edit(key, value) {
-19 |     setDraft(current => ({ ...current, [key]: value }));
-20 |     setApproved(false);
-21 |   }
-22 |   function setMedia(next) {
-23 |     setMediaList(next);
-24 |     setApproved(false);
-25 |   }
+18 |   const [registry] = useState(pendingRegistry);
+19 |   function edit(key, value) {
+20 |     setDraft(current => ({ ...current, [key]: value }));
+21 |     setApproved(false);
+22 |   }
+23 |   function setMedia(next) {
+24 |     setMediaList(current => typeof next === 'function' ? next(current) : next);
+25 |     setApproved(false);
 ```
 
 - **Line 1:** Imports React plus useRef for a synchronous request lock and useState for screen data.
 - **Line 2:** Imports ActivityEditor from './ActivityEditor.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports the media editor.
+- **Line 3:** Imports the media editor together with the context object and registry helper.
 - **Line 4:** Imports the helpers for deleting unsaved uploads, building the request list and making temporary keys.
 - **Line 5:** Imports lists, labels, validators and the converter shared with the server; this module contains no credentials.
 - **Line 6:** Blank line separates related sections; it performs no operation.
@@ -2673,224 +2775,246 @@ Browser AI request and editable draft workflow. Optional preferences allow recom
 - **Line 15:** Creates the busy state used to disable form controls.
 - **Line 16:** Creates an initially empty error-message state.
 - **Line 17:** Creates a mutable ref that prevents duplicate submissions before React rerenders.
-- **Line 18:** Opens a helper for editing one draft property.
-- **Line 19:** Copies the current object with spread and replaces the computed property key with the new value.
-- **Line 20:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
-- **Line 21:** Closes the submit handler.
-- **Line 22:** Wrapper used by the editors: any change to attachments also needs fresh approval, just like editing the text.
-- **Line 23:** Stores the new list.
-- **Line 24:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
-- **Line 25:** Closes the submit handler.
+- **Line 18:** Creates the registry that tracks unfinished media panels in the draft.
+- **Line 19:** Opens a helper for editing one draft property.
+- **Line 20:** Copies the current object with spread and replaces the computed property key with the new value.
+- **Line 21:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
+- **Line 22:** Closes the submit handler.
+- **Line 23:** Wrapper used by the editors: any change to attachments also needs fresh approval, just like editing the text.
+- **Line 24:** The setter used by the media editors now accepts either a new list or a function that receives the newest list, matching the editors’ functional updates.
+- **Line 25:** Clears approval after every draft edit so previous approval cannot silently cover changed content.
 
 ### Lines 26–50
 
 ```text
-26 |   async function findMedia(source) {
-27 |     setFinding(true);
-28 |     setFindNote('');
-29 |     try {
-30 |       const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
-31 |       const data = await response.json();
-32 |       if (!response.ok) throw new Error(data.error || 'Media search failed.');
-33 |       setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
-34 |       setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
-35 |     } catch (failure) {
-36 |       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
-37 |     } finally { setFinding(false); }
-38 |   }
-39 |   function discard() {
-40 |     media.forEach(discardUpload);
-41 |     onCancel();
-42 |   }
-43 |   async function submit(event) {
-44 |     event.preventDefault();
-45 |     if (locked.current) return;
-46 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
-47 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
-48 |     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
-49 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
-50 |     locked.current = true;
+26 |   }
+27 |   async function findMedia(source) {
+28 |     setFinding(true);
+29 |     setFindNote('');
+30 |     try {
+31 |       const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
+32 |       const data = await response.json();
+33 |       if (!response.ok) throw new Error(data.error || 'Media search failed.');
+34 |       setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
+35 |       setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
+36 |     } catch (failure) {
+37 |       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
+38 |     } finally { setFinding(false); }
+39 |   }
+40 |   function discard() {
+41 |     media.forEach(discardUpload);
+42 |     onCancel();
+43 |   }
+44 |   async function submit(event) {
+45 |     event.preventDefault();
+46 |     if (locked.current) return;
+47 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
+48 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
+49 |     if (draft && registry.count()) {
+50 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
 ```
 
-- **Line 26:** Defines findMedia, which asks the server to find and verify pictures and videos for a draft.
-- **Line 27:** Shows the searching state.
-- **Line 28:** Clears the previous note.
-- **Line 29:** Starts the request/error-handling block.
-- **Line 30:** Sends the discipline and, for each section, its name, instructions (limited to 1500 characters) and the AI’s technique search phrases (text only, at most three of up to 80 characters). A 60-second limit stops a stuck search.
-- **Line 31:** Parses the server JSON reply.
-- **Line 32:** A failed answer becomes an error message.
-- **Line 33:** Replaces earlier suggestions with the new ones while keeping anything the coach added; every new item gets a temporary key.
-- **Line 34:** Writes the summary: how many items were found, that every link was checked, and any per-section notes; or that nothing was found.
-- **Line 35:** Catches request, parsing, validation and server failures.
-- **Line 36:** On failure shows the server’s friendly message, or a generic one for interruptions. Draft editing and saving still work.
-- **Line 37:** Always ends the searching state.
-- **Line 38:** Closes the submit handler.
-- **Line 39:** Defines discard, used by the Discard draft and Cancel buttons.
-- **Line 40:** Deletes any unsaved uploads from this draft.
-- **Line 41:** Then closes the form.
-- **Line 42:** Closes the submit handler.
-- **Line 43:** Opens the asynchronous form submission handler.
-- **Line 44:** Stops normal HTML form navigation so React handles the submission.
-- **Line 45:** Returns immediately if another submission is already running.
-- **Line 46:** The ternary chooses draft validation after generation, or request validation before it.
-- **Line 47:** Shows any validation error or missing approval and exits without sending a request.
-- **Line 48:** When saving an approved draft, adds the media list to the lesson. Each attachment’s section name is converted to the exact activity heading that the saved lesson text will contain (“Technique teaching — 12 minutes”), so the attachment finds its activity later; attachments of no section become whole-lesson media.
-- **Line 49:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
-- **Line 50:** Sets the immediate lock before starting asynchronous work.
+- **Line 26:** Closes the submit handler.
+- **Line 27:** Defines findMedia, which asks the server to find and verify pictures and videos for a draft.
+- **Line 28:** Shows the searching state.
+- **Line 29:** Clears the previous note.
+- **Line 30:** Starts the request/error-handling block.
+- **Line 31:** Sends the discipline and, for each section, its name, instructions (limited to 1500 characters) and the AI’s technique search phrases (text only, at most three of up to 80 characters). A 60-second limit stops a stuck search.
+- **Line 32:** Parses the server JSON reply.
+- **Line 33:** A failed answer becomes an error message.
+- **Line 34:** Replaces earlier suggestions with the new ones while keeping anything the coach added; every new item gets a temporary key.
+- **Line 35:** Writes the summary: how many items were found, that every link was checked, and any per-section notes; or that nothing was found.
+- **Line 36:** Catches request, parsing, validation and server failures.
+- **Line 37:** On failure shows the server’s friendly message, or a generic one for interruptions. Draft editing and saving still work.
+- **Line 38:** Always ends the searching state.
+- **Line 39:** Closes the submit handler.
+- **Line 40:** Defines discard, used by the Discard draft and Cancel buttons.
+- **Line 41:** Deletes any unsaved uploads from this draft.
+- **Line 42:** Then closes the form.
+- **Line 43:** Closes the submit handler.
+- **Line 44:** Opens the asynchronous form submission handler.
+- **Line 45:** Stops normal HTML form navigation so React handles the submission.
+- **Line 46:** Returns immediately if another submission is already running.
+- **Line 47:** The ternary chooses draft validation after generation, or request validation before it.
+- **Line 48:** Shows any validation error or missing approval and exits without sending a request.
+- **Line 49:** Before saving an approved draft, checks for unfinished media panels.
+- **Line 50:** Explains what to do about the open panel.
 
 ### Lines 51–75
 
 ```text
-51 |     setBusy(true);
-52 |     setError('');
-53 |     try {
-54 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-55 |       const data = await response.json();
-56 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
-57 |       if (draft) {
-58 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
-59 |         onSaved(data);
-60 |       } else {
-61 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
-62 |         setDraft(data.draft);
-63 |         setApproved(false);
-64 |         setMediaList([]);
-65 |         findMedia(data.draft);
-66 |       }
-67 |     } catch (failure) {
-68 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
-69 |     } finally {
-70 |       locked.current = false;
-71 |       setBusy(false);
-72 |     }
-73 |   }
-74 |   return (
-75 |     <section className="form-panel" aria-labelledby="ai-heading">
+51 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+52 |       return;
+53 |     }
+54 |     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
+55 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
+56 |     locked.current = true;
+57 |     setBusy(true);
+58 |     setError('');
+59 |     try {
+60 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+61 |       const data = await response.json();
+62 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
+63 |       if (draft) {
+64 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
+65 |         onSaved(data, body.media.length);
+66 |       } else {
+67 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
+68 |         setDraft(data.draft);
+69 |         setApproved(false);
+70 |         setMediaList([]);
+71 |         findMedia(data.draft);
+72 |       }
+73 |     } catch (failure) {
+74 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
+75 |     } finally {
 ```
 
-- **Line 51:** Marks the UI busy to disable its fieldset.
-- **Line 52:** Clears previous error feedback.
-- **Line 53:** Starts the request/error-handling block.
-- **Line 54:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
-- **Line 55:** Parses the server JSON reply.
-- **Line 56:** Throws the safe server message or a fallback on unsuccessful HTTP status.
-- **Line 57:** Starts the save-success branch when submitting a draft.
-- **Line 58:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
-- **Line 59:** Passes the saved row to App, which adds its card and closes the form.
-- **Line 60:** Starts the generation-success branch instead.
-- **Line 61:** Checks the returned draft with the same structure/timing validator before displaying it.
-- **Line 62:** Stores the unsaved generated draft in React state.
-- **Line 63:** Keeps approval unchecked for this newly generated content.
-- **Line 64:** When a new draft arrives, clears old attachments.
-- **Line 65:** Immediately starts the automatic media search. The draft is already visible and editable while the search runs.
-- **Line 66:** Closes the generation/save branch.
-- **Line 67:** Catches request, parsing, validation and server failures.
-- **Line 68:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
-- **Line 69:** Begins cleanup that always runs.
-- **Line 70:** Releases the immediate submission lock.
-- **Line 71:** Re-enables UI controls by clearing busy.
-- **Line 72:** Closes cleanup.
-- **Line 73:** Closes the submit handler.
-- **Line 74:** Begins returning JSX, React's HTML-like UI description.
-- **Line 75:** Opens a styled section associated with its heading for accessibility.
+- **Line 51:** Scrolls to it.
+- **Line 52:** Stops the save.
+- **Line 53:** Closes cleanup.
+- **Line 54:** When saving an approved draft, adds the media list to the lesson. Each attachment’s section name is converted to the exact activity heading that the saved lesson text will contain (“Technique teaching — 12 minutes”), so the attachment finds its activity later; attachments of no section become whole-lesson media.
+- **Line 55:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
+- **Line 56:** Sets the immediate lock before starting asynchronous work.
+- **Line 57:** Marks the UI busy to disable its fieldset.
+- **Line 58:** Clears previous error feedback.
+- **Line 59:** Starts the request/error-handling block.
+- **Line 60:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
+- **Line 61:** Parses the server JSON reply.
+- **Line 62:** Throws the safe server message or a fallback on unsuccessful HTTP status.
+- **Line 63:** Starts the save-success branch when submitting a draft.
+- **Line 64:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
+- **Line 65:** Tells the parent how many attachments were saved with the draft, so the page can confirm they arrived.
+- **Line 66:** Starts the generation-success branch instead.
+- **Line 67:** Checks the returned draft with the same structure/timing validator before displaying it.
+- **Line 68:** Stores the unsaved generated draft in React state.
+- **Line 69:** Keeps approval unchecked for this newly generated content.
+- **Line 70:** When a new draft arrives, clears old attachments.
+- **Line 71:** Immediately starts the automatic media search. The draft is already visible and editable while the search runs.
+- **Line 72:** Closes the generation/save branch.
+- **Line 73:** Catches request, parsing, validation and server failures.
+- **Line 74:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
+- **Line 75:** Begins cleanup that always runs.
 
 ### Lines 76–100
 
 ```text
-76 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
-77 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
-78 |       <form onSubmit={submit}>
-79 |         <fieldset disabled={busy}>
-80 |           <legend className="sr-only">AI lesson details</legend>
-81 |           {!draft ? <>
-82 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
-83 |             <div className="form-row">
-84 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
-85 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
-86 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
-87 |             </div>
-88 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
-89 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
-90 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
-91 |           </> : <>
-92 |             <p>{request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
-93 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
-94 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
-95 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
-96 |               <h3>{section.name}</h3>
-97 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
-98 |               <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
-99 |               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
-100 |             </div>)}
+76 |       locked.current = false;
+77 |       setBusy(false);
+78 |     }
+79 |   }
+80 |   return (
+81 |     <PendingMedia.Provider value={registry}>
+82 |     <section className="form-panel" aria-labelledby="ai-heading">
+83 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
+84 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
+85 |       <form onSubmit={submit}>
+86 |         <fieldset disabled={busy}>
+87 |           <legend className="sr-only">AI lesson details</legend>
+88 |           {!draft ? <>
+89 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
+90 |             <div className="form-row">
+91 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
+92 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
+93 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
+94 |             </div>
+95 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
+96 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
+97 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
+98 |           </> : <>
+99 |             <p>{request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
+100 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
 ```
 
-- **Line 76:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
-- **Line 77:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
-- **Line 78:** Opens a form whose submit event calls the handler above.
-- **Line 79:** Opens a fieldset that disables all enclosed controls while busy.
-- **Line 80:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
-- **Line 81:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
-- **Line 82:** Shows the privacy warning and free-tier data-use disclosure before submission.
-- **Line 83:** Opens the existing responsive three-column input row.
-- **Line 84:** Renders a labelled discipline select. map creates keyed options; onChange copies request state and replaces discipline with the selected text.
-- **Line 85:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
-- **Line 86:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
-- **Line 87:** Closes the responsive input row.
-- **Line 88:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
-- **Line 89:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
-- **Line 90:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
-- **Line 91:** Closes the request fragment and opens the alternative draft-review fragment.
-- **Line 92:** Displays the original class context and reminds the coach that edits reset approval.
-- **Line 93:** Renders a required editable title capped at 200 characters through the edit helper.
-- **Line 94:** Renders required editable training objectives capped at 1500 characters.
-- **Line 95:** Maps draft sections into keyed styled containers, opening one div for each section.
-- **Line 96:** Displays that section's name in an h3 heading.
-- **Line 97:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
-- **Line 98:** Edits activities within this timed draft section. The parent maps to replace only this section's instructions, retains other sections and clears coach approval through edit().
-- **Line 99:** Under each section’s instructions, adds an editor for that section’s pictures and videos, filtered by the section name.
-- **Line 100:** Closes the section div, map callback and JSX expression.
+- **Line 76:** Releases the immediate submission lock.
+- **Line 77:** Re-enables UI controls by clearing busy.
+- **Line 78:** Closes cleanup.
+- **Line 79:** Closes the submit handler.
+- **Line 80:** Begins returning JSX, React's HTML-like UI description.
+- **Line 81:** Wraps the form so media components can report to the registry.
+- **Line 82:** Opens a styled section associated with its heading for accessibility.
+- **Line 83:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
+- **Line 84:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
+- **Line 85:** Opens a form whose submit event calls the handler above.
+- **Line 86:** Opens a fieldset that disables all enclosed controls while busy.
+- **Line 87:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
+- **Line 88:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
+- **Line 89:** Shows the privacy warning and free-tier data-use disclosure before submission.
+- **Line 90:** Opens the existing responsive three-column input row.
+- **Line 91:** Renders a labelled discipline select. map creates keyed options; onChange copies request state and replaces discipline with the selected text.
+- **Line 92:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
+- **Line 93:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
+- **Line 94:** Closes the responsive input row.
+- **Line 95:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
+- **Line 96:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
+- **Line 97:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
+- **Line 98:** Closes the request fragment and opens the alternative draft-review fragment.
+- **Line 99:** Displays the original class context and reminds the coach that edits reset approval.
+- **Line 100:** Renders a required editable title capped at 200 characters through the edit helper.
 
-### Lines 101–118
+### Lines 101–125
 
 ```text
-101 |             <div className="draft-section">
-102 |               <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
-103 |               {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
-104 |               {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
-105 |               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
-106 |             </div>
-107 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
-108 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
-109 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
-110 |           </>}
-111 |           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
-112 |         </fieldset>
-113 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
-114 |         {error && <p role="alert" className="error">{error}</p>}
-115 |       </form>
-116 |     </section>
-117 |   );
-118 | }
+101 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
+102 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
+103 |               <h3>{section.name}</h3>
+104 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
+105 |               <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+106 |               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
+107 |             </div>)}
+108 |             <div className="draft-section">
+109 |               <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
+110 |               {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
+111 |               {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
+112 |               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
+113 |             </div>
+114 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
+115 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
+116 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
+117 |           </>}
+118 |           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
+119 |         </fieldset>
+120 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
+121 |         {error && <p role="alert" className="error">{error}</p>}
+122 |       </form>
+123 |     </section>
+124 |     </PendingMedia.Provider>
+125 |   );
 ```
 
-- **Line 101:** Starts a block for whole-lesson media.
-- **Line 102:** Editor for attachments that belong to no section.
-- **Line 103:** While searching, a status message says so.
-- **Line 104:** When finished, shows the summary note.
-- **Line 105:** Button to run the search again.
-- **Line 106:** Closes the responsive input row.
-- **Line 107:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
-- **Line 108:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
-- **Line 109:** Renders the explicit coach approval checkbox, controlled by approved state.
-- **Line 110:** Closes the draft fragment and conditional JSX expression.
-- **Line 111:** The save button is also disabled while a media search runs, so a lesson is never saved with a half-finished list. Cancel/Discard now uses discard to clean up uploads.
-- **Line 112:** Closes the fieldset of controls.
-- **Line 113:** Conditionally announces saving or generation progress in a status paragraph.
-- **Line 114:** Conditionally displays error text in an alert paragraph; React treats it as text rather than HTML.
-- **Line 115:** Closes the form.
-- **Line 116:** Closes the outer section.
-- **Line 117:** Closes the grouped JSX return expression.
-- **Line 118:** Closes AiLessonForm.
+- **Line 101:** Renders required editable training objectives capped at 1500 characters.
+- **Line 102:** Maps draft sections into keyed styled containers, opening one div for each section.
+- **Line 103:** Displays that section's name in an h3 heading.
+- **Line 104:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
+- **Line 105:** Edits activities within this timed draft section. The parent maps to replace only this section's instructions, retains other sections and clears coach approval through edit().
+- **Line 106:** Under each section’s instructions, adds an editor for that section’s pictures and videos, filtered by the section name.
+- **Line 107:** Closes the section div, map callback and JSX expression.
+- **Line 108:** Starts a block for whole-lesson media.
+- **Line 109:** Editor for attachments that belong to no section.
+- **Line 110:** While searching, a status message says so.
+- **Line 111:** When finished, shows the summary note.
+- **Line 112:** Button to run the search again.
+- **Line 113:** Closes the responsive input row.
+- **Line 114:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
+- **Line 115:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
+- **Line 116:** Renders the explicit coach approval checkbox, controlled by approved state.
+- **Line 117:** Closes the draft fragment and conditional JSX expression.
+- **Line 118:** The save button is also disabled while a media search runs, so a lesson is never saved with a half-finished list. Cancel/Discard now uses discard to clean up uploads.
+- **Line 119:** Closes the fieldset of controls.
+- **Line 120:** Conditionally announces saving or generation progress in a status paragraph.
+- **Line 121:** Conditionally displays error text in an alert paragraph; React treats it as text rather than HTML.
+- **Line 122:** Closes the form.
+- **Line 123:** Closes the outer section.
+- **Line 124:** Closes the wrapper.
+- **Line 125:** Closes the grouped JSX return expression.
+
+### Lines 126–126
+
+```text
+126 | }
+```
+
+- **Line 126:** Closes AiLessonForm.
 
 ## server/ai.test.js
 
@@ -4097,7 +4221,7 @@ Browser component shared by LessonForm and AiLessonForm. It edits the existing d
 20 |     onChange(joinActivities(next.map(card => card.text)));
 21 |   }
 22 |   function edit(card, text) {
-23 |     if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(renameActivity(media, headingOf(card.text), headingOf(text)));
+23 |     if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(current => renameActivity(current, headingOf(card.text), headingOf(text)));
 24 |     update(cards.map(item => item.id === card.id ? { ...item, text } : item));
 25 |   }
 ```
@@ -4124,7 +4248,7 @@ Browser component shared by LessonForm and AiLessonForm. It edits the existing d
 - **Line 20:** Tells the parent the new combined text. joinActivities removes blank lines inside cards and puts one blank line between cards.
 - **Line 21:** Closes the update function.
 - **Line 22:** Defines edit, called whenever the text of one card changes.
-- **Line 23:** If the first line changed, renames that activity in the attachments so they follow the activity instead of being left behind.
+- **Line 23:** When a heading changes, attachments are renamed through the newest list (functional update), so the rename cannot overwrite a media change made at the same moment.
 - **Line 24:** Then saves the new text for just that card, found by its permanent id.
 - **Line 25:** Closes the update function.
 
@@ -4522,7 +4646,7 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 - **Line 69:** Goes through the new list with positions.
 - **Line 70:** An item with an id is an existing attachment.
 - **Line 71:** Looks it up.
-- **Line 72:** It must exist and be unattached or belong to this lesson.
+- **Line 72:** It must exist and either be unattached (a fresh upload) or already belong to this lesson; otherwise the whole save is cancelled.
 - **Line 73:** Attaches it and updates caption, activity and position.
 - **Line 74:** Remembers to keep it.
 - **Line 75:** Otherwise it is a new link.
@@ -4623,26 +4747,26 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 3 | import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
 4 | import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
 5 | import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
-6 | import { groupMedia, headingOf } from '../client/src/media.js';
-7 |
-8 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
-9 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
-10 |   const items = activityBlocks(original);
-11 |   assert.equal(items.join('\n\n'), original);
-12 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
-13 |   assert.deepEqual(moveActivity(items, 0, -1), items);
-14 |   assert.deepEqual(items, activityBlocks(original));
-15 |   assert.deepEqual(activityBlocks(''), []);
-16 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
-17 | });
-18 |
-19 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
-20 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
-21 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
-22 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
-23 |   assert.equal(activityMinutes(''), 0);
-24 | });
-25 |
+6 | import { readFileSync } from 'node:fs';
+7 | import { groupMedia, headingOf } from '../client/src/media.js';
+8 |
+9 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
+10 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
+11 |   const items = activityBlocks(original);
+12 |   assert.equal(items.join('\n\n'), original);
+13 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
+14 |   assert.deepEqual(moveActivity(items, 0, -1), items);
+15 |   assert.deepEqual(items, activityBlocks(original));
+16 |   assert.deepEqual(activityBlocks(''), []);
+17 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
+18 | });
+19 |
+20 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
+21 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
+22 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
+23 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
+24 |   assert.equal(activityMinutes(''), 0);
+25 | });
 ```
 
 - **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
@@ -4650,76 +4774,106 @@ Fast Node tests for browser data helpers, minimal AI request validation and medi
 - **Line 3:** Imports the two new helpers beside the existing ones so the tests can exercise them.
 - **Line 4:** Imports { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 5:** Imports { disciplines, validateRequest } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 6:** Imports groupMedia and headingOf, the helpers that decide which attachment appears under which activity.
-- **Line 7:** Blank line separating related statements; it has no runtime effect.
-- **Line 8:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 9:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
-- **Line 10:** Parses that synthetic text into activity blocks for testing.
-- **Line 11:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 12:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 17:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 18:** Blank line separating related statements; it has no runtime effect.
-- **Line 19:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
-- **Line 20:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
-- **Line 21:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
-- **Line 22:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
-- **Line 23:** Checks that empty text adds up to zero.
-- **Line 24:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 25:** Blank line separating related statements; it has no runtime effect.
+- **Line 6:** Imports readFileSync so the test can read source files.
+- **Line 7:** Imports groupMedia and headingOf, the helpers that decide which attachment appears under which activity.
+- **Line 8:** Blank line separating related statements; it has no runtime effect.
+- **Line 9:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 10:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
+- **Line 11:** Parses that synthetic text into activity blocks for testing.
+- **Line 12:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 18:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 19:** Blank line separating related statements; it has no runtime effect.
+- **Line 20:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
+- **Line 21:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
+- **Line 22:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
+- **Line 23:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
+- **Line 24:** Checks that empty text adds up to zero.
+- **Line 25:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
-### Lines 26–47
+### Lines 26–50
 
 ```text
-26 | test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
-27 |   const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
-28 |   assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
-29 |   const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
-30 |   const { byBlock, rest } = groupMedia(media, blocks);
-31 |   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
-32 |   assert.deepEqual(rest.map(item => item.id), [3, 4]);
-33 | });
-34 |
-35 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
-36 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
-37 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-38 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
-39 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
-40 | });
-41 |
-42 | test('media matches both discipline and technique with an empty safe fallback', () => {
-43 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
-44 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
-45 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
-46 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
-47 | });
+26 |
+27 | test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
+28 |   const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
+29 |   assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
+30 |   const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
+31 |   const { byBlock, rest } = groupMedia(media, blocks);
+32 |   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
+33 |   assert.deepEqual(rest.map(item => item.id), [3, 4]);
+34 | });
+35 |
+36 | test('media fields are detached from the lesson form so Enter can never save the lesson without a pending attachment', () => {
+37 |   const source = readFileSync(new URL('../client/src/MediaEditor.jsx', import.meta.url), 'utf8');
+38 |   const fields = source.match(/<(input|select)\b[^>]*>/g) || [];
+39 |   assert.ok(fields.length >= 5);
+40 |   for (const field of fields) assert.ok(field.includes('form={detached}'), field.slice(0, 60));
+41 |   assert.match(source, /const detached = 'coachlab-media-fields'/);
+42 |   const forms = readFileSync(new URL('../client/src/LessonForm.jsx', import.meta.url), 'utf8') + readFileSync(new URL('../client/src/AiLessonForm.jsx', import.meta.url), 'utf8');
+43 |   assert.ok(!forms.includes('id="coachlab-media-fields"'));
+44 |   assert.ok(forms.includes('registry.count()'));
+45 | });
+46 |
+47 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
+48 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
+49 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
+50 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
 ```
 
-- **Line 26:** Registers a test of the grouping rule: each attachment goes under the first activity with a matching heading, and the rest are collected separately.
-- **Line 27:** Builds three activity blocks from text; the second and third share the heading “Drill — 10 minutes”.
-- **Line 28:** Checks that headingOf reads the first line of a block.
-- **Line 29:** Defines five sample attachments: two for the duplicated drill heading, one for the warm-up, one for the whole lesson (empty activity) and one for an activity that no longer exists.
-- **Line 30:** Runs the grouping function.
-- **Line 31:** Checks that attachments 1 and 5 both appear under block index 1 (the first “Drill” block, never the duplicate) and attachment 2 under block 0.
-- **Line 32:** Checks that the whole-lesson and orphaned attachments (3 and 4) are returned as the rest, so no attachment is lost.
-- **Line 33:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 34:** Blank line separating related statements; it has no runtime effect.
-- **Line 35:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 36:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
-- **Line 37:** Checks every supported discipline accepts the minimal request without a validation error.
-- **Line 38:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 39:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 41:** Blank line separating related statements; it has no runtime effect.
-- **Line 42:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 43:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
-- **Line 44:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 45:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 46:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
-- **Line 47:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 26:** Blank line separating related statements; it has no runtime effect.
+- **Line 27:** Registers a test of the grouping rule: each attachment goes under the first activity with a matching heading, and the rest are collected separately.
+- **Line 28:** Builds three activity blocks from text; the second and third share the heading “Drill — 10 minutes”.
+- **Line 29:** Checks that headingOf reads the first line of a block.
+- **Line 30:** Defines five sample attachments: two for the duplicated drill heading, one for the warm-up, one for the whole lesson (empty activity) and one for an activity that no longer exists.
+- **Line 31:** Runs the grouping function.
+- **Line 32:** Checks that attachments 1 and 5 both appear under block index 1 (the first “Drill” block, never the duplicate) and attachment 2 under block 0.
+- **Line 33:** Checks that the whole-lesson and orphaned attachments (3 and 4) are returned as the rest, so no attachment is lost.
+- **Line 34:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 35:** Blank line separating related statements; it has no runtime effect.
+- **Line 36:** Registers a regression test for the root cause of the reported bug: media fields must never be able to submit the lesson form.
+- **Line 37:** Reads the media editor’s source text.
+- **Line 38:** Finds every input and select element in it with a regular expression (\b marks a word boundary).
+- **Line 39:** There must be at least five such fields, so the test cannot pass by finding none.
+- **Line 40:** Each of them must carry the form={detached} attribute.
+- **Line 41:** The detached form name must be defined as expected.
+- **Line 42:** Reads the two lesson forms’ source text.
+- **Line 43:** Neither form may define an element with the detached form’s id (that would re-attach the fields).
+- **Line 44:** Both forms must consult the pending registry before saving.
+- **Line 45:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 46:** Blank line separating related statements; it has no runtime effect.
+- **Line 47:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 48:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
+- **Line 49:** Checks every supported discipline accepts the minimal request without a validation error.
+- **Line 50:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+
+### Lines 51–59
+
+```text
+51 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
+52 | });
+53 |
+54 | test('media matches both discipline and technique with an empty safe fallback', () => {
+55 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
+56 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
+57 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
+58 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+59 | });
+```
+
+- **Line 51:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 52:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 53:** Blank line separating related statements; it has no runtime effect.
+- **Line 54:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 55:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
+- **Line 56:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 58:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
+- **Line 59:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/postgres-api.test.js
 
@@ -5137,7 +5291,7 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 - **Line 49:** A Map from block position to its attachments.
 - **Line 50:** The list of attachments that belong to no visible activity.
 
-### Lines 51–73
+### Lines 51–75
 
 ```text
 51 |   for (const item of media) {
@@ -5163,6 +5317,8 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 71 | }
 72 |
 73 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
+74 |
+75 | export async function fetchMedia(signal) {
 ```
 
 - **Line 51:** Loops over every attachment.
@@ -5182,12 +5338,32 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 - **Line 65:** Blank line separates related sections for readability; it performs no operation.
 - **Line 66:** Exports checkLink, which asks the server to verify a pasted link.
 - **Line 67:** POSTs the link as JSON to the verification route.
-- **Line 68:** Reads the reply as JSON, tolerating non-JSON.
+- **Line 68:** Reads the JSON reply, using an empty object if the reply is not JSON.
 - **Line 69:** A failed check throws an Error with the server’s explanation so the form can show it.
-- **Line 70:** Returns what the server confirmed: kind, address, caption suggestion and credit.
+- **Line 70:** Returns the saved file’s details.
 - **Line 71:** Closes the preceding block (function, object, or statement body).
 - **Line 72:** Blank line separates related sections for readability; it performs no operation.
 - **Line 73:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
+- **Line 74:** Blank line separates related sections for readability; it performs no operation.
+- **Line 75:** Exports fetchMedia, one shared function that loads the list of every saved attachment from the server. App uses it when the page opens, before opening a lesson for editing and after saving.
+
+### Lines 76–81
+
+```text
+76 |   const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
+77 |   if (!response.ok) throw new Error('Unable to load media.');
+78 |   const data = await response.json();
+79 |   if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+80 |   return data;
+81 | }
+```
+
+- **Line 76:** Requests the list. cache: "no-store" forbids the browser from reusing an older copy, so an edit form can never start from a stale list; the optional signal lets the caller cancel.
+- **Line 77:** Any failure status becomes an error.
+- **Line 78:** Reads the JSON reply.
+- **Line 79:** A reply that is not a list is treated as an error too.
+- **Line 80:** Returns the saved file’s details.
+- **Line 81:** Closes the preceding block (function, object, or statement body).
 
 ## client/src/MediaItem.jsx
 
@@ -5263,319 +5439,381 @@ Browser component that shows one attachment: a picture, an uploaded or linked vi
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\MediaEditor.jsx`
 
-Browser components for adding, previewing, editing and removing attachments. MediaEditor is the Add Media button and attachment list used under each activity, in the whole-lesson area and in the AI draft. Inside it, LinkChecker verifies a pasted link and Attachment shows one attachment with Edit and Remove. Nothing is saved to a lesson here: the parent form holds the list until Save.
+Browser components for adding, previewing, editing and removing attachments. MediaEditor is the Add Media button and attachment list used under each activity, in the whole-lesson area and in the AI draft; LinkChecker verifies a pasted link and Attachment shows one attachment with Edit and Remove. Nothing is saved to a lesson here: the parent form holds the list until Save. All media fields are detached from the lesson form (so Enter cannot save the lesson early) and every unfinished panel reports itself, so the form refuses to save while something is half-added.
 
 ### Lines 1–25
 
 ```text
-1 | import React, { useState } from 'react';
+1 | import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 2 | import MediaItem from './MediaItem.jsx';
 3 | import { checkLink, discardUpload, mediaKey, mediaLimits, newKey, uploadFile, uploadTypes } from './media.js';
 4 |
 5 | const accept = Object.keys(uploadTypes).join(',');
-6 |
-7 | function LinkChecker({ initial = '', onVerified, onCancel, action }) {
-8 |   const [text, setText] = useState(initial);
-9 |   const [checking, setChecking] = useState(false);
-10 |   const [error, setError] = useState('');
-11 |   const [found, setFound] = useState(null);
-12 |   const [title, setTitle] = useState('');
-13 |   async function check() {
-14 |     if (checking) return;
-15 |     setError(''); setFound(null); setChecking(true);
-16 |     try {
-17 |       const info = await checkLink(text);
-18 |       setFound(info);
-19 |       setTitle(info.title || '');
-20 |     } catch (failure) { setError(failure.message); }
-21 |     finally { setChecking(false); }
-22 |   }
-23 |   return <div className="media-panel-body">
-24 |     <label>Picture or YouTube link
-25 |       <input type="url" inputMode="url" placeholder="https://www.youtube.com/watch?v=… or https://…/picture.jpg" value={text} maxLength={mediaLimits.url} disabled={checking}
+6 | const detached = 'coachlab-media-fields';
+7 |
+8 | export const PendingMedia = createContext(null);
+9 |
+10 | export function pendingRegistry() {
+11 |   const open = new Set();
+12 |   return { set: (id, active) => { if (active) open.add(id); else open.delete(id); }, count: () => open.size };
+13 | }
+14 |
+15 | function useReportPending(active) {
+16 |   const registry = useContext(PendingMedia);
+17 |   const id = useId();
+18 |   useEffect(() => {
+19 |     registry?.set(id, active);
+20 |     return () => registry?.set(id, false);
+21 |   }, [registry, id, active]);
+22 | }
+23 |
+24 | function LinkChecker({ initial = '', onVerified, onCancel, action }) {
+25 |   const [text, setText] = useState(initial);
 ```
 
-- **Line 1:** Imports React and the useState hook for the many small pieces of screen state.
+- **Line 1:** Imports React and the hooks it needs: createContext and useContext share the “pending media” registry with the lesson forms, useId gives each component instance a unique id, useRef points at the confirmation message, plus useEffect and useState as before.
 - **Line 2:** Imports the preview component.
 - **Line 3:** Imports the helpers for checking links, discarding unsaved uploads, identifying attachments, the limits, new keys, uploading and the allowed upload types.
 - **Line 4:** Blank line separates related sections for readability; it performs no operation.
 - **Line 5:** Builds the accept text for the file chooser (comma-separated allowed MIME types) so the browser only offers supported files.
-- **Line 6:** Blank line separates related sections for readability; it performs no operation.
-- **Line 7:** Defines LinkChecker, the “paste a link, check it, preview it” mini form. It receives a starting text, callbacks for success and cancel, and the label for its confirm button.
-- **Line 8:** The address being typed.
-- **Line 9:** True while the server is checking the link.
-- **Line 10:** The message shown when the check fails.
-- **Line 11:** What the server confirmed (kind, address, caption suggestion), or null.
-- **Line 12:** The caption the coach may edit.
-- **Line 13:** Defines the check action.
-- **Line 14:** Ignores repeated presses while a check is already running.
-- **Line 15:** Clears the previous result and error and shows the checking state.
-- **Line 16:** Starts the guarded request.
-- **Line 17:** Asks the server to verify the link; the server contacts YouTube or the picture host and inspects the real file.
-- **Line 18:** Stores the confirmed details so a preview appears.
-- **Line 19:** Pre-fills the caption with the title the server found.
-- **Line 20:** On failure shows the server’s explanation (for example “this link opens a web page, not a picture”).
-- **Line 21:** Whether it worked or not, stops the checking state.
+- **Line 6:** The name of a form that deliberately does not exist. Giving media inputs form="coachlab-media-fields" detaches them from the lesson form around them, so pressing Enter (or a phone’s Go key) in a media field can no longer submit and save the whole lesson.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** Exports a React context; the lesson forms provide a registry through it and the media components report to it.
+- **Line 9:** Blank line separates related sections for readability; it performs no operation.
+- **Line 10:** Exports pendingRegistry, a tiny helper object that remembers which media panels are open.
+- **Line 11:** A Set of the ids of panels that currently hold unfinished work.
+- **Line 12:** Returns two functions: set adds or removes a panel id depending on active, and count says how many panels are unfinished.
+- **Line 13:** Closes the preceding block (function, object, or statement body).
+- **Line 14:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Defines useReportPending, a hook a component calls with true while it holds unfinished work (a checked link not yet added, an upload in progress, an edit panel left open).
+- **Line 16:** Reads the registry supplied by the surrounding lesson form (null if there is none).
+- **Line 17:** Creates an id that is unique to this component instance.
+- **Line 18:** Runs after rendering whenever the values listed at the end change.
+- **Line 19:** Tells the registry whether this component is unfinished right now. The ?. skips the call when there is no registry.
+- **Line 20:** The returned function is cleanup: when the component disappears it is no longer counted as unfinished.
+- **Line 21:** Ends the effect; it re-runs when the registry, id or active flag changes.
 - **Line 22:** Closes the preceding block (function, object, or statement body).
-- **Line 23:** Returns the mini form markup.
-- **Line 24:** Starts the labeled link field; wrapping the input in a label makes the text its accessible name.
-- **Line 25:** The link input: type="url" with inputMode="url" shows a suitable phone keyboard, maxLength follows the shared limit, and it is disabled while checking.
+- **Line 23:** Blank line separates related sections for readability; it performs no operation.
+- **Line 24:** Defines LinkChecker, the “paste a link, check it, preview it” mini form. It receives a starting text, callbacks for success and cancel, and the label for its confirm button.
+- **Line 25:** The address being typed.
 
 ### Lines 26–50
 
 ```text
-26 |         onChange={event => { setText(event.target.value); setFound(null); setError(''); }}
-27 |         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); check(); } }} />
-28 |       <small>CoachLab checks that the link really is a picture, video or YouTube video before it is added.</small>
-29 |     </label>
-30 |     <div className="actions">
-31 |       <button type="button" disabled={checking || !text.trim()} onClick={check}>{checking ? 'Checking link…' : 'Check link'}</button>
-32 |       <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
-33 |     </div>
-34 |     {error && <p className="error" role="alert">{error}</p>}
-35 |     {found && <div className="media-found" role="status">
-36 |       <p className="success">Link checked — this is a {found.kind === 'youtube' ? 'YouTube video' : found.kind === 'image' ? 'picture' : 'video'}. Preview:</p>
-37 |       <MediaItem item={{ ...found, origin: 'link', title }} />
-38 |       <label>Caption<input value={title} maxLength={mediaLimits.title} onChange={event => setTitle(event.target.value)} /></label>
-39 |       <button type="button" onClick={() => onVerified({ ...found, title })}>{action}</button>
-40 |     </div>}
-41 |   </div>;
-42 | }
-43 |
-44 | function Attachment({ item, headings, onChange, onRemove, disabled }) {
-45 |   const [editing, setEditing] = useState(false);
-46 |   const [relinking, setRelinking] = useState(false);
-47 |   const [draft, setDraft] = useState({ title: '', activity: '' });
-48 |   const isLink = item.origin !== 'upload';
-49 |   return <li className="media-attachment">
-50 |     <MediaItem key={`${item.url}-${item.kind}`} item={item} />
+26 |   const [checking, setChecking] = useState(false);
+27 |   const [error, setError] = useState('');
+28 |   const [found, setFound] = useState(null);
+29 |   const [title, setTitle] = useState('');
+30 |   useReportPending(checking || !!found);
+31 |   async function check() {
+32 |     if (checking) return;
+33 |     setError(''); setFound(null); setChecking(true);
+34 |     try {
+35 |       const info = await checkLink(text);
+36 |       setFound(info);
+37 |       setTitle(info.title || '');
+38 |     } catch (failure) { setError(failure.message); }
+39 |     finally { setChecking(false); }
+40 |   }
+41 |   return <div className="media-panel-body" data-media-pending={checking || found ? 'true' : undefined}>
+42 |     <label>Picture or YouTube link
+43 |       <input form={detached} type="url" inputMode="url" placeholder="https://www.youtube.com/watch?v=… or https://…/picture.jpg" value={text} maxLength={mediaLimits.url} disabled={checking}
+44 |         onChange={event => { setText(event.target.value); setFound(null); setError(''); }}
+45 |         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); check(); } }} />
+46 |       <small>CoachLab checks that the link really is a picture, video or YouTube video before it is added.</small>
+47 |     </label>
+48 |     <div className="actions">
+49 |       <button type="button" disabled={checking || !text.trim()} onClick={check}>{checking ? 'Checking link…' : 'Check link'}</button>
+50 |       <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
 ```
 
-- **Line 26:** Typing updates the text and clears any old result or error, so a preview never belongs to a different address.
-- **Line 27:** Pressing Enter checks the link and prevents the Enter key from submitting the whole lesson form that contains this field.
-- **Line 28:** Helper text explaining the verification promise.
-- **Line 29:** Closes the label.
-- **Line 30:** Starts the button row.
-- **Line 31:** Check link button: type="button" so it never submits the lesson form; disabled when empty or busy.
-- **Line 32:** Cancel button that calls the parent’s cancel callback.
-- **Line 33:** Closes the div element.
-- **Line 34:** Shows the failure message in an alert region.
-- **Line 35:** When a link was confirmed, shows the result area (announced politely to screen readers).
-- **Line 36:** Confirms what was found, translating the kind into words.
-- **Line 37:** Previews the attachment exactly as it will look, using the edited caption.
-- **Line 38:** Lets the coach edit the caption.
-- **Line 39:** Confirm button: hands the confirmed details and caption to the parent.
-- **Line 40:** Closes the result area.
-- **Line 41:** Closes the div element and the returned expression.
-- **Line 42:** Closes the preceding block (function, object, or statement body).
-- **Line 43:** Blank line separates related sections for readability; it performs no operation.
-- **Line 44:** Defines Attachment: one attachment with Edit and Remove. It receives the attachment, the list of activity headings, change and remove callbacks and a disabled flag.
-- **Line 45:** Whether the edit panel is open.
-- **Line 46:** Whether the “Change link” checker is open inside the edit panel.
-- **Line 47:** A private copy of the caption and activity being edited; nothing changes until the coach presses Done, so the attachment does not jump to another activity while editing.
-- **Line 48:** True for pasted and suggested links, false for uploads (which cannot change address).
-- **Line 49:** Starts a list item.
-- **Line 50:** The preview. The key changes when the address or kind changes, so the preview resets itself.
+- **Line 26:** True while the server is checking the link.
+- **Line 27:** The message shown when the check fails.
+- **Line 28:** What the server confirmed (kind, address, caption suggestion), or null.
+- **Line 29:** The caption the coach may edit.
+- **Line 30:** The link checker reports itself unfinished while a check is running or a verified preview is waiting to be added.
+- **Line 31:** Defines the check action.
+- **Line 32:** Ignores repeated presses while a check is already running.
+- **Line 33:** Clears the previous result and error and shows the checking state.
+- **Line 34:** Starts the guarded request.
+- **Line 35:** Asks the server to verify the link; the server contacts YouTube or the picture host and inspects the real file.
+- **Line 36:** Stores the confirmed details so a preview appears.
+- **Line 37:** Pre-fills the caption with the title the server found.
+- **Line 38:** On failure shows the server’s explanation (for example “this link opens a web page, not a picture”).
+- **Line 39:** Whether it worked or not, stops the checking state.
+- **Line 40:** Closes the preceding block (function, object, or statement body).
+- **Line 41:** The checker’s container also carries a data-media-pending attribute while unfinished, so the form can scroll to it when a save is blocked.
+- **Line 42:** Starts the labeled link field; wrapping the input in a label makes the text its accessible name.
+- **Line 43:** The link input, detached from the lesson form by the form attribute. type="url" and inputMode="url" give a suitable phone keyboard; the onKeyDown on the next lines checks the link when Enter is pressed.
+- **Line 44:** Typing updates the text and clears any old result or error, so a preview never belongs to a different address.
+- **Line 45:** Pressing Enter checks the link and prevents the Enter key from submitting the whole lesson form that contains this field.
+- **Line 46:** Helper text explaining the verification promise.
+- **Line 47:** Closes the label.
+- **Line 48:** Starts the button row.
+- **Line 49:** Check link button: type="button" so it never submits the lesson form; disabled when empty or busy.
+- **Line 50:** Cancel button that calls the parent’s cancel callback.
 
 ### Lines 51–75
 
 ```text
-51 |     {!editing && <div className="actions">
-52 |       <button type="button" className="secondary" disabled={disabled} onClick={() => { setDraft({ title: item.title || '', activity: headings.includes((item.activity || '').trim()) ? item.activity.trim() : '' }); setEditing(true); }} aria-label={`Edit ${item.title || 'media'}`}>Edit</button>
-53 |       <button type="button" className="secondary danger" disabled={disabled} onClick={onRemove} aria-label={`Remove ${item.title || 'media'}`}>Remove</button>
-54 |     </div>}
-55 |     {editing && !relinking && <div className="media-edit">
-56 |       <label>Caption<input value={draft.title} maxLength={mediaLimits.title} onChange={event => setDraft({ ...draft, title: event.target.value })} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
-57 |       <label>Show with
-58 |         <select value={draft.activity} onChange={event => setDraft({ ...draft, activity: event.target.value })}>
-59 |           <option value="">Whole lesson (not one activity)</option>
-60 |           {headings.map(heading => <option key={heading} value={heading}>{heading}</option>)}
-61 |         </select>
-62 |       </label>
-63 |       <div className="actions">
-64 |         {isLink && <button type="button" className="secondary" onClick={() => setRelinking(true)}>Change link</button>}
-65 |         <button type="button" onClick={() => { setEditing(false); onChange(draft); }}>Done</button>
-66 |         <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel</button>
-67 |       </div>
-68 |     </div>}
-69 |     {editing && relinking && <LinkChecker initial={item.url} action="Use this link" onCancel={() => setRelinking(false)} onVerified={info => { onChange({ replace: { ...info, origin: 'link', activity: item.activity || '' } }); setRelinking(false); setEditing(false); }} />}
-70 |   </li>;
-71 | }
-72 |
-73 | export default function MediaEditor({ media, onChange, items, activity = '', headings = [], label, disabled = false, note }) {
-74 |   const [panel, setPanel] = useState(null);
-75 |   const [busy, setBusy] = useState(false);
+51 |     </div>
+52 |     {error && <p className="error" role="alert">{error}</p>}
+53 |     {found && <div className="media-found" role="status">
+54 |       <p className="success">Link checked — this is a {found.kind === 'youtube' ? 'YouTube video' : found.kind === 'image' ? 'picture' : 'video'}. Preview:</p>
+55 |       <MediaItem item={{ ...found, origin: 'link', title }} />
+56 |       <label>Caption<input form={detached} value={title} maxLength={mediaLimits.title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
+57 |       <button type="button" onClick={() => onVerified({ ...found, title })}>{action}</button>
+58 |     </div>}
+59 |   </div>;
+60 | }
+61 |
+62 | function Attachment({ item, headings, onChange, onRemove, disabled }) {
+63 |   const [editing, setEditing] = useState(false);
+64 |   const [relinking, setRelinking] = useState(false);
+65 |   const [draft, setDraft] = useState({ title: '', activity: '' });
+66 |   const isLink = item.origin !== 'upload';
+67 |   useReportPending(editing);
+68 |   return <li className="media-attachment">
+69 |     <MediaItem key={`${item.url}-${item.kind}`} item={item} />
+70 |     {!editing && <div className="actions">
+71 |       <button type="button" className="secondary" disabled={disabled} onClick={() => { setDraft({ title: item.title || '', activity: headings.includes((item.activity || '').trim()) ? item.activity.trim() : '' }); setEditing(true); }} aria-label={`Edit ${item.title || 'media'}`}>Edit</button>
+72 |       <button type="button" className="secondary danger" disabled={disabled} onClick={onRemove} aria-label={`Remove ${item.title || 'media'}`}>Remove</button>
+73 |     </div>}
+74 |     {editing && !relinking && <div className="media-edit" data-media-pending="true">
+75 |       <label>Caption<input form={detached} value={draft.title} maxLength={mediaLimits.title} onChange={event => setDraft({ ...draft, title: event.target.value })} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
 ```
 
-- **Line 51:** When not editing, shows the Edit and Remove buttons.
-- **Line 52:** Edit button: copies the current caption and activity into the private draft (using the empty option if the activity no longer exists) and opens the edit panel. aria-label names the item for screen readers.
-- **Line 53:** Remove button; the parent decides what removal means (deleting an unsaved upload immediately, or dropping a saved one so the server deletes it on Save).
-- **Line 54:** Closes the button row.
-- **Line 55:** The edit panel, shown while editing and not changing the link.
-- **Line 56:** Caption field bound to the draft. Pressing Enter is blocked so it cannot submit the surrounding form.
-- **Line 57:** Starts the “Show with” selector label.
-- **Line 58:** Dropdown bound to the draft’s activity.
-- **Line 59:** First option: not tied to one activity.
-- **Line 60:** One option for each activity heading; the heading doubles as the key.
-- **Line 61:** Closes the dropdown.
-- **Line 62:** Closes the label.
-- **Line 63:** Starts the panel’s buttons.
-- **Line 64:** Links offer a Change link button, which opens the checker.
-- **Line 65:** Done closes the panel and sends the draft caption and activity to the parent, which updates the list.
-- **Line 66:** Cancel closes the panel and discards the draft.
-- **Line 67:** Closes the div element.
-- **Line 68:** Closes the edit panel.
-- **Line 69:** When changing the link, shows the checker pre-filled with the current address. A confirmed new link replaces this attachment (a new entry that keeps the activity), then both panels close.
-- **Line 70:** Ends the list item.
-- **Line 71:** Closes the preceding block (function, object, or statement body).
-- **Line 72:** Blank line separates related sections for readability; it performs no operation.
-- **Line 73:** Exports MediaEditor. media is the whole lesson’s list, onChange replaces it, items is the subset to display here, activity is the heading new attachments get, headings lists all activities for the dropdown, and note explains special cases.
-- **Line 74:** Which add panel is open: none, the chooser, upload or link.
-- **Line 75:** True while files are uploading.
+- **Line 51:** Closes the div element.
+- **Line 52:** Shows the failure message in an alert region.
+- **Line 53:** When a link was confirmed, shows the result area (announced politely to screen readers).
+- **Line 54:** Confirms what was found, translating the kind into words.
+- **Line 55:** Previews the attachment exactly as it will look, using the edited caption.
+- **Line 56:** The caption input of the confirmed link, also detached from the lesson form; pressing Enter here is ignored instead of saving the lesson, which was one way an attachment could be lost.
+- **Line 57:** Confirm button: hands the confirmed details and caption to the parent.
+- **Line 58:** Closes the result area.
+- **Line 59:** Closes the div element and the returned expression.
+- **Line 60:** Closes the preceding block (function, object, or statement body).
+- **Line 61:** Blank line separates related sections for readability; it performs no operation.
+- **Line 62:** Defines Attachment: one attachment with Edit and Remove. It receives the attachment, the list of activity headings, change and remove callbacks and a disabled flag.
+- **Line 63:** Whether the edit panel is open.
+- **Line 64:** Whether the “Change link” checker is open inside the edit panel.
+- **Line 65:** A private copy of the caption and activity being edited; nothing changes until the coach presses Done, so the attachment does not jump to another activity while editing.
+- **Line 66:** True for pasted and suggested links, false for uploads (which cannot change address).
+- **Line 67:** An attachment whose edit panel is open counts as unfinished until Done or Cancel is pressed.
+- **Line 68:** Starts a list item.
+- **Line 69:** The preview. The key changes when the address or kind changes, so the preview resets itself.
+- **Line 70:** When not editing, shows the Edit and Remove buttons.
+- **Line 71:** Edit button: copies the current caption and activity into the private draft (using the empty option if the activity no longer exists) and opens the edit panel. aria-label names the item for screen readers.
+- **Line 72:** Remove button; the parent decides what removal means (deleting an unsaved upload immediately, or dropping a saved one so the server deletes it on Save).
+- **Line 73:** Closes the result area.
+- **Line 74:** The edit panel is marked as unfinished work while it is open.
+- **Line 75:** The caption input of the edit panel, detached from the lesson form; Enter is ignored.
 
 ### Lines 76–100
 
 ```text
-76 |   const [error, setError] = useState('');
-77 |   const full = media.length >= mediaLimits.perLesson;
-78 |   const add = list => onChange([...media, ...list.map(entry => ({ ...entry, activity, clientKey: newKey() }))]);
-79 |
-80 |   async function upload(event) {
-81 |     const files = [...event.target.files];
-82 |     event.target.value = '';
-83 |     if (!files.length) return;
-84 |     setError('');
-85 |     if (media.length + files.length > mediaLimits.perLesson) { setError(`A lesson can have at most ${mediaLimits.perLesson} pictures and videos.`); return; }
-86 |     for (const file of files) {
-87 |       const kind = uploadTypes[file.type];
-88 |       if (!kind) { setError(`“${file.name}” is not a supported file. Use PNG, JPEG, GIF or WebP pictures, or MP4 or WebM videos.`); return; }
-89 |       if (file.size > mediaLimits[kind]) { setError(`“${file.name}” is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.`); return; }
-90 |     }
-91 |     setBusy(true);
-92 |     const added = [];
-93 |     try {
-94 |       for (const file of files) added.push({ ...(await uploadFile(file)), pending: true });
-95 |       add(added);
-96 |       setPanel(null);
-97 |     } catch (failure) {
-98 |       for (const item of added) discardUpload(item);
-99 |       setError(failure.message);
-100 |     } finally { setBusy(false); }
+76 |       <label>Show with
+77 |         <select form={detached} value={draft.activity} onChange={event => setDraft({ ...draft, activity: event.target.value })}>
+78 |           <option value="">Whole lesson (not one activity)</option>
+79 |           {headings.map(heading => <option key={heading} value={heading}>{heading}</option>)}
+80 |         </select>
+81 |       </label>
+82 |       <div className="actions">
+83 |         {isLink && <button type="button" className="secondary" onClick={() => setRelinking(true)}>Change link</button>}
+84 |         <button type="button" onClick={() => { setEditing(false); onChange(draft); }}>Done</button>
+85 |         <button type="button" className="secondary" onClick={() => setEditing(false)}>Cancel</button>
+86 |       </div>
+87 |     </div>}
+88 |     {editing && relinking && <LinkChecker initial={item.url} action="Use this link" onCancel={() => setRelinking(false)} onVerified={info => { onChange({ replace: { ...info, origin: 'link', activity: item.activity || '' } }); setRelinking(false); setEditing(false); }} />}
+89 |   </li>;
+90 | }
+91 |
+92 | export default function MediaEditor({ media, onChange, items, activity = '', headings = [], label, disabled = false, note }) {
+93 |   const [panel, setPanel] = useState(null);
+94 |   const [busy, setBusy] = useState(false);
+95 |   const [error, setError] = useState('');
+96 |   const [added, setAdded] = useState('');
+97 |   const addedRef = useRef(null);
+98 |   const full = media.length >= mediaLimits.perLesson;
+99 |   useReportPending(busy);
+100 |   useEffect(() => { if (added) addedRef.current?.scrollIntoView({ block: 'nearest' }); }, [added]);
 ```
 
-- **Line 76:** Error message for the upload panel.
-- **Line 77:** True when the lesson already holds the maximum number of attachments.
-- **Line 78:** Helper that appends new attachments to the lesson’s list, each tagged with this editor’s activity and a temporary key.
-- **Line 79:** Blank line separates related sections for readability; it performs no operation.
-- **Line 80:** Handles the file chooser: the function runs after the coach picks one or more files.
-- **Line 81:** Copies the chosen files into a normal array.
-- **Line 82:** Clears the input so choosing the same file again still triggers a change.
-- **Line 83:** Nothing chosen means nothing to do.
-- **Line 84:** Clears the old error.
-- **Line 85:** Refuses the whole batch if it would exceed the 12-attachment limit.
-- **Line 86:** Checks every file before uploading any of them.
-- **Line 87:** Looks up the file’s type among the allowed ones.
-- **Line 88:** Unsupported type: explains which types work and stops.
-- **Line 89:** File too large for its kind: explains the limits and suggests a YouTube link for long videos, then stops.
+- **Line 76:** Starts the “Show with” selector label.
+- **Line 77:** The “Show with” dropdown, detached from the lesson form.
+- **Line 78:** First option: not tied to one activity.
+- **Line 79:** One option for each activity heading; the heading doubles as the key.
+- **Line 80:** Closes the dropdown.
+- **Line 81:** Closes the label.
+- **Line 82:** Starts the panel’s buttons.
+- **Line 83:** Links offer a Change link button, which opens the checker.
+- **Line 84:** Done closes the panel and sends the draft caption and activity to the parent, which updates the list.
+- **Line 85:** Cancel closes the panel and discards the draft.
+- **Line 86:** Closes the div element.
+- **Line 87:** Closes the result area.
+- **Line 88:** When changing the link, shows the checker pre-filled with the current address. A confirmed new link replaces this attachment (a new entry that keeps the activity), then both panels close.
+- **Line 89:** Ends the list item.
 - **Line 90:** Closes the preceding block (function, object, or statement body).
-- **Line 91:** Shows the uploading state.
-- **Line 92:** Collects files uploaded so far during this batch.
-- **Line 93:** Starts the guarded upload.
-- **Line 94:** Uploads files one at a time, marking each as pending (not yet saved with a lesson). await waits for each server reply.
-- **Line 95:** Adds all uploaded files to the lesson’s list.
-- **Line 96:** Closes the add panel.
-- **Line 97:** Handles an upload failure.
-- **Line 98:** Deletes any files from this batch that did upload, so a failed batch leaves nothing behind.
-- **Line 99:** Shows the failure reason (for example “contents do not match a supported picture or video type”).
-- **Line 100:** Always ends the busy state.
+- **Line 91:** Blank line separates related sections for readability; it performs no operation.
+- **Line 92:** Exports MediaEditor. media is the whole lesson’s list, onChange replaces it, items is the subset to display here, activity is the heading new attachments get, headings lists all activities for the dropdown, and note explains special cases.
+- **Line 93:** Which add panel is open: none, the chooser, upload or link.
+- **Line 94:** True while files are uploading.
+- **Line 95:** The message shown when the check fails.
+- **Line 96:** State holding the confirmation sentence shown after something is added.
+- **Line 97:** A ref (a pointer to a page element) for that confirmation message, so it can be scrolled into view.
+- **Line 98:** True when the lesson already holds the maximum number of attachments.
+- **Line 99:** An upload in progress counts as unfinished work.
+- **Line 100:** When a confirmation appears, scrolls it gently into view (block: nearest moves the page only as far as needed), so the coach sees that the media was added without the page jumping elsewhere.
 
 ### Lines 101–125
 
 ```text
-101 |   }
-102 |   function change(item, patch) {
-103 |     if (patch.replace) {
-104 |       discardUpload(item);
-105 |       onChange(media.map(entry => mediaKey(entry) === mediaKey(item) ? { ...patch.replace, clientKey: newKey(), title: patch.replace.title } : entry));
-106 |       return;
-107 |     }
-108 |     onChange(media.map(entry => mediaKey(entry) === mediaKey(item) ? { ...entry, ...patch } : entry));
-109 |   }
-110 |   function remove(item) {
-111 |     discardUpload(item);
-112 |     onChange(media.filter(entry => mediaKey(entry) !== mediaKey(item)));
-113 |   }
-114 |   return <div className="media-editor">
-115 |     {label && <h4>{label}</h4>}
-116 |     {note && <small>{note}</small>}
-117 |     {items.length > 0 && <ul className="media-list">{items.map(item => <Attachment key={mediaKey(item)} item={item} headings={headings} disabled={disabled} onChange={patch => change(item, patch)} onRemove={() => remove(item)} />)}</ul>}
-118 |     {items.length === 0 && <small>No pictures or videos yet.</small>}
-119 |     {!panel && <button type="button" className="secondary add-media" disabled={disabled || full || busy} onClick={() => { setPanel('choose'); setError(''); }}>{full ? 'Media limit reached' : 'Add Media'}</button>}
-120 |     {panel && <div className="media-panel">
-121 |       <div className="actions" role="group" aria-label="How to add media">
-122 |         <button type="button" className={panel === 'upload' ? '' : 'secondary'} aria-pressed={panel === 'upload'} disabled={busy} onClick={() => { setPanel('upload'); setError(''); }}>Upload picture or video</button>
-123 |         <button type="button" className={panel === 'link' ? '' : 'secondary'} aria-pressed={panel === 'link'} disabled={busy} onClick={() => { setPanel('link'); setError(''); }}>Paste a link</button>
-124 |         <button type="button" className="secondary" disabled={busy} onClick={() => setPanel(null)}>Close</button>
-125 |       </div>
+101 |   const add = list => {
+102 |     onChange(current => [...current, ...list.map(entry => ({ ...entry, activity, clientKey: newKey() }))]);
+103 |     setAdded(list.length === 1 ? `Added “${list[0].title || 'your media'}”.` : `Added ${list.length} files.`);
+104 |   };
+105 |
+106 |   async function upload(event) {
+107 |     const files = [...event.target.files];
+108 |     event.target.value = '';
+109 |     if (!files.length) return;
+110 |     setError('');
+111 |     if (media.length + files.length > mediaLimits.perLesson) { setError(`A lesson can have at most ${mediaLimits.perLesson} pictures and videos.`); return; }
+112 |     for (const file of files) {
+113 |       const kind = uploadTypes[file.type];
+114 |       if (!kind) { setError(`“${file.name}” is not a supported file. Use PNG, JPEG, GIF or WebP pictures, or MP4 or WebM videos.`); return; }
+115 |       if (file.size > mediaLimits[kind]) { setError(`“${file.name}” is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.`); return; }
+116 |     }
+117 |     setBusy(true);
+118 |     const uploaded = [];
+119 |     try {
+120 |       for (const file of files) uploaded.push({ ...(await uploadFile(file)), pending: true });
+121 |       add(uploaded);
+122 |       setPanel(null);
+123 |     } catch (failure) {
+124 |       for (const item of uploaded) discardUpload(item);
+125 |       setError(failure.message);
 ```
 
-- **Line 101:** Closes the preceding block (function, object, or statement body).
-- **Line 102:** Applies an edit to one attachment.
-- **Line 103:** A replace patch means the link was changed to a new checked link.
-- **Line 104:** If the old attachment was an unsaved upload it is deleted from the server first.
-- **Line 105:** Swaps the old attachment for the new one in the list, giving it a fresh temporary key.
-- **Line 106:** Stops here for the replace case.
-- **Line 107:** Closes the preceding block (function, object, or statement body).
-- **Line 108:** Ordinary edits merge the changed caption or activity into the matching attachment and keep the rest.
-- **Line 109:** Closes the preceding block (function, object, or statement body).
-- **Line 110:** Removes one attachment.
-- **Line 111:** Deletes an unsaved upload on the server immediately; saved attachments are removed when the lesson is saved.
-- **Line 112:** Removes it from the list.
-- **Line 113:** Closes the preceding block (function, object, or statement body).
-- **Line 114:** Starts the editor markup.
-- **Line 115:** Optional heading for this group.
-- **Line 116:** Optional explanatory note.
-- **Line 117:** When there are attachments to show, lists them as Attachment components.
-- **Line 118:** Otherwise says there are none yet.
-- **Line 119:** The Add Media button, shown while no add panel is open. It is disabled when the activity has no usable heading, at the attachment limit, or while uploading.
-- **Line 120:** The add panel.
-- **Line 121:** A group of buttons for choosing how to add media.
-- **Line 122:** Upload button; aria-pressed tells screen readers whether it is the chosen mode.
-- **Line 123:** Paste-a-link button, same idea.
-- **Line 124:** Close button that hides the panel.
-- **Line 125:** Closes the div element.
+- **Line 101:** Defines add, which appends new attachments to the lesson’s list.
+- **Line 102:** Uses the functional form of the setter: it receives the newest list (current) instead of the list from an earlier render, so a slow upload or another editor can never overwrite attachments added in the meantime.
+- **Line 103:** Shows a confirmation, naming the item (or the number of files).
+- **Line 104:** Closes the preceding block and ends the statement.
+- **Line 105:** Blank line separates related sections for readability; it performs no operation.
+- **Line 106:** Handles the file chooser: the function runs after the coach picks one or more files.
+- **Line 107:** Copies the chosen files into a normal array.
+- **Line 108:** Clears the input so choosing the same file again still triggers a change.
+- **Line 109:** Nothing chosen means nothing to do.
+- **Line 110:** Clears the old error.
+- **Line 111:** Refuses the whole batch if it would exceed the 12-attachment limit.
+- **Line 112:** Checks every file before uploading any of them.
+- **Line 113:** Looks up the file’s type among the allowed ones.
+- **Line 114:** Unsupported type: explains which types work and stops.
+- **Line 115:** File too large for its kind: explains the limits and suggests a YouTube link for long videos, then stops.
+- **Line 116:** Closes the preceding block (function, object, or statement body).
+- **Line 117:** Shows the uploading state.
+- **Line 118:** Renamed from added to uploaded, because added is now the confirmation message state.
+- **Line 119:** Starts the guarded request.
+- **Line 120:** Uploads files one at a time and marks each as not yet saved with a lesson.
+- **Line 121:** Adds all uploaded files to the lesson’s list.
+- **Line 122:** Closes the add panel.
+- **Line 123:** Handles an upload failure.
+- **Line 124:** If any upload fails, deletes the files of this batch that did upload.
+- **Line 125:** Shows the failure reason (for example “contents do not match a supported picture or video type”).
 
-### Lines 126–138
+### Lines 126–150
 
 ```text
-126 |       {panel === 'choose' && <small>Choose how to add a picture or video: upload a file from this device, or paste a YouTube or picture link.</small>}
-127 |       {panel === 'upload' && <div className="media-panel-body">
-128 |         <label>Choose files
-129 |           <input type="file" accept={accept} multiple disabled={busy} onChange={upload} />
-130 |           <small>PNG, JPEG, GIF, WebP pictures up to 6 MB. MP4 or WebM videos up to 20 MB. Longer videos: use a YouTube link.</small>
-131 |         </label>
-132 |         {busy && <p role="status">Uploading and checking the file…</p>}
-133 |       </div>}
-134 |       {panel === 'link' && <LinkChecker action="Add to this activity" onCancel={() => setPanel(null)} onVerified={info => { add([{ ...info, origin: 'link' }]); setPanel(null); }} />}
-135 |       {error && <p className="error" role="alert">{error}</p>}
-136 |     </div>}
-137 |   </div>;
-138 | }
+126 |     } finally { setBusy(false); }
+127 |   }
+128 |   function change(item, patch) {
+129 |     if (patch.replace) {
+130 |       discardUpload(item);
+131 |       onChange(current => current.map(entry => mediaKey(entry) === mediaKey(item) ? { ...patch.replace, clientKey: newKey(), title: patch.replace.title } : entry));
+132 |       return;
+133 |     }
+134 |     onChange(current => current.map(entry => mediaKey(entry) === mediaKey(item) ? { ...entry, ...patch } : entry));
+135 |   }
+136 |   function remove(item) {
+137 |     discardUpload(item);
+138 |     onChange(current => current.filter(entry => mediaKey(entry) !== mediaKey(item)));
+139 |   }
+140 |   const openPanel = mode => { setPanel(mode); setError(''); setAdded(''); };
+141 |   return <div className="media-editor">
+142 |     {label && <h4>{label}</h4>}
+143 |     {note && <small>{note}</small>}
+144 |     {items.length > 0 && <ul className="media-list">{items.map(item => <Attachment key={mediaKey(item)} item={item} headings={headings} disabled={disabled} onChange={patch => change(item, patch)} onRemove={() => remove(item)} />)}</ul>}
+145 |     {items.length === 0 && <small>No pictures or videos yet.</small>}
+146 |     {added && <p ref={addedRef} className="success media-added" role="status">{added} It is saved with the lesson when you press Save.</p>}
+147 |     {!panel && <button type="button" className="secondary add-media" disabled={disabled || full || busy} onClick={() => openPanel('choose')}>{full ? 'Media limit reached' : 'Add Media'}</button>}
+148 |     {panel && <div className="media-panel">
+149 |       <div className="actions" role="group" aria-label="How to add media">
+150 |         <button type="button" className={panel === 'upload' ? '' : 'secondary'} aria-pressed={panel === 'upload'} disabled={busy} onClick={() => openPanel('upload')}>Upload picture or video</button>
 ```
 
-- **Line 126:** Before a mode is chosen, a hint explains the two ways to add media.
-- **Line 127:** Upload mode.
-- **Line 128:** Labeled file chooser.
-- **Line 129:** The file input: accept limits the offered types, multiple allows several files, and choosing files calls upload.
-- **Line 130:** Helper text with the size limits.
-- **Line 131:** Closes the label.
-- **Line 132:** While uploading, shows a status message.
-- **Line 133:** Closes upload mode.
-- **Line 134:** Link mode: shows the LinkChecker; when a link is confirmed it is added to the list and the panel closes.
-- **Line 135:** Shows any upload error.
-- **Line 136:** Closes the panel.
-- **Line 137:** Closes the div element and the returned expression.
-- **Line 138:** Closes the preceding block (function, object, or statement body).
+- **Line 126:** Always ends the busy state.
+- **Line 127:** Closes the preceding block (function, object, or statement body).
+- **Line 128:** Applies an edit to one attachment.
+- **Line 129:** A replace patch means the link was changed to a new checked link.
+- **Line 130:** If the old attachment was an unsaved upload it is deleted from the server first.
+- **Line 131:** For a changed link, swaps the old attachment for the new one, again using the newest list.
+- **Line 132:** Stops here for the replace case.
+- **Line 133:** Closes the preceding block (function, object, or statement body).
+- **Line 134:** For ordinary edits, merges the changes into the matching attachment of the newest list.
+- **Line 135:** Closes the preceding block (function, object, or statement body).
+- **Line 136:** Removes one attachment.
+- **Line 137:** Deletes an unsaved upload on the server immediately; saved attachments are removed when the lesson is saved.
+- **Line 138:** Removes the attachment from the newest list.
+- **Line 139:** Closes the preceding block (function, object, or statement body).
+- **Line 140:** Helper that opens a panel mode and clears the previous error and confirmation.
+- **Line 141:** Starts the editor markup.
+- **Line 142:** Optional heading for this group.
+- **Line 143:** Optional explanatory note.
+- **Line 144:** When there are attachments to show, lists them as Attachment components.
+- **Line 145:** Otherwise says there are none yet.
+- **Line 146:** Shows the green confirmation (announced to screen readers) and reminds the coach that the media is saved when the lesson is saved.
+- **Line 147:** The Add Media button, now opening the panel through openPanel.
+- **Line 148:** The add panel.
+- **Line 149:** A group of buttons for choosing how to add media.
+- **Line 150:** Upload button, switching mode through openPanel.
+
+### Lines 151–166
+
+```text
+151 |         <button type="button" className={panel === 'link' ? '' : 'secondary'} aria-pressed={panel === 'link'} disabled={busy} onClick={() => openPanel('link')}>Paste a link</button>
+152 |         <button type="button" className="secondary" disabled={busy} onClick={() => setPanel(null)}>Close</button>
+153 |       </div>
+154 |       {panel === 'choose' && <small>Choose how to add a picture or video: upload a file from this device, or paste a YouTube or picture link.</small>}
+155 |       {panel === 'upload' && <div className="media-panel-body" data-media-pending={busy ? 'true' : undefined}>
+156 |         <label>Choose files
+157 |           <input form={detached} type="file" accept={accept} multiple disabled={busy} onChange={upload} />
+158 |           <small>PNG, JPEG, GIF, WebP pictures up to 6 MB. MP4 or WebM videos up to 20 MB. Longer videos: use a YouTube link.</small>
+159 |         </label>
+160 |         {busy && <p role="status">Uploading and checking the file…</p>}
+161 |       </div>}
+162 |       {panel === 'link' && <LinkChecker action={activity ? 'Add to this activity' : 'Add to the whole lesson'} onCancel={() => setPanel(null)} onVerified={info => { add([{ ...info, origin: 'link' }]); setPanel(null); }} />}
+163 |       {error && <p className="error" role="alert">{error}</p>}
+164 |     </div>}
+165 |   </div>;
+166 | }
+```
+
+- **Line 151:** Paste-a-link button, switching mode through openPanel.
+- **Line 152:** Close button that hides the panel.
+- **Line 153:** Closes the div element.
+- **Line 154:** Before a mode is chosen, a hint explains the two ways to add media.
+- **Line 155:** The upload area is marked as unfinished while a file is uploading.
+- **Line 156:** Labeled file chooser.
+- **Line 157:** The file chooser, detached from the lesson form.
+- **Line 158:** Helper text with the size limits.
+- **Line 159:** Closes the label.
+- **Line 160:** While uploading, shows a status message.
+- **Line 161:** Closes upload mode.
+- **Line 162:** The link area. Its confirm button says “Add to this activity” under an activity and “Add to the whole lesson” in the whole-lesson area; confirming adds the link and closes the panel.
+- **Line 163:** Shows any upload error.
+- **Line 164:** Closes the result area.
+- **Line 165:** Closes the div element and the returned expression.
+- **Line 166:** Closes the preceding block (function, object, or statement body).
 
 ## server/media-sniff.js
 
@@ -6818,7 +7056,7 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 96:** The attachments are still there after the restart.
 - **Line 97:** The uploaded file’s bytes are still intact.
 - **Line 98:** Updating with an empty list removes every attachment.
-- **Line 99:** None remain.
+- **Line 99:** Unsaved uploads are not listed as lesson attachments.
 - **Line 100:** Creates a second lesson with one link.
 
 ### Lines 101–125
@@ -6853,7 +7091,7 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 
 - **Line 101:** Exactly one attachment exists.
 - **Line 102:** Deletes that lesson.
-- **Line 103:** Its attachments are removed with it.
+- **Line 103:** Unsaved uploads are not listed as lesson attachments.
 - **Line 104:** Checks the table directly: no rows remain.
 - **Line 105:** Closes the callback body and the function call that received it.
 - **Line 106:** Blank line separates related sections for readability; it performs no operation.
@@ -7013,7 +7251,7 @@ Small Vite plugin that forwards every /api request from the development web page
 - **Line 14:** If the answer already started, just closes the connection because the headers cannot be changed.
 - **Line 15:** Otherwise sends status 502 (Bad Gateway) as JSON.
 - **Line 16:** Sends a plain-language message; the page shows it as a connection problem.
-- **Line 17:** Ends the error handler.
+- **Line 17:** Ends the answer callback and the request options.
 - **Line 18:** If the browser disconnects, cancels the backend request so nothing keeps running.
 - **Line 19:** Streams the browser’s request body (for example an uploaded file) to the backend.
 - **Line 20:** Ends the /api handler.

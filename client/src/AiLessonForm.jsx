@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
-import MediaEditor from './MediaEditor.jsx';
+import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
 import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 
@@ -15,12 +15,13 @@ export default function AiLessonForm({ onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const locked = useRef(false);
+  const [registry] = useState(pendingRegistry);
   function edit(key, value) {
     setDraft(current => ({ ...current, [key]: value }));
     setApproved(false);
   }
   function setMedia(next) {
-    setMediaList(next);
+    setMediaList(current => typeof next === 'function' ? next(current) : next);
     setApproved(false);
   }
   async function findMedia(source) {
@@ -45,6 +46,11 @@ export default function AiLessonForm({ onSaved, onCancel }) {
     if (locked.current) return;
     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
+    if (draft && registry.count()) {
+      setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+      document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+      return;
+    }
     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
     locked.current = true;
@@ -56,7 +62,7 @@ export default function AiLessonForm({ onSaved, onCancel }) {
       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
       if (draft) {
         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
-        onSaved(data);
+        onSaved(data, body.media.length);
       } else {
         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
         setDraft(data.draft);
@@ -72,6 +78,7 @@ export default function AiLessonForm({ onSaved, onCancel }) {
     }
   }
   return (
+    <PendingMedia.Provider value={registry}>
     <section className="form-panel" aria-labelledby="ai-heading">
       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
@@ -114,5 +121,6 @@ export default function AiLessonForm({ onSaved, onCancel }) {
         {error && <p role="alert" className="error">{error}</p>}
       </form>
     </section>
+    </PendingMedia.Provider>
   );
 }

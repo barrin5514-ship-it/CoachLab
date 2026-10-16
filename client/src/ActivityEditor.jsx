@@ -20,7 +20,7 @@ export default function ActivityEditor({ value, onChange, label = 'Exercises and
     onChange(joinActivities(next.map(card => card.text)));
   }
   function edit(card, text) {
-    if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(renameActivity(media, headingOf(card.text), headingOf(text)));
+    if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(current => renameActivity(current, headingOf(card.text), headingOf(text)));
     update(cards.map(item => item.id === card.id ? { ...item, text } : item));
   }
   function swap(index, direction) {
