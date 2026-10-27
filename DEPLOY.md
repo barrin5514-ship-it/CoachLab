@@ -2,6 +2,8 @@
 
 Prepared October 27, 2026. **Nothing has been deployed by this preparation.** Follow these steps only when you decide to publish. Keep the existing local `.env`, Neon Development project, SQLite files and backups unchanged. Local accounts and lessons are not copied into the new production database.
 
+**Deployment hold:** the October 27 final audit reports 11 findings (2 high, 9 moderate), including Express/body-parser denial-of-service exposure. npm offers no fix for the reported paths. The dependency lockfile is unchanged from the pre-preparation baseline. Resolve or explicitly review these findings in a separate security task before publishing; do not run automatic/forced upgrades. See PRODUCTION_PREPARATION_VERIFICATION.md for actual checks and limits.
+
 ## What will run
 
 Render runs Express, which serves both the API and the built React files from `client/dist`. Neon stores accounts, lessons and uploaded media. PostgreSQL is required in production; there is no SQLite fallback. The browser and API share one HTTPS origin, so a separate frontend service and cross-origin setup are unnecessary.
