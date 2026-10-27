@@ -1,6 +1,6 @@
 # CoachLab code walkthrough
 
-Source walkthrough updated for the login and accounts work on 2026-10-16 (on top of the lesson manager and media upgrade). Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser results are reported in AUTH_SECURITY_REPORT.md.
+Source walkthrough updated for production deployment preparation on 2026-10-27 (on top of the login, lesson manager and media work). Local development explicitly uses Neon PostgreSQL; SQLite remains the default alternative. Exact listing coverage is checked against files; real-browser results are reported in AUTH_SECURITY_REPORT.md.
 
 Every line, including blank lines and closing delimiters, is listed below. Numbered code blocks are for reading; remove line-number prefixes before copying code. Paths are exact repository-relative paths, with the current absolute workspace path given for each file.
 
@@ -18,7 +18,7 @@ Media: every activity card in LessonForm (and every section of an AI draft) show
 
 Accounts: main.jsx now mounts Gate, which asks GET /api/auth/get-session whether the browser has a valid session and shows either AuthScreen (sign in, create account, forgot password, choose new password) or the dashboard App. The login routes under /api/auth are served by the Better Auth library (server/auth.js): passwords are hashed with scrypt, sessions live in the database and are carried by an HttpOnly SameSite=Lax cookie, sign-in is rate limited per address and per account, and password reset links are single-use and expire after an hour (until an email provider exists they are printed in the backend window by mailer.js). Every other /api route passes through one gate in app.js that requires a valid session and, for changes, an allowed Origin; the signed-in coach's id is passed to the stores, which filter every query by owner_id, so another coach's lessons and media answer 404. Lessons created before accounts have no owner and are invisible to everyone until the operator runs npm run claim-lessons (claim.js), which defaults to a dry run, writes a verified backup, and only touches unowned lessons.
 
-Prisma generation emits ignored TypeScript and compiled ESM. Remote migrations are not part of application startup or these lesson-manager changes. Existing table constraints remain in effect. Isolated PostgreSQL tests use explicit random schemas; ordinary npm test uses disposable SQLite plus pure browser-data helpers.
+Prisma generation emits ignored TypeScript and compiled ESM. Development startup does not run PostgreSQL migrations. The separately approved production npm start now validates settings and runs Prisma migrate deploy before serving Express; see DEPLOY.md. Existing table constraints remain in effect. Isolated PostgreSQL tests use explicit random schemas; ordinary npm test uses disposable SQLite plus pure browser-data helpers.
 
 ## Reading the syntax
 

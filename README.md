@@ -248,3 +248,7 @@ CoachLab now requires an account. Each coach sees only their own lessons and med
 - Required setting: `BETTER_AUTH_SECRET` (96 random characters) in the ignored `.env`; the server refuses to start without it. See `.env.example` for all settings.
 - Open the app at `COACHLAB_PUBLIC_URL` (default http://127.0.0.1:5174). Until an email provider is configured, password reset links are printed in the backend window.
 - Lessons from before accounts have no owner and are hidden. Hand them to a registered coach with `npm run claim-lessons -- --email you@example.com --all-unclaimed` (dry run), then add `--confirm`. See AUTH_SECURITY_REPORT.md for the full procedure, security measures, test results and limits.
+
+## Production deployment preparation — 2026-10-27
+
+See [DEPLOY.md](DEPLOY.md) for the separate Neon production project, one Render web service, environment names, commands and post-deployment checks. `npm run build` now installs build dependencies, generates/compiles Prisma and builds React; `npm run build:client` is the original React-only build. `npm start` is production-only: it validates explicit settings, runs pending Prisma deploy migrations, then starts Express. Do not use it to start local development. Existing dev:server/dev:client commands and the ignored development .env remain unchanged. Production reset is disabled with contact-the-coach guidance; no admin recovery tool or email delivery has been added. No deployment has been performed.
