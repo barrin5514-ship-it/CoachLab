@@ -9,6 +9,7 @@ import { sniffMedia } from './media-sniff.js';
 import { mediaLimits, uploadTypes } from '../client/src/media.js';
 import { disciplines } from '../client/src/lesson-draft.js';
 import { serveFrontend } from './web.js';
+import { productionApiGuard } from './request-guard.js';
 
 const orphanAgeMs = 24 * 60 * 60 * 1000;
 const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
@@ -43,8 +44,9 @@ export function createApp(database, options = {}) {
     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
     next();
   });
+  if (options.production) app.use('/api', productionApiGuard());
   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
-  app.use(express.json({ limit: '32kb' }));
+  app.use(express.json({ limit: '32kb', inflate: !options.production }));
   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
   let suggestions = [];
   let suggesting = false;
@@ -125,7 +127,7 @@ export function createApp(database, options = {}) {
     if (!lessons.media) return response.json([]);
     response.json(await lessons.media.list(request.user.id));
   });
-  const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
+  const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024, inflate: !options.production })(request, response, error => {
     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
     next();
   });

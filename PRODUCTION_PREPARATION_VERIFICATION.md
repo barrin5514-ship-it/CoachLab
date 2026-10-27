@@ -1,5 +1,7 @@
 # Production preparation verification — October 27, 2026
 
+**Later same-day update:** the separately authorized security triage resolved all 11 findings with compatible dependency updates and verified additional production request protections. See SECURITY_NOTES.md for the current zero-audit result and conditional demo decision. The original report below is retained as historical evidence.
+
 Implementation and local verification are complete; **public deployment is on hold for dependency security review**. Nothing was deployed or pushed, no production credentials were supplied, and no remote migration or database query was executed by this work. Existing local `.env` values were neither read nor edited. Development commands and the separate development database factory are unchanged.
 
 ## Fresh results

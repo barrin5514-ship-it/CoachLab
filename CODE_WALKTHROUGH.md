@@ -1512,25 +1512,25 @@ Production preparation: this file connects deployment configuration to the exist
 9 | import { mediaLimits, uploadTypes } from '../client/src/media.js';
 10 | import { disciplines } from '../client/src/lesson-draft.js';
 11 | import { serveFrontend } from './web.js';
-12 |
-13 | const orphanAgeMs = 24 * 60 * 60 * 1000;
-14 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
-15 |
-16 | function sendFile(request, response, file) {
-17 |   const data = Buffer.from(file.data);
-18 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
-19 |   const range = request.headers.range;
-20 |   if (!range) return response.status(200).send(data);
-21 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-22 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
-23 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
-24 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
-25 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
-26 | }
-27 |
-28 | export function createApp(database, options = {}) {
-29 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
-30 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
+12 | import { productionApiGuard } from './request-guard.js';
+13 |
+14 | const orphanAgeMs = 24 * 60 * 60 * 1000;
+15 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
+16 |
+17 | function sendFile(request, response, file) {
+18 |   const data = Buffer.from(file.data);
+19 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+20 |   const range = request.headers.range;
+21 |   if (!range) return response.status(200).send(data);
+22 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+23 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
+24 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
+25 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
+26 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
+27 | }
+28 |
+29 | export function createApp(database, options = {}) {
+30 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
 ```
 
 - **Line 1:** Imports Express from the existing installed package.
@@ -1544,393 +1544,397 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 9:** Imports the shared size limits and allowed upload types.
 - **Line 10:** Imports the six discipline names so the suggest route can reject unknown ones.
 - **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 12:** Blank line separates related sections; it performs no operation.
-- **Line 13:** One day in milliseconds: unsaved uploads older than this are purged.
-- **Line 14:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
-- **Line 15:** Blank line separates related sections; it performs no operation.
-- **Line 16:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
-- **Line 17:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
-- **Line 18:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
-- **Line 19:** Reads the Range header the browser sends when playing or seeking a video.
-- **Line 20:** Without a Range header, sends the whole file with status 200.
-- **Line 21:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
-- **Line 22:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
-- **Line 23:** Works out the last byte: the given end (capped at the file end) or the end of the file.
-- **Line 24:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
-- **Line 25:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
-- **Line 26:** Closes createApp.
-- **Line 27:** Blank line separates related sections; it performs no operation.
-- **Line 28:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
-- **Line 29:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
-- **Line 30:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
+- **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 13:** Blank line separates related sections; it performs no operation.
+- **Line 14:** One day in milliseconds: unsaved uploads older than this are purged.
+- **Line 15:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
+- **Line 16:** Blank line separates related sections; it performs no operation.
+- **Line 17:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
+- **Line 18:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
+- **Line 19:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
+- **Line 20:** Reads the Range header the browser sends when playing or seeking a video.
+- **Line 21:** Without a Range header, sends the whole file with status 200.
+- **Line 22:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
+- **Line 23:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
+- **Line 24:** Works out the last byte: the given end (capped at the file end) or the end of the file.
+- **Line 25:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
+- **Line 26:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
+- **Line 27:** Closes createApp.
+- **Line 28:** Blank line separates related sections; it performs no operation.
+- **Line 29:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
+- **Line 30:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
 
 ### Lines 31–60
 
 ```text
-31 |   const { auth, allowedOrigins = [] } = options;
-32 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
-33 |   const app = express();
-34 |   app.disable('x-powered-by');
-35 |   if (options.production) {
-36 |     app.set('trust proxy', 1);
-37 |     app.use((request, response, next) => {
-38 |       request.headers['x-forwarded-for'] = request.ip;
-39 |       next();
-40 |     });
-41 |   }
-42 |   app.use('/api', (request, response, next) => {
-43 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-44 |     next();
-45 |   });
-46 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
-47 |   app.use(express.json({ limit: '32kb' }));
-48 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-49 |   let suggestions = [];
-50 |   let suggesting = false;
-51 |
-52 |   async function verifiedMedia(rawMedia) {
-53 |     const checked = validateMediaList(rawMedia);
-54 |     if (checked.error) return { error: checked.error };
-55 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
-56 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
-57 |     const media = [];
-58 |     for (const [index, result] of results.entries()) {
-59 |       const item = checked.media[index];
-60 |       if (result.status === 'rejected') {
+31 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
+32 |   const { auth, allowedOrigins = [] } = options;
+33 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
+34 |   const app = express();
+35 |   app.disable('x-powered-by');
+36 |   if (options.production) {
+37 |     app.set('trust proxy', 1);
+38 |     app.use((request, response, next) => {
+39 |       request.headers['x-forwarded-for'] = request.ip;
+40 |       next();
+41 |     });
+42 |   }
+43 |   app.use('/api', (request, response, next) => {
+44 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+45 |     next();
+46 |   });
+47 |   if (options.production) app.use('/api', productionApiGuard());
+48 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
+49 |   app.use(express.json({ limit: '32kb', inflate: !options.production }));
+50 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+51 |   let suggestions = [];
+52 |   let suggesting = false;
+53 |
+54 |   async function verifiedMedia(rawMedia) {
+55 |     const checked = validateMediaList(rawMedia);
+56 |     if (checked.error) return { error: checked.error };
+57 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+58 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
+59 |     const media = [];
+60 |     for (const [index, result] of results.entries()) {
 ```
 
-- **Line 31:** Reads the login adapter and the list of allowed browser origins from the options.
-- **Line 32:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
-- **Line 33:** Creates an Express application object.
-- **Line 34:** Stops Express from announcing itself in a response header.
-- **Line 35:** Enables the hosting proxy behavior only for the explicitly selected production server.
-- **Line 36:** Trusts one proxy hop: Render is the sole public ingress. Do not expose this server directly or add a different proxy chain without reviewing this setting.
-- **Line 37:** Installs request middleware before authentication so subsequent handlers receive the validated proxy address.
-- **Line 38:** Replaces the raw forwarded chain with Express’s nearest trusted client address, preventing Better Auth from accepting a forged leftmost address.
-- **Line 39:** Passes control to the next Express middleware after normalizing the request.
-- **Line 40:** Closes the error callback and registration.
-- **Line 41:** Closes createApp.
-- **Line 42:** For every /api request, adds safety headers before anything else runs.
-- **Line 43:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
-- **Line 44:** Passes control to the next Express middleware after normalizing the request.
-- **Line 45:** Closes the error callback and registration.
-- **Line 46:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
-- **Line 47:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
-- **Line 48:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 49:** Remembers the times of recent media searches for rate limiting.
-- **Line 50:** True while a media search is running, so only one runs at a time.
-- **Line 51:** Blank line separates related sections; it performs no operation.
-- **Line 52:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
-- **Line 53:** Validates and cleans the submitted list.
-- **Line 54:** Returns the validation message if it failed.
-- **Line 55:** Stores without media support (such as a test double) refuse media cleanly.
-- **Line 56:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
-- **Line 57:** The verified entries will be collected here.
-- **Line 58:** Walks through the results in order.
-- **Line 59:** The matching submitted entry.
-- **Line 60:** Handles a failed check.
+- **Line 31:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
+- **Line 32:** Reads the login adapter and the list of allowed browser origins from the options.
+- **Line 33:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
+- **Line 34:** Creates an Express application object.
+- **Line 35:** Stops Express from announcing itself in a response header.
+- **Line 36:** Enables the hosting proxy behavior only for the explicitly selected production server.
+- **Line 37:** Trusts one proxy hop: Render is the sole public ingress. Do not expose this server directly or add a different proxy chain without reviewing this setting.
+- **Line 38:** Installs request middleware before authentication so subsequent handlers receive the validated proxy address.
+- **Line 39:** Replaces the raw forwarded chain with Express’s nearest trusted client address, preventing Better Auth from accepting a forged leftmost address.
+- **Line 40:** Continues only when the request is within its limit and is not compressed.
+- **Line 41:** Closes the error callback and registration.
+- **Line 42:** Closes createApp.
+- **Line 43:** For every /api request, adds safety headers before anything else runs.
+- **Line 44:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
+- **Line 45:** Continues only when the request is within its limit and is not compressed.
+- **Line 46:** Closes the error callback and registration.
+- **Line 47:** Installs the bounded request guard only in production, after proxy normalization and before auth/body handlers. Development keeps its previous behavior.
+- **Line 48:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
+- **Line 49:** Preserves the 32 KB JSON limit and additionally disables automatic decompression in production; the early API guard provides a clearer rejection.
+- **Line 50:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 51:** Remembers the times of recent media searches for rate limiting.
+- **Line 52:** True while a media search is running, so only one runs at a time.
+- **Line 53:** Blank line separates related sections; it performs no operation.
+- **Line 54:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 55:** Validates and cleans the submitted list.
+- **Line 56:** Returns the validation message if it failed.
+- **Line 57:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 58:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
+- **Line 59:** The verified entries will be collected here.
+- **Line 60:** Walks through the results in order.
 
 ### Lines 61–90
 
 ```text
-61 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
-62 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
-63 |       }
-64 |       if (item.id) { media.push(item); continue; }
-65 |       const info = result.value;
-66 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
-67 |     }
-68 |     return { media };
-69 |   }
-70 |   async function saveWithMedia(request, response, save) {
-71 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-72 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
-73 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
-74 |     const result = validateLesson(hasMedia ? fields : request.body);
-75 |     if (result.error) return response.status(400).json({ error: result.error });
-76 |     let media;
-77 |     if (hasMedia) {
-78 |       const checked = await verifiedMedia(rawMedia);
-79 |       if (checked.error) return response.status(400).json({ error: checked.error });
-80 |       media = checked.media;
-81 |     }
-82 |     try {
-83 |       return await save(result.lesson, media);
-84 |     } catch (error) {
-85 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
-86 |       throw error;
-87 |     }
-88 |   }
-89 |
-90 |   app.get('/api/health', (request, response) => {
+61 |       const item = checked.media[index];
+62 |       if (result.status === 'rejected') {
+63 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+64 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+65 |       }
+66 |       if (item.id) { media.push(item); continue; }
+67 |       const info = result.value;
+68 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+69 |     }
+70 |     return { media };
+71 |   }
+72 |   async function saveWithMedia(request, response, save) {
+73 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+74 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+75 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+76 |     const result = validateLesson(hasMedia ? fields : request.body);
+77 |     if (result.error) return response.status(400).json({ error: result.error });
+78 |     let media;
+79 |     if (hasMedia) {
+80 |       const checked = await verifiedMedia(rawMedia);
+81 |       if (checked.error) return response.status(400).json({ error: checked.error });
+82 |       media = checked.media;
+83 |     }
+84 |     try {
+85 |       return await save(result.lesson, media);
+86 |     } catch (error) {
+87 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+88 |       throw error;
+89 |     }
+90 |   }
 ```
 
-- **Line 61:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
-- **Line 62:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
-- **Line 63:** Closes createApp.
-- **Line 64:** Stored attachments are kept as they are.
-- **Line 65:** The successful check result.
-- **Line 66:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
-- **Line 67:** Closes createApp.
-- **Line 68:** Returns the verified list.
+- **Line 61:** The matching submitted entry.
+- **Line 62:** Handles a failed check.
+- **Line 63:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 64:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 65:** Closes createApp.
+- **Line 66:** Stored attachments are kept as they are.
+- **Line 67:** The successful check result.
+- **Line 68:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
 - **Line 69:** Closes createApp.
-- **Line 70:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
-- **Line 71:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 72:** True when the body is an ordinary object that contains a media key.
-- **Line 73:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
-- **Line 74:** Validates the nine lesson fields exactly as before, without the media key.
-- **Line 75:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 76:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
-- **Line 77:** Only when media was sent.
-- **Line 78:** Validates and verifies it before touching the database.
-- **Line 79:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
-- **Line 80:** Uses the verified list.
-- **Line 81:** Closes createApp.
-- **Line 82:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 83:** Calls the store’s save function (create or update) and returns its response.
-- **Line 84:** Catches store errors.
-- **Line 85:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
-- **Line 86:** Any other error continues to the general safe 500 handler.
-- **Line 87:** Closes createApp.
-- **Line 88:** Closes createApp.
-- **Line 89:** Blank line separates related sections; it performs no operation.
-- **Line 90:** Registers the existing GET health route with request/response callback parameters.
+- **Line 70:** Returns the verified list.
+- **Line 71:** Closes createApp.
+- **Line 72:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 73:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 74:** True when the body is an ordinary object that contains a media key.
+- **Line 75:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 76:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 77:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 78:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 79:** Only when media was sent.
+- **Line 80:** Validates and verifies it before touching the database.
+- **Line 81:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 82:** Uses the verified list.
+- **Line 83:** Closes createApp.
+- **Line 84:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 85:** Calls the store’s save function (create or update) and returns its response.
+- **Line 86:** Catches store errors.
+- **Line 87:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 88:** Any other error continues to the general safe 500 handler.
+- **Line 89:** Closes createApp.
+- **Line 90:** Closes createApp.
 
 ### Lines 91–120
 
 ```text
-91 |     response.json({ status: 'ok', service: 'CoachLab API' });
-92 |   });
-93 |   app.get('/api/auth-config', (request, response) => {
-94 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
-95 |   });
-96 |   app.use('/api', async (request, response, next) => {
-97 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
-98 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
-99 |     }
-100 |     const user = await auth.getUser(request);
-101 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
-102 |     request.user = user;
-103 |     next();
-104 |   });
-105 |   app.get('/api/lessons', async (request, response) => {
-106 |     response.json(await lessons.list(request.user.id));
-107 |   });
-108 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
-109 |   app.param('id', (request, response, next, value) => {
-110 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-111 |     request.lessonId = Number(value);
-112 |     next();
-113 |   });
-114 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-115 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
-116 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-117 |     return response.json(saved);
-118 |   }));
-119 |   app.delete('/api/lessons/:id', async (request, response) => {
-120 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+91 |
+92 |   app.get('/api/health', (request, response) => {
+93 |     response.json({ status: 'ok', service: 'CoachLab API' });
+94 |   });
+95 |   app.get('/api/auth-config', (request, response) => {
+96 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
+97 |   });
+98 |   app.use('/api', async (request, response, next) => {
+99 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
+100 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
+101 |     }
+102 |     const user = await auth.getUser(request);
+103 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
+104 |     request.user = user;
+105 |     next();
+106 |   });
+107 |   app.get('/api/lessons', async (request, response) => {
+108 |     response.json(await lessons.list(request.user.id));
+109 |   });
+110 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
+111 |   app.param('id', (request, response, next, value) => {
+112 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+113 |     request.lessonId = Number(value);
+114 |     next();
+115 |   });
+116 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+117 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
+118 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
+119 |     return response.json(saved);
+120 |   }));
 ```
 
-- **Line 91:** Returns the same health JSON as before, normally with HTTP 200.
-- **Line 92:** Closes the error callback and registration.
-- **Line 93:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
-- **Line 94:** Returns public authentication capabilities only, including whether password reset is enabled; no secrets are included.
-- **Line 95:** Closes the error callback and registration.
-- **Line 96:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
-- **Line 97:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
-- **Line 98:** Blocks such a request with 403 and a plain message.
-- **Line 99:** Closes createApp.
-- **Line 100:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
-- **Line 101:** No valid session: answers 401 and never reaches the route.
-- **Line 102:** Remembers who is asking, so every route below can only touch that coach’s data.
-- **Line 103:** Passes control to the next Express middleware after normalizing the request.
-- **Line 104:** Closes the error callback and registration.
-- **Line 105:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 106:** Lists only the signed-in coach’s lessons.
-- **Line 107:** Closes the error callback and registration.
-- **Line 108:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
-- **Line 109:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 110:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 111:** Converts the validated URL ID to a number and stores it on this request.
-- **Line 112:** Passes control to the next Express middleware after normalizing the request.
-- **Line 113:** Closes the error callback and registration.
-- **Line 114:** Updating a lesson goes through saveWithMedia as well.
-- **Line 115:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
-- **Line 116:** A missing lesson still returns 404.
-- **Line 117:** Returns the updated lesson.
-- **Line 118:** Closes the handler and the route.
-- **Line 119:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 120:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
+- **Line 91:** Blank line separates related sections; it performs no operation.
+- **Line 92:** Registers the existing GET health route with request/response callback parameters.
+- **Line 93:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 94:** Closes the error callback and registration.
+- **Line 95:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
+- **Line 96:** Returns public authentication capabilities only, including whether password reset is enabled; no secrets are included.
+- **Line 97:** Closes the error callback and registration.
+- **Line 98:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
+- **Line 99:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
+- **Line 100:** Blocks such a request with 403 and a plain message.
+- **Line 101:** Closes createApp.
+- **Line 102:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
+- **Line 103:** No valid session: answers 401 and never reaches the route.
+- **Line 104:** Remembers who is asking, so every route below can only touch that coach’s data.
+- **Line 105:** Continues only when the request is within its limit and is not compressed.
+- **Line 106:** Closes the error callback and registration.
+- **Line 107:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 108:** Lists only the signed-in coach’s lessons.
+- **Line 109:** Closes the error callback and registration.
+- **Line 110:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
+- **Line 111:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 112:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 113:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 114:** Continues only when the request is within its limit and is not compressed.
+- **Line 115:** Closes the error callback and registration.
+- **Line 116:** Updating a lesson goes through saveWithMedia as well.
+- **Line 117:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
+- **Line 118:** A missing lesson still returns 404.
+- **Line 119:** Returns the updated lesson.
+- **Line 120:** Closes the handler and the route.
 
 ### Lines 121–150
 
 ```text
-121 |     response.status(204).end();
-122 |   });
-123 |
-124 |   app.get('/api/lesson-media', async (request, response) => {
-125 |     if (!lessons.media) return response.json([]);
-126 |     response.json(await lessons.media.list(request.user.id));
-127 |   });
-128 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
-129 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
-130 |     next();
-131 |   });
-132 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
-133 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
-134 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-135 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
-136 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-137 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
-138 |     const detected = sniffMedia(data);
-139 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
-140 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
-141 |     let name = '';
-142 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
-143 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
-144 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-145 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
-146 |   });
-147 |   app.get('/api/media/:id/file', async (request, response) => {
-148 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
-149 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
-150 |     sendFile(request, response, file);
+121 |   app.delete('/api/lessons/:id', async (request, response) => {
+122 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+123 |     response.status(204).end();
+124 |   });
+125 |
+126 |   app.get('/api/lesson-media', async (request, response) => {
+127 |     if (!lessons.media) return response.json([]);
+128 |     response.json(await lessons.media.list(request.user.id));
+129 |   });
+130 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024, inflate: !options.production })(request, response, error => {
+131 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+132 |     next();
+133 |   });
+134 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+135 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+136 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+137 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+138 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+139 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+140 |     const detected = sniffMedia(data);
+141 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+142 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+143 |     let name = '';
+144 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+145 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+146 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+147 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
+148 |   });
+149 |   app.get('/api/media/:id/file', async (request, response) => {
+150 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
 ```
 
-- **Line 121:** Finishes a successful deletion response without a JSON body.
-- **Line 122:** Closes the error callback and registration.
-- **Line 123:** Blank line separates related sections; it performs no operation.
-- **Line 124:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
-- **Line 125:** Stores without media support return an empty list.
-- **Line 126:** Lists only the signed-in coach’s attachments.
-- **Line 127:** Closes the error callback and registration.
-- **Line 128:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
-- **Line 129:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
-- **Line 130:** Passes control to the next Express middleware after normalizing the request.
-- **Line 131:** Closes the error callback and registration.
-- **Line 132:** New route: uploads one file. The browser sends the file bytes as the body.
-- **Line 133:** Refuses when the store has no media support.
-- **Line 134:** The type the browser declared, without parameters, in lowercase.
-- **Line 135:** Only the listed picture and video types are accepted (415 otherwise).
-- **Line 136:** The body as a Buffer, or an empty one if nothing usable arrived.
-- **Line 137:** Empty uploads are rejected.
-- **Line 138:** Looks at the file’s real first bytes.
-- **Line 139:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
-- **Line 140:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
-- **Line 141:** Prepares the default caption.
-- **Line 142:** Decodes the file name from the header, ignoring malformed encodings.
-- **Line 143:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
-- **Line 144:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
-- **Line 145:** Stores an upload as belonging to the signed-in coach.
-- **Line 146:** Closes the error callback and registration.
-- **Line 147:** New route: sends a stored file to the browser.
-- **Line 148:** Sends a stored file only if it belongs to the signed-in coach.
-- **Line 149:** Unknown file: 404.
-- **Line 150:** Sends it, honoring byte ranges.
+- **Line 121:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 122:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
+- **Line 123:** Finishes a successful deletion response without a JSON body.
+- **Line 124:** Closes the error callback and registration.
+- **Line 125:** Blank line separates related sections; it performs no operation.
+- **Line 126:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 127:** Stores without media support return an empty list.
+- **Line 128:** Lists only the signed-in coach’s attachments.
+- **Line 129:** Closes the error callback and registration.
+- **Line 130:** Keeps the existing upload ceiling and disables decompression in production raw-body parsing too, protecting binary upload requests.
+- **Line 131:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 132:** Continues only when the request is within its limit and is not compressed.
+- **Line 133:** Closes the error callback and registration.
+- **Line 134:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 135:** Refuses when the store has no media support.
+- **Line 136:** The type the browser declared, without parameters, in lowercase.
+- **Line 137:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 138:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 139:** Empty uploads are rejected.
+- **Line 140:** Looks at the file’s real first bytes.
+- **Line 141:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 142:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 143:** Prepares the default caption.
+- **Line 144:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 145:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 146:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 147:** Stores an upload as belonging to the signed-in coach.
+- **Line 148:** Closes the error callback and registration.
+- **Line 149:** New route: sends a stored file to the browser.
+- **Line 150:** Sends a stored file only if it belongs to the signed-in coach.
 
 ### Lines 151–180
 
 ```text
-151 |   });
-152 |   app.delete('/api/media/:id', async (request, response) => {
-153 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
-154 |     response.status(204).end();
-155 |   });
-156 |   app.post('/api/media/verify', async (request, response) => {
-157 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
-158 |     try {
-159 |       response.json(await verifyLink(request.body.url));
-160 |     } catch (error) {
-161 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
-162 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
-163 |     }
-164 |   });
-165 |   app.post('/api/media/suggest', async (request, response) => {
-166 |     const body = request.body;
-167 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
-168 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
-169 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
-170 |     const now = Date.now();
-171 |     suggestions = suggestions.filter(time => now - time < 86400000);
-172 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
-173 |     suggestions.push(now);
-174 |     suggesting = true;
-175 |     try {
-176 |       response.json(await findMedia({ discipline: body.discipline, sections }));
-177 |     } catch {
-178 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
-179 |     } finally {
-180 |       suggesting = false;
+151 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+152 |     sendFile(request, response, file);
+153 |   });
+154 |   app.delete('/api/media/:id', async (request, response) => {
+155 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+156 |     response.status(204).end();
+157 |   });
+158 |   app.post('/api/media/verify', async (request, response) => {
+159 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
+160 |     try {
+161 |       response.json(await verifyLink(request.body.url));
+162 |     } catch (error) {
+163 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+164 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+165 |     }
+166 |   });
+167 |   app.post('/api/media/suggest', async (request, response) => {
+168 |     const body = request.body;
+169 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+170 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+171 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+172 |     const now = Date.now();
+173 |     suggestions = suggestions.filter(time => now - time < 86400000);
+174 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+175 |     suggestions.push(now);
+176 |     suggesting = true;
+177 |     try {
+178 |       response.json(await findMedia({ discipline: body.discipline, sections }));
+179 |     } catch {
+180 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
 ```
 
-- **Line 151:** Closes the error callback and registration.
-- **Line 152:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
-- **Line 153:** Deletes an unsaved upload only if it belongs to the signed-in coach.
-- **Line 154:** Finishes a successful deletion response without a JSON body.
-- **Line 155:** Closes the error callback and registration.
-- **Line 156:** New route: checks one pasted link.
-- **Line 157:** Requires JSON containing a text url.
-- **Line 158:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 159:** Returns what the checker found.
-- **Line 160:** Catches store errors.
-- **Line 161:** A link that cannot be used returns 400 with the explanation.
-- **Line 162:** Unexpected problems return 502 with a neutral message.
-- **Line 163:** Closes createApp.
-- **Line 164:** Closes the error callback and registration.
-- **Line 165:** New route: finds and verifies pictures and videos for an AI draft.
-- **Line 166:** The request body.
-- **Line 167:** The sections list, or null if it is missing.
-- **Line 168:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
-- **Line 169:** Invalid requests get a 400.
-- **Line 170:** The current time.
-- **Line 171:** Forgets searches older than one day.
-- **Line 172:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
-- **Line 173:** Records this search.
-- **Line 174:** Marks a search as running.
-- **Line 175:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 176:** Runs the finder and returns its verified results.
-- **Line 177:** Catches failure without including private exception details in public hosting logs.
-- **Line 178:** A 502 with advice that media can still be added by hand.
-- **Line 179:** Whatever happened, finishes with…
-- **Line 180:** …allowing the next search.
+- **Line 151:** Unknown file: 404.
+- **Line 152:** Sends it, honoring byte ranges.
+- **Line 153:** Closes the error callback and registration.
+- **Line 154:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 155:** Deletes an unsaved upload only if it belongs to the signed-in coach.
+- **Line 156:** Finishes a successful deletion response without a JSON body.
+- **Line 157:** Closes the error callback and registration.
+- **Line 158:** New route: checks one pasted link.
+- **Line 159:** Requires JSON containing a text url.
+- **Line 160:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 161:** Returns what the checker found.
+- **Line 162:** Catches store errors.
+- **Line 163:** A link that cannot be used returns 400 with the explanation.
+- **Line 164:** Unexpected problems return 502 with a neutral message.
+- **Line 165:** Closes createApp.
+- **Line 166:** Closes the error callback and registration.
+- **Line 167:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 168:** The request body.
+- **Line 169:** The sections list, or null if it is missing.
+- **Line 170:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 171:** Invalid requests get a 400.
+- **Line 172:** The current time.
+- **Line 173:** Forgets searches older than one day.
+- **Line 174:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 175:** Records this search.
+- **Line 176:** Marks a search as running.
+- **Line 177:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 178:** Runs the finder and returns its verified results.
+- **Line 179:** Catches failure without including private exception details in public hosting logs.
+- **Line 180:** A 502 with advice that media can still be added by hand.
 
-### Lines 181–196
+### Lines 181–198
 
 ```text
-181 |     }
-182 |   });
-183 |
-184 |   registerAiRoute(app, options);
-185 |   if (options.production) serveFrontend(app, options.frontendDirectory);
-186 |   app.use((request, response) => {
-187 |     response.status(404).json({ error: 'Route not found.' });
-188 |   });
-189 |   app.use((error, request, response, next) => {
-190 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-191 |     if (status === 500) logError(error);
-192 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-193 |     response.status(status).json({ error: messages[status] });
-194 |   });
-195 |   return app;
-196 | }
+181 |     } finally {
+182 |       suggesting = false;
+183 |     }
+184 |   });
+185 |
+186 |   registerAiRoute(app, options);
+187 |   if (options.production) serveFrontend(app, options.frontendDirectory);
+188 |   app.use((request, response) => {
+189 |     response.status(404).json({ error: 'Route not found.' });
+190 |   });
+191 |   app.use((error, request, response, next) => {
+192 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+193 |     if (status === 500) logError(error);
+194 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+195 |     response.status(status).json({ error: messages[status] });
+196 |   });
+197 |   return app;
+198 | }
 ```
 
-- **Line 181:** Closes createApp.
-- **Line 182:** Closes the error callback and registration.
-- **Line 183:** Blank line separates related sections; it performs no operation.
-- **Line 184:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
-- **Line 185:** Adds production static hosting only when explicitly requested; tests may substitute a temporary build directory.
-- **Line 186:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 187:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 188:** Closes the error callback and registration.
-- **Line 189:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 190:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 191:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
-- **Line 192:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 193:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 194:** Closes the error callback and registration.
-- **Line 195:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 196:** Closes createApp.
+- **Line 181:** Whatever happened, finishes with…
+- **Line 182:** …allowing the next search.
+- **Line 183:** Closes createApp.
+- **Line 184:** Closes the error callback and registration.
+- **Line 185:** Blank line separates related sections; it performs no operation.
+- **Line 186:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 187:** Adds production static hosting only when explicitly requested; tests may substitute a temporary build directory.
+- **Line 188:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 189:** Sends HTTP 404 with a short route-not-found JSON error.
+- **Line 190:** Closes the error callback and registration.
+- **Line 191:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 192:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 193:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
+- **Line 194:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 195:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 196:** Closes the error callback and registration.
+- **Line 197:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 198:** Closes createApp.
 
 ## server/api.test.js
 
@@ -10170,25 +10174,25 @@ Offline deployment checks use temporary HTML and a disposable loopback server. N
 9 | import { productionDatabaseSettings } from './production-database.js';
 10 | import { deployMigrations } from './deploy-migrations.js';
 11 | import { productionSecuritySettings } from './production-security.js';
-12 |
-13 | test('production binds the hosting port while development stays local', () => {
-14 |   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
-15 |   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
-16 |   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
-17 | });
-18 |
-19 | test('production requires one public HTTPS origin and a strong authentication secret', () => {
-20 |   const env = { APP_URL: 'https://coachlab.example/', BETTER_AUTH_SECRET: 'test-only-secret-'.repeat(4) };
-21 |   assert.deepEqual(productionSecuritySettings(env), { publicUrl: 'https://coachlab.example', allowedOrigins: ['https://coachlab.example'] });
-22 |   for (const APP_URL of ['', 'http://coachlab.example', 'https://localhost', 'https://coachlab.example/path', 'https://user:password@coachlab.example', 'https://coachlab.example/?query=1']) assert.throws(() => productionSecuritySettings({ ...env, APP_URL }));
-23 |   assert.throws(() => productionSecuritySettings({ ...env, BETTER_AUTH_SECRET: 'short' }));
-24 | });
-25 |
-26 | test('production database configuration rejects unsafe or mismatched targets without connecting', () => {
-27 |   const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
-28 |   const settings = productionDatabaseSettings(env);
-29 |   let calls = 0;
-30 |   const run = (command, args, options) => {
+12 | import { productionApiGuard } from './request-guard.js';
+13 |
+14 | test('production binds the hosting port while development stays local', () => {
+15 |   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
+16 |   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
+17 |   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
+18 | });
+19 |
+20 | test('production requires one public HTTPS origin and a strong authentication secret', () => {
+21 |   const env = { APP_URL: 'https://coachlab.example/', BETTER_AUTH_SECRET: 'test-only-secret-'.repeat(4) };
+22 |   assert.deepEqual(productionSecuritySettings(env), { publicUrl: 'https://coachlab.example', allowedOrigins: ['https://coachlab.example'] });
+23 |   for (const APP_URL of ['', 'http://coachlab.example', 'https://localhost', 'https://coachlab.example/path', 'https://user:password@coachlab.example', 'https://coachlab.example/?query=1']) assert.throws(() => productionSecuritySettings({ ...env, APP_URL }));
+24 |   assert.throws(() => productionSecuritySettings({ ...env, BETTER_AUTH_SECRET: 'short' }));
+25 | });
+26 |
+27 | test('production database configuration rejects unsafe or mismatched targets without connecting', () => {
+28 |   const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
+29 |   const settings = productionDatabaseSettings(env);
+30 |   let calls = 0;
 ```
 
 - **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
@@ -10202,125 +10206,185 @@ Offline deployment checks use temporary HTML and a disposable loopback server. N
 - **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 12:** Blank line separates related operations for readability.
-- **Line 13:** Starts an offline test of environment selection and port validation.
-- **Line 14:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 13:** Blank line separates related operations for readability.
+- **Line 14:** Starts an offline test of environment selection and port validation.
 - **Line 15:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 16:** Loops over invalid port examples and requires each to fail before a server can start.
-- **Line 17:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 18:** Blank line separates related operations for readability.
-- **Line 19:** Tests production origin and secret validation without real credentials or network access.
-- **Line 20:** Supplies a fictional public origin and clearly synthetic test signing secret.
-- **Line 21:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 22:** Tries invalid origin shapes and requires rejection before startup.
-- **Line 23:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 24:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 25:** Blank line separates related operations for readability.
-- **Line 26:** Tests production connection safety with dummy URLs only; no remote database is contacted.
-- **Line 27:** Defines entirely fictional matching production endpoints and test credentials for offline validation.
-- **Line 28:** Validates the fictional environment to test the successful configuration path.
-- **Line 29:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
-- **Line 30:** Defines a fake synchronous command runner which checks the exact invocation without executing it.
+- **Line 16:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 17:** Loops over invalid port examples and requires each to fail before a server can start.
+- **Line 18:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 19:** Blank line separates related operations for readability.
+- **Line 20:** Tests production origin and secret validation without real credentials or network access.
+- **Line 21:** Supplies a fictional public origin and clearly synthetic test signing secret.
+- **Line 22:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 23:** Tries invalid origin shapes and requires rejection before startup.
+- **Line 24:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 25:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 26:** Blank line separates related operations for readability.
+- **Line 27:** Tests production connection safety with dummy URLs only; no remote database is contacted.
+- **Line 28:** Defines entirely fictional matching production endpoints and test credentials for offline validation.
+- **Line 29:** Validates the fictional environment to test the successful configuration path.
+- **Line 30:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
 
 ### Lines 31–60
 
 ```text
-31 |     calls++;
-32 |     assert.equal(command, process.execPath);
-33 |     assert.deepEqual(args.slice(1, 4), ['migrate', 'deploy', '--config']);
-34 |     assert.equal(options.env, env);
-35 |     assert.equal(options.stdio, 'pipe');
-36 |     return { status: 0 };
-37 |   };
-38 |   deployMigrations(env, run);
-39 |   assert.equal(calls, 1);
-40 |   assert.throws(() => deployMigrations(env, () => ({ status: 1 })), /Startup stopped/);
-41 |   assert.throws(() => deployMigrations({}, run));
-42 |   assert.equal(calls, 1);
-43 |   assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
-44 |   assert.equal(new URL(settings.pooled).search, '');
-45 |   for (const override of [{ NODE_ENV: 'development' }, { COACHLAB_DB_ENV: 'development' }, { COACHLAB_DATABASE: 'sqlite' }, { DATABASE_URL: 'invalid' }, { PRODUCTION_DB_NAME: 'wrong' }, { DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:other') }, { DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=disable') }, { DIRECT_URL: env.DATABASE_URL }, { COACHLAB_DEV_EXPECTED_HOST: 'ep-production-pooler.example.neon.tech' }]) {
-46 |     assert.throws(() => productionDatabaseSettings({ ...env, ...override }));
-47 |   }
-48 | });
-49 |
-50 | test('production serves React browser routes without swallowing API or missing assets', async t => {
-51 |   const directory = mkdtempSync(join(tmpdir(), 'coachlab-web-'));
-52 |   writeFileSync(join(directory, 'index.html'), '<html>CoachLab test shell</html>');
-53 |   writeFileSync(join(directory, 'example.js'), '/* test asset */');
-54 |   let forwarded;
-55 |   const auth = { getUser: async request => { forwarded = request.headers['x-forwarded-for']; return { id: 'test-coach' }; } };
-56 |   const app = createApp({ list: async () => [] }, { auth, production: true, frontendDirectory: directory });
-57 |   const server = app.listen(0, '127.0.0.1');
-58 |   await once(server, 'listening');
-59 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true }); });
-60 |   const base = `http://127.0.0.1:${server.address().port}`;
+31 |   const run = (command, args, options) => {
+32 |     calls++;
+33 |     assert.equal(command, process.execPath);
+34 |     assert.deepEqual(args.slice(1, 4), ['migrate', 'deploy', '--config']);
+35 |     assert.equal(options.env, env);
+36 |     assert.equal(options.stdio, 'pipe');
+37 |     return { status: 0 };
+38 |   };
+39 |   deployMigrations(env, run);
+40 |   assert.equal(calls, 1);
+41 |   assert.throws(() => deployMigrations(env, () => ({ status: 1 })), /Startup stopped/);
+42 |   assert.throws(() => deployMigrations({}, run));
+43 |   assert.equal(calls, 1);
+44 |   assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
+45 |   assert.equal(new URL(settings.pooled).search, '');
+46 |   for (const override of [{ NODE_ENV: 'development' }, { COACHLAB_DB_ENV: 'development' }, { COACHLAB_DATABASE: 'sqlite' }, { DATABASE_URL: 'invalid' }, { PRODUCTION_DB_NAME: 'wrong' }, { DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:other') }, { DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=disable') }, { DIRECT_URL: env.DATABASE_URL }, { COACHLAB_DEV_EXPECTED_HOST: 'ep-production-pooler.example.neon.tech' }]) {
+47 |     assert.throws(() => productionDatabaseSettings({ ...env, ...override }));
+48 |   }
+49 | });
+50 |
+51 | test('production serves React browser routes without swallowing API or missing assets', async t => {
+52 |   const directory = mkdtempSync(join(tmpdir(), 'coachlab-web-'));
+53 |   writeFileSync(join(directory, 'index.html'), '<html>CoachLab test shell</html>');
+54 |   writeFileSync(join(directory, 'example.js'), '/* test asset */');
+55 |   let forwarded;
+56 |   const auth = { getUser: async request => { forwarded = request.headers['x-forwarded-for']; return { id: 'test-coach' }; } };
+57 |   const app = createApp({ list: async () => [] }, { auth, production: true, frontendDirectory: directory });
+58 |   const server = app.listen(0, '127.0.0.1');
+59 |   await once(server, 'listening');
+60 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true }); });
 ```
 
-- **Line 31:** Increments the fake migration call count by one.
-- **Line 32:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 31:** Defines a fake synchronous command runner which checks the exact invocation without executing it.
+- **Line 32:** Increments the fake migration call count by one.
 - **Line 33:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 35:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 36:** Simulates a successful process exit for this isolated test.
-- **Line 37:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 38:** Exercises migration orchestration using fictional settings and the fake runner.
-- **Line 39:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 36:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 37:** Simulates a successful process exit for this isolated test.
+- **Line 38:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 39:** Exercises migration orchestration using fictional settings and the fake runner.
 - **Line 40:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 41:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 42:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 43:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 44:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 45:** Tries wrong environment, database type, malformed URL, identity, credentials, TLS, connection kind and a development endpoint; each must be rejected.
-- **Line 46:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 47:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 48:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 49:** Blank line separates related operations for readability.
-- **Line 50:** Starts an asynchronous HTTP routing test; t registers cleanup of its temporary resources.
-- **Line 51:** Creates a uniquely named temporary folder outside the project for disposable frontend test files.
-- **Line 52:** Writes a tiny test entry page so routing can be checked without building React for each test.
-- **Line 53:** Creates a harmless JavaScript asset to check ordinary static-file serving.
-- **Line 54:** Captures the normalized forwarding header seen by the authentication stub.
-- **Line 55:** Simulates a logged-in coach and records the forwarding header after production middleware has processed it.
-- **Line 56:** Uses an empty in-memory lesson stub and temporary HTML with production routing enabled; no database is contacted.
-- **Line 57:** Listens only on loopback using a free temporary port selected by the operating system.
-- **Line 58:** Waits for the server to be ready before sending test requests.
-- **Line 59:** Registers cleanup: close this test server, then remove only the unique temporary folder this test created.
-- **Line 60:** Constructs this test server's local URL from its actual assigned port.
+- **Line 45:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 46:** Tries wrong environment, database type, malformed URL, identity, credentials, TLS, connection kind and a development endpoint; each must be rejected.
+- **Line 47:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 48:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 49:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 50:** Blank line separates related operations for readability.
+- **Line 51:** Starts an asynchronous HTTP routing test; t registers cleanup of its temporary resources.
+- **Line 52:** Creates a uniquely named temporary folder outside the project for disposable frontend test files.
+- **Line 53:** Writes a tiny test entry page so routing can be checked without building React for each test.
+- **Line 54:** Creates a harmless JavaScript asset to check ordinary static-file serving.
+- **Line 55:** Captures the normalized forwarding header seen by the authentication stub.
+- **Line 56:** Simulates a logged-in coach and records the forwarding header after production middleware has processed it.
+- **Line 57:** Uses an empty in-memory lesson stub and temporary HTML with production routing enabled; no database is contacted.
+- **Line 58:** Listens only on loopback using a free temporary port selected by the operating system.
+- **Line 59:** Waits for the server to be ready before sending test requests.
+- **Line 60:** Registers cleanup: close this test server, then remove only the unique temporary folder this test created.
 
-### Lines 61–74
+### Lines 61–90
 
 ```text
-61 |   for (const path of ['/', '/lesson/123', '/reset-password']) {
-62 |     const response = await fetch(base + path, { headers: { accept: 'text/html' } });
-63 |     assert.equal(response.status, 200);
-64 |     assert.match(await response.text(), /CoachLab test shell/);
-65 |   }
-66 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
-67 |   await fetch(base + '/api/lessons', { headers: { 'x-forwarded-for': '203.0.113.99, 198.51.100.7' } });
-68 |   assert.equal(forwarded, '198.51.100.7');
-69 |   assert.equal(app.get('trust proxy'), 1);
-70 |   assert.equal((await fetch(base + '/api/missing')).status, 404);
-71 |   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
-72 |   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
-73 |   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
-74 | });
+61 |   const base = `http://127.0.0.1:${server.address().port}`;
+62 |   for (const path of ['/', '/lesson/123', '/reset-password']) {
+63 |     const response = await fetch(base + path, { headers: { accept: 'text/html' } });
+64 |     assert.equal(response.status, 200);
+65 |     assert.match(await response.text(), /CoachLab test shell/);
+66 |   }
+67 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
+68 |   await fetch(base + '/api/lessons', { headers: { 'x-forwarded-for': '203.0.113.99, 198.51.100.7' } });
+69 |   assert.equal(forwarded, '198.51.100.7');
+70 |   assert.equal(app.get('trust proxy'), 1);
+71 |   for (const path of ['/api/lessons', '/api/media/upload', '/api/auth/sign-in/email']) {
+72 |     const rejected = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: 'not a compressed stream' });
+73 |     assert.equal(rejected.status, 415);
+74 |     assert.match((await rejected.json()).error, /Compressed request/);
+75 |   }
+76 |   assert.equal((await fetch(base + '/api/missing')).status, 404);
+77 |   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
+78 |   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
+79 |   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
+80 | });
+81 |
+82 | test('production API limiter bounds memory, separates clients and expires limits without blocking health', () => {
+83 |   let time = 1000;
+84 |   const guard = productionApiGuard({ now: () => time, limit: 2, maxClients: 2 });
+85 |   const call = (ip, path = '/lessons') => {
+86 |     const result = { status: 200, headers: {} };
+87 |     const response = { set: (name, value) => { result.headers[name] = value; return response; }, status: value => { result.status = value; return response; }, json: body => { result.body = body; } };
+88 |     guard({ method: 'GET', path, ip, headers: {}, socket: {} }, response, () => { result.next = true; });
+89 |     return result;
+90 |   };
 ```
 
-- **Line 61:** Checks the homepage and nested browser paths so refreshing those URLs still loads React.
-- **Line 62:** Makes a local GET request asking for HTML; await pauses this test until the response arrives.
-- **Line 63:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 61:** Constructs this test server's local URL from its actual assigned port.
+- **Line 62:** Checks the homepage and nested browser paths so refreshing those URLs still loads React.
+- **Line 63:** Makes a local GET request asking for HTML; await pauses this test until the response arrives.
 - **Line 64:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 65:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 66:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 67:** Sends a fake multi-address proxy chain to verify the untrusted leftmost address cannot control authentication rate limiting.
-- **Line 68:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 65:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 66:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 67:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 68:** Sends a fake multi-address proxy chain to verify the untrusted leftmost address cannot control authentication rate limiting.
 - **Line 69:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 70:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 71:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 72:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 71:** Checks that lesson, upload and authentication endpoints all reject compressed bodies before their handlers run.
+- **Line 72:** Sends harmless invalid test bytes labeled gzip to the disposable local test server; a 415 response must come before decompression.
 - **Line 73:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 74:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 74:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 75:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 76:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 77:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 78:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 79:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 80:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 81:** Blank line separates related operations for readability.
+- **Line 82:** Tests rate limits, address separation, memory bounds, expiry and health exemptions with a fake clock; no real database or external request is involved.
+- **Line 83:** Sets a deterministic initial clock value for the limiter test.
+- **Line 84:** Creates a tiny test limiter: two requests per client and two client slots, so boundaries can be tested cheaply.
+- **Line 85:** Defines a helper that invokes the middleware with a chosen address and path.
+- **Line 86:** Collects the fake response’s status and headers; accepted requests start with status 200.
+- **Line 87:** Provides chainable Express-like set/status methods and records JSON output without opening a network server.
+- **Line 88:** Invokes the guard with a fake GET request and records whether it calls next.
+- **Line 89:** Returns the observed middleware outcome for assertions.
+- **Line 90:** Closes this function, conditional block or object; execution continues after the block.
+
+### Lines 91–101
+
+```text
+91 |   assert.equal(call('client-a').next, true);
+92 |   assert.equal(call('client-a').next, true);
+93 |   assert.equal(call('client-a').status, 429);
+94 |   assert.equal(call('client-a').headers['Retry-After'], '60');
+95 |   assert.equal(call('client-b').next, true);
+96 |   assert.equal(call('client-c').status, 503);
+97 |   assert.equal(call('client-c', '/health').next, true);
+98 |   time += 60000;
+99 |   assert.equal(call('client-c').next, true);
+100 |   assert.equal(call('client-a').next, true);
+101 | });
+```
+
+- **Line 91:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 92:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 93:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 94:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 95:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 96:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 97:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 98:** Advances the fake clock by one minute to verify expired counters are removed and clients may try again.
+- **Line 99:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 100:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 101:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
 
 ## server/production-database.js
 
@@ -10529,3 +10593,57 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 5:** Stops before migrations if the session-signing secret is missing or too short; the value is never printed.
 - **Line 6:** Returns one normalized HTTPS origin for both Better Auth and the existing API origin checks; same-origin hosting needs no cross-origin allowance.
 - **Line 7:** Closes this function, conditional block or object; execution continues after the block.
+
+## server/request-guard.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\request-guard.js`
+
+Production-only API protection, installed after trusted proxy normalization but before authentication and body parsing. Its bounded in-memory counters are supplementary protection, not a distributed firewall.
+
+### Lines 1–21
+
+```text
+1 | export function productionApiGuard({ now = Date.now, limit = 120, maxClients = 1024 } = {}) {
+2 |   const clients = new Map();
+3 |   const windowMs = 60000;
+4 |   return (request, response, next) => {
+5 |     if (request.method === 'GET' && request.path === '/health') return next();
+6 |     const time = now();
+7 |     for (const [key, entry] of clients) if (entry.until <= time) clients.delete(key);
+8 |     const key = request.ip || request.socket.remoteAddress;
+9 |     let entry = clients.get(key);
+10 |     if (!entry) {
+11 |       if (clients.size >= maxClients) return response.set('Retry-After', '60').status(503).json({ error: 'The server is busy. Please try again shortly.' });
+12 |       entry = { count: 0, until: time + windowMs };
+13 |       clients.set(key, entry);
+14 |     }
+15 |     entry.count++;
+16 |     if (entry.count > limit) return response.set('Retry-After', String(Math.max(1, Math.ceil((entry.until - time) / 1000)))).status(429).json({ error: 'Too many requests. Please wait a minute and try again.' });
+17 |     const encoding = String(request.headers['content-encoding'] || 'identity').trim().toLowerCase();
+18 |     if (encoding !== 'identity') return response.status(415).json({ error: 'Compressed request bodies are not supported. Send an uncompressed request.' });
+19 |     next();
+20 |   };
+21 | }
+```
+
+- **Line 1:** Exports a middleware factory with a clock, request limit and maximum tracked addresses; defaults allow 120 API requests per minute and at most 1,024 entries. Tests can supply small deterministic values.
+- **Line 2:** Creates an in-memory map from client address to count and expiration; each server process has its own map.
+- **Line 3:** Sets the counting window to sixty thousand milliseconds, or one minute.
+- **Line 4:** Returns the Express middleware function which receives the request, response and next-handler callback.
+- **Line 5:** Exempts only GET health checks so hosting health probes remain available even when the limiter is full. The path is relative to the /api mount.
+- **Line 6:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 7:** Deletes expired address entries before counting; iteration is bounded by maxClients.
+- **Line 8:** Uses the proxy-validated client IP, falling back to the socket address only if unavailable. No caller-supplied account ID controls this key.
+- **Line 9:** Looks up this address’s current counting window.
+- **Line 10:** Starts a fresh counter only when this address has no unexpired entry.
+- **Line 11:** Rejects new addresses with 503 and a retry hint when the map is full; does not allocate unbounded memory or evict active counters to bypass limits.
+- **Line 12:** Starts this address at zero requests with an expiry one minute from now.
+- **Line 13:** Stores the new bounded counter in the map.
+- **Line 14:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 15:** Counts every API attempt, including attempts later rejected for compressed bodies.
+- **Line 16:** After the allowed request count, sends HTTP 429 and a Retry-After value rounded up to the remaining seconds.
+- **Line 17:** Normalizes Content-Encoding to lowercase; an absent header means the ordinary uncompressed identity encoding.
+- **Line 18:** Rejects gzip, deflate, Brotli and other compressed API bodies with 415 before any parser or auth handler can decompress them.
+- **Line 19:** Continues only when the request is within its limit and is not compressed.
+- **Line 20:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 21:** Closes this function, conditional block or object; execution continues after the block.

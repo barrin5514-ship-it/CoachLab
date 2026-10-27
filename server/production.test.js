@@ -9,6 +9,7 @@ import { listenerSettings } from './web.js';
 import { productionDatabaseSettings } from './production-database.js';
 import { deployMigrations } from './deploy-migrations.js';
 import { productionSecuritySettings } from './production-security.js';
+import { productionApiGuard } from './request-guard.js';
 
 test('production binds the hosting port while development stays local', () => {
   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
@@ -67,8 +68,34 @@ test('production serves React browser routes without swallowing API or missing a
   await fetch(base + '/api/lessons', { headers: { 'x-forwarded-for': '203.0.113.99, 198.51.100.7' } });
   assert.equal(forwarded, '198.51.100.7');
   assert.equal(app.get('trust proxy'), 1);
+  for (const path of ['/api/lessons', '/api/media/upload', '/api/auth/sign-in/email']) {
+    const rejected = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: 'not a compressed stream' });
+    assert.equal(rejected.status, 415);
+    assert.match((await rejected.json()).error, /Compressed request/);
+  }
   assert.equal((await fetch(base + '/api/missing')).status, 404);
   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
+});
+
+test('production API limiter bounds memory, separates clients and expires limits without blocking health', () => {
+  let time = 1000;
+  const guard = productionApiGuard({ now: () => time, limit: 2, maxClients: 2 });
+  const call = (ip, path = '/lessons') => {
+    const result = { status: 200, headers: {} };
+    const response = { set: (name, value) => { result.headers[name] = value; return response; }, status: value => { result.status = value; return response; }, json: body => { result.body = body; } };
+    guard({ method: 'GET', path, ip, headers: {}, socket: {} }, response, () => { result.next = true; });
+    return result;
+  };
+  assert.equal(call('client-a').next, true);
+  assert.equal(call('client-a').next, true);
+  assert.equal(call('client-a').status, 429);
+  assert.equal(call('client-a').headers['Retry-After'], '60');
+  assert.equal(call('client-b').next, true);
+  assert.equal(call('client-c').status, 503);
+  assert.equal(call('client-c', '/health').next, true);
+  time += 60000;
+  assert.equal(call('client-c').next, true);
+  assert.equal(call('client-a').next, true);
 });

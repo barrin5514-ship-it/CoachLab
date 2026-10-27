@@ -28,16 +28,29 @@ Regular Express JSON requests have a 32 KB limit. Upload parsing has a roughly 2
 
 Authentication has database-backed per-address limits (including 10 sign-in attempts per five minutes), plus in-memory account lockout. AI generation has concurrency and per-minute/per-day attempt limits; media search has separate limits. Before this triage there was no general API limiter. Body-size and request-count limits alone do not repair a decompression vulnerability; the patched dependency is the main fix.
 
-## Verification so far
+## Additional production protection
+
+Production now rejects compressed API request bodies before authentication/body parsing, and both JSON/raw parsers have inflation disabled. Normal browser requests and uploaded media files are not HTTP-compressed, so those workflows remain supported; custom API clients must send uncompressed requests. Development retains its previous behavior.
+
+A production-only API limiter allows 120 requests per minute per trusted client address, includes auth/upload/lesson requests, and leaves GET health probes available. It keeps at most 1,024 client counters, expires old counters, returns 429 with Retry-After on excess requests and 503 for new addresses if capacity is full. It is deliberately small, process-local protection, not a network-level DDoS defense. Users sharing a public IP also share this limit; restarts clear counters. Existing stricter login/AI/media controls remain.
+
+## Final verification
 
 - After dependency updates: 74/74 existing application tests passed serially.
 - Offline Prisma setup/compatibility checks: 5/5 passed serially.
 - Full audit after targeted update: zero vulnerabilities.
-- Final production guard checks and the single production build are recorded below when complete.
+- After request protections: final full suite **75/75 passed**, zero skipped, serial execution.
+- Production build run once in this triage: passed dependency installation, Prisma 7.10 generation/TypeScript compilation and Vite build (31 modules).
+- After build: schema validation passed, five offline Prisma tests passed again serially, full npm audit still **zero vulnerabilities**.
+- Three changed/new JavaScript files passed syntax checks; updated numbered walkthrough listings were checked against source.
+- No live provider request, remote migration, production database access, real .env read/edit, or deployment. Test migration runners are mocked.
+- Existing auth-fixture startup diagnostics and npm lifecycle-script-policy warnings remain; neither caused test/build failure. A fresh Linux/Render install is still a post-deployment check.
+
+Dependency commit: `860bddb`. Production guard/documentation commit subject: **Bound production API requests and document verified security triage**. Push outcome is reported separately; a local commit is not proof of a successful upload.
 
 ## Remaining risks and demo decision
 
-Zero audit findings is not a guarantee of security. A small, supervised class demo using consenting adult testers and generic lesson data has a limited acceptable operational scope, conditional on the post-deployment checks in DEPLOY.md. Do not use it for sensitive athlete data, children's personal information, medical information or a broad public launch.
+The audit deployment hold is cleared: **conditional GO for a small supervised class demo**, after GitHub synchronization and the configuration/post-deployment checks in DEPLOY.md. Zero audit findings is not a guarantee of security. Consenting adult testers and generic lesson data limit the operational scope. Do not use it for sensitive athlete data, children's personal information, medical information or a broad public launch.
 
 Email ownership is not verified; production self-service password reset and email delivery are disabled, with no admin recovery tool. Keep passwords in a password manager. AI/media providers have quotas and external content can disappear. AI counters reset with the process and are not a spending cap. Production requires a separately verified Neon project, HTTPS, correct secrets and Render as the only trusted ingress. No deployment or production migration is authorized by this task.
 
