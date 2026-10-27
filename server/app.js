@@ -32,6 +32,13 @@ export function createApp(database, options = {}) {
   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
   const app = express();
   app.disable('x-powered-by');
+  if (options.production) {
+    app.set('trust proxy', 1);
+    app.use((request, response, next) => {
+      request.headers['x-forwarded-for'] = request.ip;
+      next();
+    });
+  }
   app.use('/api', (request, response, next) => {
     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
     next();

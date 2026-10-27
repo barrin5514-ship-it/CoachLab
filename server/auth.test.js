@@ -53,6 +53,15 @@ test('the server refuses to start authentication without a long random secret', 
   assert.throws(() => createApp(new Database(':memory:'), {}), /authentication adapter is required/);
 });
 
+test('production authentication marks its session cookie Secure behind HTTPS', async t => {
+  const f = await fixture(t, { env: { NODE_ENV: 'production' } });
+  const api = f.client();
+  await register(api, 'production-cookie@example.com');
+  const response = await signIn(api, 'production-cookie@example.com');
+  assert.equal(response.status, 200);
+  assert.ok(response.setCookie.some(cookie => /; Secure(?:;|$)/i.test(cookie)));
+});
+
 test('registration validates input, hides whether an email already exists and never stores a plain password', async t => {
   const f = await fixture(t);
   const api = f.client();

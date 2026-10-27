@@ -52,7 +52,7 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     advanced: {
       cookiePrefix: 'coachlab',
-      useSecureCookies: baseURL.startsWith('https://'),
+      useSecureCookies: env.NODE_ENV === 'production' || baseURL.startsWith('https://'),
       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
     },
     rateLimit: {

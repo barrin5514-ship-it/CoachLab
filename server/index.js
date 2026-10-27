@@ -5,6 +5,7 @@ import { prismaLessons } from './lesson-store.js';
 import { createAuth } from './auth.js';
 import { consoleMailer } from './mailer.js';
 import { listenerSettings } from './web.js';
+import { productionSecuritySettings } from './production-security.js';
 
 let close = async () => {};
 try {
@@ -13,9 +14,10 @@ try {
   const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
   let auth;
-  const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
+  const security = production ? productionSecuritySettings() : null;
+  const publicUrl = security?.publicUrl || (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
   const sameMachine = publicUrl.replace('//127.0.0.1', '//localhost');
-  const allowedOrigins = [...new Set((process.env.COACHLAB_ALLOWED_ORIGINS || publicUrl).split(',').map(origin => origin.trim()).filter(Boolean).concat(process.env.COACHLAB_ALLOWED_ORIGINS ? [] : [sameMachine]))];
+  const allowedOrigins = security?.allowedOrigins || [...new Set((process.env.COACHLAB_ALLOWED_ORIGINS || publicUrl).split(',').map(origin => origin.trim()).filter(Boolean).concat(process.env.COACHLAB_ALLOWED_ORIGINS ? [] : [sameMachine]))];
   const authSettings = { secret: process.env.BETTER_AUTH_SECRET, baseURL: publicUrl, trustedOrigins: allowedOrigins, mailer: consoleMailer(), env: process.env };
   if (selected === 'sqlite') {
     const database = openDatabase();
