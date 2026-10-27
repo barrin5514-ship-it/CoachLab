@@ -4366,3 +4366,49 @@ User follow-up (verbatim): "continue".
 Step 7 outcome (2026-10-27): production build ran once and passed (install unchanged dependencies, Prisma 7.10 generation/TypeScript compilation, Vite 31 modules). Final serial npm test: 74/74 passed, zero skipped. Prisma validate passed; five existing offline Prisma tests passed serially using the freshly generated client. All 13 changed JavaScript files passed node --check. Walkthrough check: 15 changed source/config/test files, 1,037 exact listed/explained lines. Dependency lockfile is unchanged from baseline 969a455. No real environment values read/edited, no remote migrations, no live AI calls, no deployment or push.
 
 Security hold: initial audit failed certificate validation; reran full npm audit with NODE_USE_SYSTEM_CA=1 for that process (no TLS bypass). Result: 11 findings, 2 high and 9 moderate; npm reports no fix for the affected paths. Express/body-parser compressed-request DoS is among the findings; qs and fast-uri also flagged. No dependency remediation attempted because it is outside changes introduced by this task and the owner required stopping on risk. DEPLOY.md now begins with a deployment hold; PRODUCTION_PREPARATION_VERIFICATION.md records exact results, prior corrected failures, npm lifecycle-script warnings, and unverified remote/Linux checks. Step 6 commit: e1af34d. Step 7 commit subject: "Record production checks and dependency deployment hold"; resolved hash will be in the final response. Earlier step-4 documentation amendment is recorded above. Existing application data and SQLite backups preserved.
+
+## 2026-10-27 — Security triage and authorized GitHub push
+
+Exact user prompt:
+
+```text
+COACHLAB — SECURITY TRIAGE + PUSH TO GITHUB
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+GOAL
+Sort the 11 audit findings, fix only what is safe, document the rest,
+then push the 7 local commits to GitHub. Do NOT deploy.
+
+RULES
+- Low RAM: one thing at a time, tests serially.
+- Small separate commits. No "npm audit fix --force".
+- No major-version upgrades unless you explain why and I approve.
+- Do not read or print .env values. Do not touch other projects.
+
+STEPS
+1. For each audit finding, list: package, severity, whether it is
+   used in PRODUCTION or only in DEVELOPMENT/BUILD, and whether real
+   users of the live site could trigger it. Plain English, one line each.
+2. Apply any SAFE fixes (patch/minor updates, npm audit fix without
+   --force, or overrides that tests prove safe). Re-run tests serially
+   and the production build once.
+3. For the Express/body-parser denial-of-service finding: confirm the
+   app already limits request body size and rate-limits requests. If
+   a small, safe setting reduces the risk, add it.
+4. Add SECURITY_NOTES.md: what was fixed, what remains, why the
+   remaining risk is acceptable for a small class demo, and what we
+   would do with more time.
+5. Push all commits to origin/main. If Git login fails, STOP and give
+   me the exact error and simple beginner steps to fix it myself.
+
+REPORT BACK (in one code block)
+- Findings table (package / severity / prod or dev / risk to users).
+- What was fixed, per commit (hash + one line).
+- Fresh test and build results.
+- Push result (success, or the exact error).
+- Go / no-go for deploying, with reason.
+```
+
+Dependency triage outcome: baseline audit reproduced 11 findings (2 high, 9 moderate). npm's automatic fix metadata reported no fix for most paths, but direct registry checks found compatible body-parser 2.4.0, qs 6.17.0 and fast-uri 3.1.9. Each fits its parent's existing semver range. Ran targeted npm update for only those three packages with lifecycle scripts disabled. Exactly three packages changed; package.json and existing overrides unchanged. Regression results: 74/74 application tests and 5/5 offline Prisma tests passed serially. Fresh full audit: zero vulnerabilities. No major upgrade, force fix, live database or provider request. Build and additional production protections will follow before push.
+
+Inspection corrections: first npm metadata queries failed EPERM on the default cache; retried using ignored CoachLab tmp/npm-cache and system CA trust. A package.json import was blocked by package exports; read the installed manifest as a file instead. No security controls disabled. Earlier deployment report accurately recorded its audit output, but that output was insufficient to conclude compatible patched releases were unavailable. Commit subject: "Patch three transitive dependencies to clear security audit".
