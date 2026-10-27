@@ -3,6 +3,7 @@ export const networkMessage = 'Could not reach CoachLab. Check your connection a
 
 export function friendlyAuthError(status, data) {
   const code = data?.code;
+  if (code === 'PASSWORD_RESET_DISABLED') return 'Contact the coach to reset your password.';
   if (code === 'INVALID_EMAIL_OR_PASSWORD' || status === 401) return 'Incorrect email or password.';
   if (code === 'TOO_MANY_ATTEMPTS') return data.message;
   if (status === 429) return 'Too many attempts from this device. Wait a few minutes and try again.';
@@ -28,9 +29,9 @@ export async function getAuthConfig() {
   try {
     const response = await fetch('/api/auth-config');
     const data = await response.json();
-    return { google: data.google === true, mail: data.mail };
+    return { google: data.google === true, mail: data.mail, passwordReset: data.passwordReset === true };
   } catch {
-    return { google: false, mail: 'unknown' };
+    return { google: false, mail: 'unknown', passwordReset: false };
   }
 }
 

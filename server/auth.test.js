@@ -62,6 +62,26 @@ test('production authentication marks its session cookie Secure behind HTTPS', a
   assert.ok(response.setCookie.some(cookie => /; Secure(?:;|$)/i.test(cookie)));
 });
 
+test('production disables password reset routes and emits no reset mail or tokens', async t => {
+  const f = await fixture(t, { env: { NODE_ENV: 'production' } });
+  const api = f.client();
+  await register(api, 'production-reset@example.com');
+  const config = await api('/api/auth-config');
+  assert.equal(config.json.passwordReset, false);
+  assert.equal(config.json.mail, 'disabled');
+  for (const [path, options] of [
+    ['/request-password-reset', { method: 'POST', body: { email: 'production-reset@example.com', redirectTo: '/reset-password' } }],
+    ['/reset-password', { method: 'POST', body: { token: 'test-token', newPassword: goodPassword } }],
+    ['/reset-password/test-token', { redirect: 'manual' }],
+  ]) {
+    const result = await api('/api/auth' + path, options);
+    assert.equal(result.status, 403);
+    assert.equal(result.json.code, 'PASSWORD_RESET_DISABLED');
+  }
+  assert.equal(f.database.prepare('SELECT count(*) AS n FROM verification').get().n, 0);
+  assert.deepEqual(f.mailer.outbox, []);
+});
+
 test('registration validates input, hides whether an email already exists and never stores a plain password', async t => {
   const f = await fixture(t);
   const api = f.client();
@@ -136,7 +156,7 @@ test('protected routes reject anonymous users, logout ends the session on the se
     assert.equal(response.json.error, 'Please sign in to continue.');
   }
   assert.equal((await anonymous('/api/health')).status, 200);
-  assert.deepEqual((await anonymous('/api/auth-config')).json, { google: false, mail: 'memory' });
+  assert.deepEqual((await anonymous('/api/auth-config')).json, { google: false, mail: 'memory', passwordReset: true });
   const api = await signedIn(f, 'coach@example.com');
   const staleCookie = [...api.jar].map(([name, value]) => `${name}=${value}`).join('; ');
   assert.equal((await api('/api/lessons')).status, 200);

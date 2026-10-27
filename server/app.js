@@ -91,7 +91,7 @@ export function createApp(database, options = {}) {
     response.json({ status: 'ok', service: 'CoachLab API' });
   });
   app.get('/api/auth-config', (request, response) => {
-    response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
+    response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
   });
   app.use('/api', async (request, response, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {

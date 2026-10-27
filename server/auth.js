@@ -25,6 +25,7 @@ export function attemptLimiter({ max, windowMs, now = Date.now }) {
 const normalize = email => String(email ?? '').trim().toLowerCase();
 
 export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, mailer, env = {}, loginLimiter = attemptLimiter({ max: 8, windowMs: 15 * 60 * 1000 }), resetLimiter = attemptLimiter({ max: 3, windowMs: 60 * 60 * 1000 }) }) {
+  const passwordResetEnabled = env.NODE_ENV !== 'production';
   if (typeof secret !== 'string' || secret.length < 32) throw new Error('A random authentication secret of at least 32 characters is required.');
   const google = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : null;
   const sqlite = !prisma;
@@ -41,12 +42,13 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
+        if (!passwordResetEnabled) return;
         const key = normalize(user.email);
         if (resetLimiter.blocked(key)) return;
         resetLimiter.hit(key);
         await mailer.sendPasswordReset({ to: user.email, url });
       },
-      onExistingUserSignUp: async ({ user }) => { await mailer.sendExistingAccountNotice({ to: user.email }); },
+      onExistingUserSignUp: async ({ user }) => { if (passwordResetEnabled) await mailer.sendExistingAccountNotice({ to: user.email }); },
     },
     socialProviders: google ? { google } : undefined,
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
@@ -69,6 +71,7 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
     },
     hooks: {
       before: createAuthMiddleware(async context => {
+        if (!passwordResetEnabled && /^\/(request-password-reset|reset-password)(\/|$)/.test(context.path)) throw new APIError('FORBIDDEN', { message: 'Contact the coach to reset your password.', code: 'PASSWORD_RESET_DISABLED' });
         const body = context.body ?? {};
         if (context.path === '/sign-up/email') {
           const problem = validateName(body.name) || validateEmail(body.email) || passwordProblem(body.password, body.email);
@@ -81,7 +84,7 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
         if (context.path === '/sign-in/email') {
           const problem = validateEmail(body.email);
           if (problem || typeof body.password !== 'string') throw new APIError('UNAUTHORIZED', { message: generic, code: 'INVALID_EMAIL_OR_PASSWORD' });
-          if (loginLimiter.blocked(normalize(body.email))) throw new APIError('TOO_MANY_REQUESTS', { message: tooMany, code: 'TOO_MANY_ATTEMPTS' });
+          if (loginLimiter.blocked(normalize(body.email))) throw new APIError('TOO_MANY_REQUESTS', { message: passwordResetEnabled ? tooMany : 'Too many sign-in attempts. Wait 15 minutes or contact the coach.', code: 'TOO_MANY_ATTEMPTS' });
         }
       }),
       after: createAuthMiddleware(async context => {
@@ -93,8 +96,9 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
   });
   return {
     auth,
+    passwordResetEnabled,
     google: !!google,
-    mailMode: mailer.mode,
+    mailMode: passwordResetEnabled ? mailer.mode : 'disabled',
     handler: toNodeHandler(auth),
     async getUser(request) {
       const result = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });

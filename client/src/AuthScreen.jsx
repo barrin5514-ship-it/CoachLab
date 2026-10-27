@@ -14,7 +14,9 @@ function PasswordField({ label, value, onChange, autoComplete, hint, disabled })
 }
 
 export default function AuthScreen({ config, notice, resetToken, resetError, onSignedIn }) {
-  const [mode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
+  const resetEnabled = config.passwordReset === true;
+  const [requestedMode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
+  const mode = !resetEnabled && ['forgot', 'reset'].includes(requestedMode) ? 'signin' : requestedMode;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,15 +49,17 @@ export default function AuthScreen({ config, notice, resetToken, resetError, onS
     const problem = validateName(name) || validateEmail(email) || passwordProblem(password, email);
     if (problem) throw new Error(problem);
     await signUp({ name, email, password });
-    go('signin', 'Your account request was received. Sign in below. If this email already had an account, its password was not changed: sign in with your existing password or choose “Forgot password”.');
+    go('signin', `Your account request was received. Sign in below. If this email already had an account, its password was not changed. ${resetEnabled ? 'Use your existing password or choose “Forgot password”.' : 'Contact the coach if you cannot sign in.'}`);
   });
   const forgot = submit(async () => {
+    if (!resetEnabled) throw new Error('Contact the coach to reset your password.');
     const problem = validateEmail(email);
     if (problem) throw new Error(problem);
     await requestReset(email);
     go('signin', config.mail === 'console' ? 'If that email has an account, a reset link was created. Email is not set up yet in this local copy, so the link is printed in the CoachLab backend window. It works once and expires in one hour.' : 'If that email has an account, we sent a reset link. It works once and expires in one hour.');
   });
   const reset = submit(async () => {
+    if (!resetEnabled) throw new Error('Contact the coach to reset your password.');
     const problem = passwordProblem(password);
     if (problem) throw new Error(problem);
     await resetPassword({ token: resetToken, newPassword: password });
@@ -75,7 +79,7 @@ export default function AuthScreen({ config, notice, resetToken, resetError, onS
           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
           <button type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
         </fieldset>
-        <p className="auth-links"><button type="button" className="link" onClick={() => go('forgot')}>Forgot password?</button></p>
+        <p className="auth-links">{resetEnabled ? <button type="button" className="link" onClick={() => go('forgot')}>Forgot password?</button> : 'Contact the coach to reset your password.'}</p>
       </form>}
       {mode === 'register' && <form onSubmit={register} noValidate>
         <fieldset disabled={busy}>

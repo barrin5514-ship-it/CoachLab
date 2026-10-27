@@ -1702,7 +1702,7 @@ Production preparation: this file connects deployment configuration to the exist
 91 |     response.json({ status: 'ok', service: 'CoachLab API' });
 92 |   });
 93 |   app.get('/api/auth-config', (request, response) => {
-94 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
+94 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
 95 |   });
 96 |   app.use('/api', async (request, response, next) => {
 97 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
@@ -1734,7 +1734,7 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 91:** Returns the same health JSON as before, normally with HTTP 200.
 - **Line 92:** Closes the error callback and registration.
 - **Line 93:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
-- **Line 94:** Answers whether Google sign-in is configured and which mail mode is active.
+- **Line 94:** Returns public authentication capabilities only, including whether password reset is enabled; no secrets are included.
 - **Line 95:** Closes the error callback and registration.
 - **Line 96:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
 - **Line 97:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
@@ -7570,9 +7570,9 @@ Small Vite plugin that forwards every /api request from the development web page
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\AuthScreen.jsx`
 
-The login screens: sign in, create account, forgot password and choose a new password. They are built for phones first (large touch targets, full-width buttons, proper autocomplete and keyboard hints so password managers work) and show clear messages. The page never reveals whether an email is registered.
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import React, { useState } from 'react';
@@ -7591,15 +7591,20 @@ The login screens: sign in, create account, forgot password and choose a new pas
 14 | }
 15 |
 16 | export default function AuthScreen({ config, notice, resetToken, resetError, onSignedIn }) {
-17 |   const [mode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
-18 |   const [name, setName] = useState('');
-19 |   const [email, setEmail] = useState('');
-20 |   const [password, setPassword] = useState('');
-21 |   const [message, setMessage] = useState(notice ? { tone: 'success', text: notice } : resetError ? { tone: 'error', text: resetError } : null);
-22 |   const [busy, setBusy] = useState(false);
-23 |
-24 |   function go(next, text, tone = 'success') {
-25 |     setMode(next);
+17 |   const resetEnabled = config.passwordReset === true;
+18 |   const [requestedMode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
+19 |   const mode = !resetEnabled && ['forgot', 'reset'].includes(requestedMode) ? 'signin' : requestedMode;
+20 |   const [name, setName] = useState('');
+21 |   const [email, setEmail] = useState('');
+22 |   const [password, setPassword] = useState('');
+23 |   const [message, setMessage] = useState(notice ? { tone: 'success', text: notice } : resetError ? { tone: 'error', text: resetError } : null);
+24 |   const [busy, setBusy] = useState(false);
+25 |
+26 |   function go(next, text, tone = 'success') {
+27 |     setMode(next);
+28 |     setPassword('');
+29 |     setMessage(text ? { tone, text } : null);
+30 |   }
 ```
 
 - **Line 1:** Imports React and useState.
@@ -7618,211 +7623,208 @@ The login screens: sign in, create account, forgot password and choose a new pas
 - **Line 14:** Closes the preceding block (function, object, or statement body).
 - **Line 15:** Blank line separates related sections for readability; it performs no operation.
 - **Line 16:** Exports AuthScreen. It receives the public settings, an optional message, a reset token or reset error from a link, and a function to call after signing in.
-- **Line 17:** Chooses the first screen: the reset form when a token came with a reset link, the forgot form when the link was invalid, otherwise sign in.
-- **Line 18:** State for the name field.
-- **Line 19:** State for the email field.
-- **Line 20:** State for the password field.
-- **Line 21:** The message shown above the form: a notice (such as “You have been signed out”), a link error, or none.
-- **Line 22:** True while a request is running, which disables the form.
-- **Line 23:** Blank line separates related sections for readability; it performs no operation.
-- **Line 24:** Defines go, which switches screen and optionally shows a message.
-- **Line 25:** Changes the screen.
+- **Line 17:** Reads the server-confirmed reset capability; undefined remains disabled until configuration arrives.
+- **Line 18:** Remembers the requested screen, including a reset link, while authentication configuration may still be loading.
+- **Line 19:** Uses sign-in instead of forgot/reset screens when reset is disabled; a delayed development configuration can still restore the requested screen.
+- **Line 20:** State for the name field.
+- **Line 21:** State for the email field.
+- **Line 22:** State for the password field.
+- **Line 23:** The message shown above the form: a notice (such as “You have been signed out”), a link error, or none.
+- **Line 24:** True while a request is running, which disables the form.
+- **Line 25:** Blank line separates related sections for readability; it performs no operation.
+- **Line 26:** Defines go, which switches screen and optionally shows a message.
+- **Line 27:** Changes the screen.
+- **Line 28:** Always clears the password, so it is never carried between screens.
+- **Line 29:** Sets or clears the message.
+- **Line 30:** Closes the preceding block (function, object, or statement body).
 
-### Lines 26–50
-
-```text
-26 |     setPassword('');
-27 |     setMessage(text ? { tone, text } : null);
-28 |   }
-29 |   async function run(work) {
-30 |     if (busy) return;
-31 |     setBusy(true);
-32 |     setMessage(null);
-33 |     try { await work(); } catch (failure) { setMessage({ tone: 'error', text: failure.message }); } finally { setBusy(false); }
-34 |   }
-35 |   const submit = work => event => { event.preventDefault(); run(work); };
-36 |
-37 |   const login = submit(async () => {
-38 |     const problem = validateEmail(email);
-39 |     if (problem) throw new Error(problem);
-40 |     if (!password) throw new Error('Enter your password.');
-41 |     await signIn({ email, password });
-42 |     const user = await getSession();
-43 |     if (!user) throw new Error('Sign-in did not complete. Please try again.');
-44 |     onSignedIn(user);
-45 |   });
-46 |   const register = submit(async () => {
-47 |     const problem = validateName(name) || validateEmail(email) || passwordProblem(password, email);
-48 |     if (problem) throw new Error(problem);
-49 |     await signUp({ name, email, password });
-50 |     go('signin', 'Your account request was received. Sign in below. If this email already had an account, its password was not changed: sign in with your existing password or choose “Forgot password”.');
-```
-
-- **Line 26:** Always clears the password, so it is never carried between screens.
-- **Line 27:** Sets or clears the message.
-- **Line 28:** Closes the preceding block (function, object, or statement body).
-- **Line 29:** Defines run, which performs one action safely.
-- **Line 30:** Ignores a second press while one request is running.
-- **Line 31:** Shows the busy state.
-- **Line 32:** Clears the old message.
-- **Line 33:** Runs the action; any error becomes a visible message; the busy state always ends.
-- **Line 34:** Closes the preceding block (function, object, or statement body).
-- **Line 35:** Defines submit: wraps an action so the page does not reload and the action runs through run.
-- **Line 36:** Blank line separates related sections for readability; it performs no operation.
-- **Line 37:** The sign-in action.
-- **Line 38:** Checks the email shape first.
-- **Line 39:** Shows the problem if there is one.
-- **Line 40:** A password is required.
-- **Line 41:** Sends the sign-in request; the server sets the session cookie.
-- **Line 42:** Asks the server who is now signed in, to confirm the session works.
-- **Line 43:** If no session appeared, reports a problem instead of showing the dashboard.
-- **Line 44:** Tells the parent the coach is signed in.
-- **Line 45:** Closes the callback body and the function call that received it.
-- **Line 46:** The registration action.
-- **Line 47:** Checks name, email and password with the shared rules (the server checks them again).
-- **Line 48:** Shows the first problem.
-- **Line 49:** Sends the registration.
-- **Line 50:** Always shows the same message and moves to sign in, whether or not the email already had an account: it explains both cases without confirming either, so the page cannot be used to discover registered emails.
-
-### Lines 51–75
+### Lines 31–60
 
 ```text
-51 |   });
-52 |   const forgot = submit(async () => {
-53 |     const problem = validateEmail(email);
-54 |     if (problem) throw new Error(problem);
-55 |     await requestReset(email);
-56 |     go('signin', config.mail === 'console' ? 'If that email has an account, a reset link was created. Email is not set up yet in this local copy, so the link is printed in the CoachLab backend window. It works once and expires in one hour.' : 'If that email has an account, we sent a reset link. It works once and expires in one hour.');
-57 |   });
-58 |   const reset = submit(async () => {
-59 |     const problem = passwordProblem(password);
-60 |     if (problem) throw new Error(problem);
-61 |     await resetPassword({ token: resetToken, newPassword: password });
-62 |     go('signin', 'Your password was changed and every other session was signed out. Sign in with your new password.');
-63 |   });
-64 |
-65 |   const heading = { signin: 'Sign in to CoachLab', register: 'Create your coach account', forgot: 'Reset your password', reset: 'Choose a new password' }[mode];
-66 |   return <main className="auth-screen">
-67 |     <div className="auth-card">
-68 |       <p className="eyebrow">PLAN WITH PURPOSE</p>
-69 |       <h1>CoachLab</h1>
-70 |       <h2>{heading}</h2>
-71 |       {message && <p className={message.tone === 'error' ? 'error' : 'success'} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
-72 |       {mode === 'signin' && <form onSubmit={login} noValidate>
-73 |         <fieldset disabled={busy}>
-74 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
-75 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
+31 |   async function run(work) {
+32 |     if (busy) return;
+33 |     setBusy(true);
+34 |     setMessage(null);
+35 |     try { await work(); } catch (failure) { setMessage({ tone: 'error', text: failure.message }); } finally { setBusy(false); }
+36 |   }
+37 |   const submit = work => event => { event.preventDefault(); run(work); };
+38 |
+39 |   const login = submit(async () => {
+40 |     const problem = validateEmail(email);
+41 |     if (problem) throw new Error(problem);
+42 |     if (!password) throw new Error('Enter your password.');
+43 |     await signIn({ email, password });
+44 |     const user = await getSession();
+45 |     if (!user) throw new Error('Sign-in did not complete. Please try again.');
+46 |     onSignedIn(user);
+47 |   });
+48 |   const register = submit(async () => {
+49 |     const problem = validateName(name) || validateEmail(email) || passwordProblem(password, email);
+50 |     if (problem) throw new Error(problem);
+51 |     await signUp({ name, email, password });
+52 |     go('signin', `Your account request was received. Sign in below. If this email already had an account, its password was not changed. ${resetEnabled ? 'Use your existing password or choose “Forgot password”.' : 'Contact the coach if you cannot sign in.'}`);
+53 |   });
+54 |   const forgot = submit(async () => {
+55 |     if (!resetEnabled) throw new Error('Contact the coach to reset your password.');
+56 |     const problem = validateEmail(email);
+57 |     if (problem) throw new Error(problem);
+58 |     await requestReset(email);
+59 |     go('signin', config.mail === 'console' ? 'If that email has an account, a reset link was created. Email is not set up yet in this local copy, so the link is printed in the CoachLab backend window. It works once and expires in one hour.' : 'If that email has an account, we sent a reset link. It works once and expires in one hour.');
+60 |   });
 ```
 
-- **Line 51:** Closes the callback body and the function call that received it.
-- **Line 52:** The forgot-password action.
-- **Line 53:** Checks the email shape.
-- **Line 54:** Shows the problem.
-- **Line 55:** Requests the reset link.
-- **Line 56:** Always shows the same message. In local mode it also explains that the link appears in the backend window because email is not set up yet.
-- **Line 57:** Closes the callback body and the function call that received it.
-- **Line 58:** The choose-new-password action.
-- **Line 59:** Checks the new password with the shared rules.
-- **Line 60:** Shows the problem.
-- **Line 61:** Sends the one-time token and the new password.
-- **Line 62:** Confirms the change, says other sessions were signed out and moves to sign in.
-- **Line 63:** Closes the callback body and the function call that received it.
-- **Line 64:** Blank line separates related sections for readability; it performs no operation.
-- **Line 65:** Chooses the heading for each screen.
-- **Line 66:** Starts the page.
-- **Line 67:** The card.
-- **Line 68:** Small tagline above the title.
-- **Line 69:** The CoachLab title.
-- **Line 70:** The screen heading.
-- **Line 71:** Shows the message, as an alert for errors and as a status for good news, so screen readers announce it.
-- **Line 72:** The sign-in form; noValidate lets CoachLab show its own friendlier messages.
-- **Line 73:** A fieldset disabled while busy disables every control inside at once.
-- **Line 74:** The email input: type email and inputMode email show a suitable phone keyboard, autoComplete username lets password managers fill it, and autoCapitalize none stops phones capitalising the first letter.
-- **Line 75:** The password field; current-password tells password managers to fill the saved password.
+- **Line 31:** Defines run, which performs one action safely.
+- **Line 32:** Ignores a second press while one request is running.
+- **Line 33:** Shows the busy state.
+- **Line 34:** Clears the old message.
+- **Line 35:** Runs the action; any error becomes a visible message; the busy state always ends.
+- **Line 36:** Closes the preceding block (function, object, or statement body).
+- **Line 37:** Defines submit: wraps an action so the page does not reload and the action runs through run.
+- **Line 38:** Blank line separates related sections for readability; it performs no operation.
+- **Line 39:** The sign-in action.
+- **Line 40:** Checks the email shape.
+- **Line 41:** Shows the problem.
+- **Line 42:** A password is required.
+- **Line 43:** Sends the sign-in request; the server sets the session cookie.
+- **Line 44:** Asks the server who is now signed in, to confirm the session works.
+- **Line 45:** If no session appeared, reports a problem instead of showing the dashboard.
+- **Line 46:** Tells the parent the coach is signed in.
+- **Line 47:** Closes the callback body and the function call that received it.
+- **Line 48:** The registration action.
+- **Line 49:** Checks name, email and password with the shared rules (the server checks them again).
+- **Line 50:** Shows the problem.
+- **Line 51:** Sends the registration.
+- **Line 52:** Shows enumeration-safe registration feedback and chooses recovery advice appropriate to the enabled environment.
+- **Line 53:** Closes the callback body and the function call that received it.
+- **Line 54:** The forgot-password action.
+- **Line 55:** Stops a reset action locally if configuration disables it; the backend separately enforces the same rule.
+- **Line 56:** Checks the email shape.
+- **Line 57:** Shows the problem.
+- **Line 58:** Requests the reset link.
+- **Line 59:** Always shows the same message. In local mode it also explains that the link appears in the backend window because email is not set up yet.
+- **Line 60:** Closes the callback body and the function call that received it.
 
-### Lines 76–100
+### Lines 61–90
 
 ```text
-76 |           <button type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
-77 |         </fieldset>
-78 |         <p className="auth-links"><button type="button" className="link" onClick={() => go('forgot')}>Forgot password?</button></p>
-79 |       </form>}
-80 |       {mode === 'register' && <form onSubmit={register} noValidate>
-81 |         <fieldset disabled={busy}>
-82 |           <label>Your name<input value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={80} required autoFocus /></label>
-83 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" required /></label>
-84 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters. A few random words work well. Avoid common passwords.`} />
-85 |           <button type="submit">{busy ? 'Creating account…' : 'Create account'}</button>
-86 |         </fieldset>
-87 |       </form>}
-88 |       {mode === 'forgot' && <form onSubmit={forgot} noValidate>
-89 |         <fieldset disabled={busy}>
-90 |           <p>Enter your email and we will create a one-time reset link.</p>
-91 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
-92 |           <button type="submit">{busy ? 'Sending…' : 'Send reset link'}</button>
-93 |         </fieldset>
-94 |       </form>}
-95 |       {mode === 'reset' && <form onSubmit={reset} noValidate>
-96 |         <fieldset disabled={busy}>
-97 |           <PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters.`} />
-98 |           <button type="submit">{busy ? 'Saving…' : 'Change password'}</button>
-99 |         </fieldset>
-100 |       </form>}
+61 |   const reset = submit(async () => {
+62 |     if (!resetEnabled) throw new Error('Contact the coach to reset your password.');
+63 |     const problem = passwordProblem(password);
+64 |     if (problem) throw new Error(problem);
+65 |     await resetPassword({ token: resetToken, newPassword: password });
+66 |     go('signin', 'Your password was changed and every other session was signed out. Sign in with your new password.');
+67 |   });
+68 |
+69 |   const heading = { signin: 'Sign in to CoachLab', register: 'Create your coach account', forgot: 'Reset your password', reset: 'Choose a new password' }[mode];
+70 |   return <main className="auth-screen">
+71 |     <div className="auth-card">
+72 |       <p className="eyebrow">PLAN WITH PURPOSE</p>
+73 |       <h1>CoachLab</h1>
+74 |       <h2>{heading}</h2>
+75 |       {message && <p className={message.tone === 'error' ? 'error' : 'success'} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</p>}
+76 |       {mode === 'signin' && <form onSubmit={login} noValidate>
+77 |         <fieldset disabled={busy}>
+78 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
+79 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
+80 |           <button type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
+81 |         </fieldset>
+82 |         <p className="auth-links">{resetEnabled ? <button type="button" className="link" onClick={() => go('forgot')}>Forgot password?</button> : 'Contact the coach to reset your password.'}</p>
+83 |       </form>}
+84 |       {mode === 'register' && <form onSubmit={register} noValidate>
+85 |         <fieldset disabled={busy}>
+86 |           <label>Your name<input value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={80} required autoFocus /></label>
+87 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" required /></label>
+88 |           <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters. A few random words work well. Avoid common passwords.`} />
+89 |           <button type="submit">{busy ? 'Creating account…' : 'Create account'}</button>
+90 |         </fieldset>
 ```
 
-- **Line 76:** The submit button.
-- **Line 77:** Ends the fieldset.
-- **Line 78:** The Forgot password link-button.
-- **Line 79:** Ends the sign-in form.
-- **Line 80:** The registration form.
-- **Line 81:** Fieldset disabled while busy.
-- **Line 82:** The name input with the browser’s name autofill hint and the 80-character limit.
-- **Line 83:** The email input.
-- **Line 84:** The password field; new-password tells password managers to offer a strong password; the hint states the rule.
-- **Line 85:** The submit button.
-- **Line 86:** Ends the fieldset.
-- **Line 87:** Ends the registration form.
-- **Line 88:** The forgot-password form.
-- **Line 89:** Fieldset disabled while busy.
-- **Line 90:** Explains what will happen.
-- **Line 91:** The email input.
-- **Line 92:** The submit button.
-- **Line 93:** Ends the fieldset.
-- **Line 94:** Ends the form.
-- **Line 95:** The choose-new-password form (shown only when a valid reset link was opened).
-- **Line 96:** Fieldset disabled while busy.
-- **Line 97:** The new password field with its hint.
-- **Line 98:** The submit button.
-- **Line 99:** Ends the fieldset.
-- **Line 100:** Ends the form.
+- **Line 61:** The choose-new-password action.
+- **Line 62:** Stops a reset action locally if configuration disables it; the backend separately enforces the same rule.
+- **Line 63:** Checks the new password with the shared rules.
+- **Line 64:** Shows the problem.
+- **Line 65:** Sends the one-time token and the new password.
+- **Line 66:** Confirms the change, says other sessions were signed out and moves to sign in.
+- **Line 67:** Closes the callback body and the function call that received it.
+- **Line 68:** Blank line separates related sections for readability; it performs no operation.
+- **Line 69:** Chooses the heading for each screen.
+- **Line 70:** Starts the page.
+- **Line 71:** The card.
+- **Line 72:** Small tagline above the title.
+- **Line 73:** The CoachLab title.
+- **Line 74:** The screen heading.
+- **Line 75:** Shows the message, as an alert for errors and as a status for good news, so screen readers announce it.
+- **Line 76:** The sign-in form; noValidate lets CoachLab show its own friendlier messages.
+- **Line 77:** Fieldset disabled while busy.
+- **Line 78:** The email input.
+- **Line 79:** The password field; current-password tells password managers to fill the saved password.
+- **Line 80:** The submit button.
+- **Line 81:** Ends the fieldset.
+- **Line 82:** Conditionally renders the existing forgot-password button in development, or the contact-the-coach message in production.
+- **Line 83:** Ends the form.
+- **Line 84:** The registration form.
+- **Line 85:** Fieldset disabled while busy.
+- **Line 86:** The name input with the browser’s name autofill hint and the 80-character limit.
+- **Line 87:** The email input.
+- **Line 88:** The password field; new-password tells password managers to offer a strong password; the hint states the rule.
+- **Line 89:** The submit button.
+- **Line 90:** Ends the fieldset.
 
-### Lines 101–111
+### Lines 91–115
 
 ```text
-101 |       {mode === 'signin' && config.google && <>
-102 |         <p className="auth-divider"><span>or</span></p>
-103 |         <button type="button" className="secondary" disabled={busy} onClick={() => run(startGoogleSignIn)}>Continue with Google</button>
-104 |       </>}
-105 |       <p className="auth-links">
-106 |         {mode === 'signin' && <>New here? <button type="button" className="link" onClick={() => go('register')}>Create an account</button></>}
-107 |         {mode !== 'signin' && <button type="button" className="link" onClick={() => go('signin')}>Back to sign in</button>}
-108 |       </p>
-109 |     </div>
-110 |   </main>;
-111 | }
+91 |       </form>}
+92 |       {mode === 'forgot' && <form onSubmit={forgot} noValidate>
+93 |         <fieldset disabled={busy}>
+94 |           <p>Enter your email and we will create a one-time reset link.</p>
+95 |           <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" inputMode="email" autoCapitalize="none" autoFocus required /></label>
+96 |           <button type="submit">{busy ? 'Sending…' : 'Send reset link'}</button>
+97 |         </fieldset>
+98 |       </form>}
+99 |       {mode === 'reset' && <form onSubmit={reset} noValidate>
+100 |         <fieldset disabled={busy}>
+101 |           <PasswordField label="New password" value={password} onChange={setPassword} autoComplete="new-password" hint={`At least ${passwordLimits.min} characters.`} />
+102 |           <button type="submit">{busy ? 'Saving…' : 'Change password'}</button>
+103 |         </fieldset>
+104 |       </form>}
+105 |       {mode === 'signin' && config.google && <>
+106 |         <p className="auth-divider"><span>or</span></p>
+107 |         <button type="button" className="secondary" disabled={busy} onClick={() => run(startGoogleSignIn)}>Continue with Google</button>
+108 |       </>}
+109 |       <p className="auth-links">
+110 |         {mode === 'signin' && <>New here? <button type="button" className="link" onClick={() => go('register')}>Create an account</button></>}
+111 |         {mode !== 'signin' && <button type="button" className="link" onClick={() => go('signin')}>Back to sign in</button>}
+112 |       </p>
+113 |     </div>
+114 |   </main>;
+115 | }
 ```
 
-- **Line 101:** On the sign-in screen, when the server says Google is configured, shows the Google option.
-- **Line 102:** The “or” divider.
-- **Line 103:** The Continue with Google button.
-- **Line 104:** Ends the Google section.
-- **Line 105:** Starts the bottom links.
-- **Line 106:** On sign in: a link-button to create an account.
-- **Line 107:** On the other screens: a link-button back to sign in.
-- **Line 108:** Ends the links.
-- **Line 109:** Closes the div element.
-- **Line 110:** Ends the page.
-- **Line 111:** Closes the preceding block (function, object, or statement body).
+- **Line 91:** Ends the form.
+- **Line 92:** The forgot-password form.
+- **Line 93:** Fieldset disabled while busy.
+- **Line 94:** Explains what will happen.
+- **Line 95:** The email input.
+- **Line 96:** The submit button.
+- **Line 97:** Ends the fieldset.
+- **Line 98:** Ends the form.
+- **Line 99:** The choose-new-password form (shown only when a valid reset link was opened).
+- **Line 100:** Fieldset disabled while busy.
+- **Line 101:** The new password field with its hint.
+- **Line 102:** The submit button.
+- **Line 103:** Ends the fieldset.
+- **Line 104:** Ends the form.
+- **Line 105:** On the sign-in screen, when the server says Google is configured, shows the Google option.
+- **Line 106:** The “or” divider.
+- **Line 107:** The Continue with Google button.
+- **Line 108:** Ends the Google section.
+- **Line 109:** Starts the bottom links.
+- **Line 110:** On sign in: a link-button to create an account.
+- **Line 111:** On the other screens: a link-button back to sign in.
+- **Line 112:** Ends the links.
+- **Line 113:** Closes the div element.
+- **Line 114:** Ends the page.
+- **Line 115:** Closes the preceding block (function, object, or statement body).
 
 ## client/src/Gate.jsx
 
@@ -7920,9 +7922,9 @@ The top-level component. It decides what the coach sees: a loading message, the 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\auth.js`
 
-Browser helper functions for the login system. They call Better Auth’s routes under /api/auth with plain fetch (the session itself lives in an HttpOnly cookie the browser sends automatically and JavaScript can never read), and turn technical error codes into plain-language messages.
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | const json = { 'Content-Type': 'application/json' };
@@ -7930,26 +7932,31 @@ Browser helper functions for the login system. They call Better Auth’s routes 
 3 |
 4 | export function friendlyAuthError(status, data) {
 5 |   const code = data?.code;
-6 |   if (code === 'INVALID_EMAIL_OR_PASSWORD' || status === 401) return 'Incorrect email or password.';
-7 |   if (code === 'TOO_MANY_ATTEMPTS') return data.message;
-8 |   if (status === 429) return 'Too many attempts from this device. Wait a few minutes and try again.';
-9 |   if (code === 'INVALID_TOKEN') return 'This reset link is invalid or has expired. Request a new one.';
-10 |   if (['INVALID_REGISTRATION', 'WEAK_PASSWORD', 'PASSWORD_TOO_SHORT', 'PASSWORD_TOO_LONG'].includes(code) && data.message) return data.message;
-11 |   if (status === 403) return 'This request was blocked for your safety. Reload the page and try again.';
-12 |   return 'Something went wrong. Please try again.';
-13 | }
-14 |
-15 | async function call(path, { method = 'POST', body } = {}) {
-16 |   let response;
-17 |   try {
-18 |     response = await fetch(`/api/auth${path}`, { method, headers: body === undefined ? undefined : json, body: body === undefined ? undefined : JSON.stringify(body) });
-19 |   } catch {
-20 |     throw new Error(networkMessage);
-21 |   }
-22 |   const data = await response.json().catch(() => null);
-23 |   if (!response.ok) throw new Error(friendlyAuthError(response.status, data));
-24 |   return data;
-25 | }
+6 |   if (code === 'PASSWORD_RESET_DISABLED') return 'Contact the coach to reset your password.';
+7 |   if (code === 'INVALID_EMAIL_OR_PASSWORD' || status === 401) return 'Incorrect email or password.';
+8 |   if (code === 'TOO_MANY_ATTEMPTS') return data.message;
+9 |   if (status === 429) return 'Too many attempts from this device. Wait a few minutes and try again.';
+10 |   if (code === 'INVALID_TOKEN') return 'This reset link is invalid or has expired. Request a new one.';
+11 |   if (['INVALID_REGISTRATION', 'WEAK_PASSWORD', 'PASSWORD_TOO_SHORT', 'PASSWORD_TOO_LONG'].includes(code) && data.message) return data.message;
+12 |   if (status === 403) return 'This request was blocked for your safety. Reload the page and try again.';
+13 |   return 'Something went wrong. Please try again.';
+14 | }
+15 |
+16 | async function call(path, { method = 'POST', body } = {}) {
+17 |   let response;
+18 |   try {
+19 |     response = await fetch(`/api/auth${path}`, { method, headers: body === undefined ? undefined : json, body: body === undefined ? undefined : JSON.stringify(body) });
+20 |   } catch {
+21 |     throw new Error(networkMessage);
+22 |   }
+23 |   const data = await response.json().catch(() => null);
+24 |   if (!response.ok) throw new Error(friendlyAuthError(response.status, data));
+25 |   return data;
+26 | }
+27 |
+28 | export async function getAuthConfig() {
+29 |   try {
+30 |     const response = await fetch('/api/auth-config');
 ```
 
 - **Line 1:** Header object used for requests that send JSON.
@@ -7957,114 +7964,111 @@ Browser helper functions for the login system. They call Better Auth’s routes 
 - **Line 3:** Blank line separates related sections for readability; it performs no operation.
 - **Line 4:** Exports friendlyAuthError, which chooses the sentence a coach sees for a failed request, from the HTTP status and the server’s error code.
 - **Line 5:** Reads the machine-readable error code, if the reply had one.
-- **Line 6:** A wrong password, an unknown email or any 401 all produce the same sentence, so the page cannot be used to find out which emails have accounts.
-- **Line 7:** A temporarily locked account shows the server’s own explanation.
-- **Line 8:** Any other 429 (too many requests) says to wait a few minutes.
-- **Line 9:** An invalid or expired reset token tells the coach to request a new link.
-- **Line 10:** Registration and password rule failures show the server’s specific reason (for example “Use at least 10 characters.”).
-- **Line 11:** A 403 means the request was blocked as not coming from CoachLab’s own page; the advice is to reload.
-- **Line 12:** Everything else gets a general message that reveals no technical detail.
-- **Line 13:** Closes the preceding block (function, object, or statement body).
-- **Line 14:** Blank line separates related sections for readability; it performs no operation.
-- **Line 15:** Defines call, the shared request helper for the login routes (POST by default).
-- **Line 16:** Will hold the server’s answer.
-- **Line 17:** Starts the guarded request.
-- **Line 18:** Sends the request to /api/auth plus the path, with a JSON body when there is one. Cookies travel automatically because the request is to the same site.
-- **Line 19:** If the network fails…
-- **Line 20:** …throws the friendly connection message.
-- **Line 21:** Closes the preceding block (function, object, or statement body).
-- **Line 22:** Reads the JSON reply, or null if the reply is not JSON.
-- **Line 23:** A failed status becomes an Error with a friendly message.
-- **Line 24:** Returns the reply data on success.
-- **Line 25:** Closes the preceding block (function, object, or statement body).
+- **Line 6:** Translates the production reset rejection into the same plain-English contact message used by the screen.
+- **Line 7:** A wrong password, an unknown email or any 401 all produce the same sentence, so the page cannot be used to find out which emails have accounts.
+- **Line 8:** A temporarily locked account shows the server’s own explanation.
+- **Line 9:** Any other 429 (too many requests) says to wait a few minutes.
+- **Line 10:** An invalid or expired reset token tells the coach to request a new link.
+- **Line 11:** Registration and password rule failures show the server’s specific reason (for example “Use at least 10 characters.”).
+- **Line 12:** A 403 means the request was blocked as not coming from CoachLab’s own page; the advice is to reload.
+- **Line 13:** Everything else gets a general message that reveals no technical detail.
+- **Line 14:** Closes the preceding block (function, object, or statement body).
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Defines call, the shared request helper for the login routes (POST by default).
+- **Line 17:** Will hold the server’s answer.
+- **Line 18:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 19:** Sends the request to /api/auth plus the path, with a JSON body when there is one. Cookies travel automatically because the request is to the same site.
+- **Line 20:** Catches failure without including private exception details in public hosting logs.
+- **Line 21:** …throws the friendly connection message.
+- **Line 22:** Closes the preceding block (function, object, or statement body).
+- **Line 23:** Reads the JSON reply, or null if the reply is not JSON.
+- **Line 24:** A failed status becomes an Error with a friendly message.
+- **Line 25:** Returns the reply data on success.
+- **Line 26:** Closes the preceding block (function, object, or statement body).
+- **Line 27:** Blank line separates related sections for readability; it performs no operation.
+- **Line 28:** Exports getAuthConfig, which asks which sign-in options exist.
+- **Line 29:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 30:** Requests the public settings (no sign-in needed).
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |
-27 | export async function getAuthConfig() {
-28 |   try {
-29 |     const response = await fetch('/api/auth-config');
-30 |     const data = await response.json();
-31 |     return { google: data.google === true, mail: data.mail };
-32 |   } catch {
-33 |     return { google: false, mail: 'unknown' };
-34 |   }
-35 | }
-36 |
-37 | export async function getSession() {
-38 |   const data = await call('/get-session', { method: 'GET' });
-39 |   return data?.user ? { id: data.user.id, name: data.user.name, email: data.user.email } : null;
-40 | }
-41 |
-42 | export const signUp = ({ name, email, password }) => call('/sign-up/email', { body: { name: name.trim(), email: email.trim(), password } });
-43 | export const signIn = ({ email, password }) => call('/sign-in/email', { body: { email: email.trim(), password } });
-44 | export const signOut = () => call('/sign-out', { body: {} });
-45 | export const requestReset = email => call('/request-password-reset', { body: { email: email.trim(), redirectTo: '/reset-password' } });
-46 | export const resetPassword = ({ token, newPassword }) => call('/reset-password', { body: { token, newPassword } });
-47 |
-48 | export async function startGoogleSignIn() {
-49 |   const data = await call('/sign-in/social', { body: { provider: 'google', callbackURL: '/' } });
-50 |   if (typeof data?.url !== 'string' || !data.url.startsWith('https://accounts.google.com/')) throw new Error('Google sign-in is not available right now.');
+31 |     const data = await response.json();
+32 |     return { google: data.google === true, mail: data.mail, passwordReset: data.passwordReset === true };
+33 |   } catch {
+34 |     return { google: false, mail: 'unknown', passwordReset: false };
+35 |   }
+36 | }
+37 |
+38 | export async function getSession() {
+39 |   const data = await call('/get-session', { method: 'GET' });
+40 |   return data?.user ? { id: data.user.id, name: data.user.name, email: data.user.email } : null;
+41 | }
+42 |
+43 | export const signUp = ({ name, email, password }) => call('/sign-up/email', { body: { name: name.trim(), email: email.trim(), password } });
+44 | export const signIn = ({ email, password }) => call('/sign-in/email', { body: { email: email.trim(), password } });
+45 | export const signOut = () => call('/sign-out', { body: {} });
+46 | export const requestReset = email => call('/request-password-reset', { body: { email: email.trim(), redirectTo: '/reset-password' } });
+47 | export const resetPassword = ({ token, newPassword }) => call('/reset-password', { body: { token, newPassword } });
+48 |
+49 | export async function startGoogleSignIn() {
+50 |   const data = await call('/sign-in/social', { body: { provider: 'google', callbackURL: '/' } });
+51 |   if (typeof data?.url !== 'string' || !data.url.startsWith('https://accounts.google.com/')) throw new Error('Google sign-in is not available right now.');
+52 |   window.location.assign(data.url);
+53 | }
+54 |
+55 | export function installUnauthorizedHandler(handler) {
+56 |   const original = window.fetch;
+57 |   window.fetch = async (input, init) => {
+58 |     const response = await original(input, init);
+59 |     const address = typeof input === 'string' ? input : input?.url ?? '';
+60 |     if (response.status === 401 && address.startsWith('/api/') && !address.startsWith('/api/auth')) handler();
 ```
 
-- **Line 26:** Blank line separates related sections for readability; it performs no operation.
-- **Line 27:** Exports getAuthConfig, which asks which sign-in options exist.
-- **Line 28:** Starts the guarded request.
-- **Line 29:** Requests the public settings (no sign-in needed).
-- **Line 30:** Reads the reply.
-- **Line 31:** Returns whether Google sign-in is configured and the mail mode.
-- **Line 32:** If anything fails…
-- **Line 33:** …assumes no Google and an unknown mail mode, so the login page still works.
-- **Line 34:** Closes the preceding block (function, object, or statement body).
+- **Line 31:** Reads the reply.
+- **Line 32:** Copies only public capabilities from Express and enables reset only for an explicit true value.
+- **Line 33:** Catches failure without including private exception details in public hosting logs.
+- **Line 34:** If configuration cannot load, hides reset and Google actions rather than guessing that they are available.
 - **Line 35:** Closes the preceding block (function, object, or statement body).
-- **Line 36:** Blank line separates related sections for readability; it performs no operation.
-- **Line 37:** Exports getSession: asks the server whether the browser has a valid session.
-- **Line 38:** Calls get-session; the server answers null when nobody is signed in.
-- **Line 39:** Returns the coach’s id, name and email, or null.
-- **Line 40:** Closes the preceding block (function, object, or statement body).
-- **Line 41:** Blank line separates related sections for readability; it performs no operation.
-- **Line 42:** signUp: sends the registration (name, email, password).
-- **Line 43:** signIn: sends the email and password; on success the server sets the session cookie.
-- **Line 44:** signOut: ends the session on the server and clears the cookie.
-- **Line 45:** requestReset: asks for a password reset link; redirectTo says the link should lead back to the /reset-password page.
-- **Line 46:** resetPassword: sends the one-time token and the new password.
-- **Line 47:** Blank line separates related sections for readability; it performs no operation.
-- **Line 48:** Exports startGoogleSignIn.
-- **Line 49:** Asks the server for Google’s sign-in address.
-- **Line 50:** Only follows the address if it starts with https://accounts.google.com/, so a tampered answer cannot send the coach anywhere else.
+- **Line 36:** Closes the preceding block (function, object, or statement body).
+- **Line 37:** Blank line separates related sections for readability; it performs no operation.
+- **Line 38:** Exports getSession: asks the server whether the browser has a valid session.
+- **Line 39:** Calls get-session; the server answers null when nobody is signed in.
+- **Line 40:** Returns the coach’s id, name and email, or null.
+- **Line 41:** Closes the preceding block (function, object, or statement body).
+- **Line 42:** Blank line separates related sections for readability; it performs no operation.
+- **Line 43:** signUp: sends the registration (name, email, password).
+- **Line 44:** signIn: sends the email and password; on success the server sets the session cookie.
+- **Line 45:** signOut: ends the session on the server and clears the cookie.
+- **Line 46:** requestReset: asks for a password reset link; redirectTo says the link should lead back to the /reset-password page.
+- **Line 47:** resetPassword: sends the one-time token and the new password.
+- **Line 48:** Blank line separates related sections for readability; it performs no operation.
+- **Line 49:** Exports startGoogleSignIn.
+- **Line 50:** Asks the server for Google’s sign-in address.
+- **Line 51:** Only follows the address if it starts with https://accounts.google.com/, so a tampered answer cannot send the coach anywhere else.
+- **Line 52:** Moves the browser to Google.
+- **Line 53:** Closes the preceding block (function, object, or statement body).
+- **Line 54:** Blank line separates related sections for readability; it performs no operation.
+- **Line 55:** Exports installUnauthorizedHandler. It wraps fetch so the dashboard learns when the server stops accepting the session.
+- **Line 56:** Remembers the original fetch.
+- **Line 57:** Replaces window.fetch with a version that adds one check.
+- **Line 58:** Makes the real request.
+- **Line 59:** Reads the address that was requested.
+- **Line 60:** If a CoachLab data route (not a login route) answers 401, calls the handler, which returns the coach to the login screen with an explanation.
 
-### Lines 51–63
+### Lines 61–64
 
 ```text
-51 |   window.location.assign(data.url);
-52 | }
-53 |
-54 | export function installUnauthorizedHandler(handler) {
-55 |   const original = window.fetch;
-56 |   window.fetch = async (input, init) => {
-57 |     const response = await original(input, init);
-58 |     const address = typeof input === 'string' ? input : input?.url ?? '';
-59 |     if (response.status === 401 && address.startsWith('/api/') && !address.startsWith('/api/auth')) handler();
-60 |     return response;
-61 |   };
-62 |   return () => { window.fetch = original; };
-63 | }
+61 |     return response;
+62 |   };
+63 |   return () => { window.fetch = original; };
+64 | }
 ```
 
-- **Line 51:** Moves the browser to Google.
-- **Line 52:** Closes the preceding block (function, object, or statement body).
-- **Line 53:** Blank line separates related sections for readability; it performs no operation.
-- **Line 54:** Exports installUnauthorizedHandler. It wraps fetch so the dashboard learns when the server stops accepting the session.
-- **Line 55:** Remembers the original fetch.
-- **Line 56:** Replaces window.fetch with a version that adds one check.
-- **Line 57:** Makes the real request.
-- **Line 58:** Reads the address that was requested.
-- **Line 59:** If a CoachLab data route (not a login route) answers 401, calls the handler, which returns the coach to the login screen with an explanation.
-- **Line 60:** Returns the response unchanged.
-- **Line 61:** Closes the preceding block and ends the statement.
-- **Line 62:** Returns a function that puts the original fetch back.
-- **Line 63:** Closes the preceding block (function, object, or statement body).
+- **Line 61:** Returns the response unchanged.
+- **Line 62:** Closes the preceding block and ends the statement.
+- **Line 63:** Returns a function that puts the original fetch back.
+- **Line 64:** Closes the preceding block (function, object, or statement body).
 
 ## client/src/password-policy.js
 
@@ -8358,9 +8362,9 @@ Production preparation: this file connects deployment configuration to the exist
 25 | const normalize = email => String(email ?? '').trim().toLowerCase();
 26 |
 27 | export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, mailer, env = {}, loginLimiter = attemptLimiter({ max: 8, windowMs: 15 * 60 * 1000 }), resetLimiter = attemptLimiter({ max: 3, windowMs: 60 * 60 * 1000 }) }) {
-28 |   if (typeof secret !== 'string' || secret.length < 32) throw new Error('A random authentication secret of at least 32 characters is required.');
-29 |   const google = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : null;
-30 |   const sqlite = !prisma;
+28 |   const passwordResetEnabled = env.NODE_ENV !== 'production';
+29 |   if (typeof secret !== 'string' || secret.length < 32) throw new Error('A random authentication secret of at least 32 characters is required.');
+30 |   const google = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : null;
 ```
 
 - **Line 1:** Imports the main Better Auth function.
@@ -8390,185 +8394,193 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 25:** Defines normalize: trims and lowercases an email so limits and lookups treat Ana@x.com and ana@x.com as one account.
 - **Line 26:** Blank line separates related sections for readability; it performs no operation.
 - **Line 27:** Exports createAuth. It takes either a SQLite database or a Prisma client, the secret, the public address, the trusted origins, a mailer, the environment (for Google keys) and two replaceable limiters (eight wrong passwords per account per 15 minutes; three reset emails per account per hour).
-- **Line 28:** Refuses to start without a random secret of at least 32 characters. The secret signs session cookies; a weak or missing one would make sessions forgeable.
-- **Line 29:** Enables Google sign-in only when both Google credentials are present in the server environment.
-- **Line 30:** Remembers whether this is the SQLite flavour (no Prisma client).
+- **Line 28:** Enables reset only outside production; this single flag controls server routes, mail callbacks and public UI configuration.
+- **Line 29:** Refuses to start without a random secret of at least 32 characters. The secret signs session cookies; a weak or missing one would make sessions forgeable.
+- **Line 30:** Enables Google sign-in only when both Google credentials are present in the server environment.
 
 ### Lines 31–60
 
 ```text
-31 |   const auth = betterAuth({
-32 |     database: prisma ? prismaAdapter(prisma, { provider: 'postgresql' }) : database,
-33 |     secret,
-34 |     baseURL,
-35 |     trustedOrigins,
-36 |     emailAndPassword: {
-37 |       enabled: true,
-38 |       autoSignIn: false,
-39 |       minPasswordLength: 10,
-40 |       maxPasswordLength: 128,
-41 |       resetPasswordTokenExpiresIn: 60 * 60,
-42 |       revokeSessionsOnPasswordReset: true,
-43 |       sendResetPassword: async ({ user, url }) => {
-44 |         const key = normalize(user.email);
-45 |         if (resetLimiter.blocked(key)) return;
-46 |         resetLimiter.hit(key);
-47 |         await mailer.sendPasswordReset({ to: user.email, url });
-48 |       },
-49 |       onExistingUserSignUp: async ({ user }) => { await mailer.sendExistingAccountNotice({ to: user.email }); },
-50 |     },
-51 |     socialProviders: google ? { google } : undefined,
-52 |     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
-53 |     advanced: {
-54 |       cookiePrefix: 'coachlab',
-55 |       useSecureCookies: env.NODE_ENV === 'production' || baseURL.startsWith('https://'),
-56 |       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
-57 |     },
-58 |     rateLimit: {
-59 |       enabled: true,
-60 |       storage: 'database',
+31 |   const sqlite = !prisma;
+32 |   const auth = betterAuth({
+33 |     database: prisma ? prismaAdapter(prisma, { provider: 'postgresql' }) : database,
+34 |     secret,
+35 |     baseURL,
+36 |     trustedOrigins,
+37 |     emailAndPassword: {
+38 |       enabled: true,
+39 |       autoSignIn: false,
+40 |       minPasswordLength: 10,
+41 |       maxPasswordLength: 128,
+42 |       resetPasswordTokenExpiresIn: 60 * 60,
+43 |       revokeSessionsOnPasswordReset: true,
+44 |       sendResetPassword: async ({ user, url }) => {
+45 |         if (!passwordResetEnabled) return;
+46 |         const key = normalize(user.email);
+47 |         if (resetLimiter.blocked(key)) return;
+48 |         resetLimiter.hit(key);
+49 |         await mailer.sendPasswordReset({ to: user.email, url });
+50 |       },
+51 |       onExistingUserSignUp: async ({ user }) => { if (passwordResetEnabled) await mailer.sendExistingAccountNotice({ to: user.email }); },
+52 |     },
+53 |     socialProviders: google ? { google } : undefined,
+54 |     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
+55 |     advanced: {
+56 |       cookiePrefix: 'coachlab',
+57 |       useSecureCookies: env.NODE_ENV === 'production' || baseURL.startsWith('https://'),
+58 |       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
+59 |     },
+60 |     rateLimit: {
 ```
 
-- **Line 31:** Builds the Better Auth instance with the options below.
-- **Line 32:** Chooses where accounts live: the Prisma adapter for PostgreSQL, or the SQLite database directly.
-- **Line 33:** The signing secret.
-- **Line 34:** The public address of the site; reset links and cookie security are derived from it.
-- **Line 35:** The browser origins allowed to send sign-in requests. Better Auth rejects others as INVALID_ORIGIN, which blocks cross-site request forgery on the login routes.
-- **Line 36:** Email and password settings follow.
-- **Line 37:** Turns rate limiting on in every environment (the library only does so in production by default).
-- **Line 38:** Registration does not sign the new coach in automatically. This also makes a registration with an already-used email indistinguishable from a new one, because the library then returns the same response for both (no account enumeration).
-- **Line 39:** Minimum password length of 10 (the shared rules apply as well).
-- **Line 40:** Maximum password length of 128, which also bounds hashing work.
-- **Line 41:** Reset links work for 60 * 60 seconds, one hour.
-- **Line 42:** After a password reset, every existing session of that coach is ended, so someone who stole an old session loses access.
-- **Line 43:** Called when a reset is requested for a real account; it receives the coach and the one-time link.
-- **Line 44:** Makes the lowercase email key for the limiter.
-- **Line 45:** If three reset emails were already sent to this account within the hour, silently sends nothing. The response to the requester stays the same, so nobody can flood an inbox or learn anything.
-- **Line 46:** Records this send.
-- **Line 47:** Sends the link through the mailer (printed locally until an email provider exists).
-- **Line 48:** Closes the object or block and continues the surrounding list.
-- **Line 49:** Called when someone registers with an email that already has an account: it sends the real owner a notice. The person registering sees the same success message as anyone else.
+- **Line 31:** Remembers whether this is the SQLite flavour (no Prisma client).
+- **Line 32:** Builds the Better Auth instance with the options below.
+- **Line 33:** Chooses where accounts live: the Prisma adapter for PostgreSQL, or the SQLite database directly.
+- **Line 34:** The signing secret.
+- **Line 35:** The public address of the site; reset links and cookie security are derived from it.
+- **Line 36:** The browser origins allowed to send sign-in requests. Better Auth rejects others as INVALID_ORIGIN, which blocks cross-site request forgery on the login routes.
+- **Line 37:** Email and password settings follow.
+- **Line 38:** Turns rate limiting on in every environment (the library only does so in production by default).
+- **Line 39:** Registration does not sign the new coach in automatically. This also makes a registration with an already-used email indistinguishable from a new one, because the library then returns the same response for both (no account enumeration).
+- **Line 40:** Minimum password length of 10 (the shared rules apply as well).
+- **Line 41:** Maximum password length of 128, which also bounds hashing work.
+- **Line 42:** Reset links work for 60 * 60 seconds, one hour.
+- **Line 43:** After a password reset, every existing session of that coach is ended, so someone who stole an old session loses access.
+- **Line 44:** Called when a reset is requested for a real account; it receives the coach and the one-time link.
+- **Line 45:** Defensively prevents reset mail or console links even if the callback is reached through another internal path.
+- **Line 46:** Makes the lowercase email key for the limiter.
+- **Line 47:** If three reset emails were already sent to this account within the hour, silently sends nothing. The response to the requester stays the same, so nobody can flood an inbox or learn anything.
+- **Line 48:** Records this send.
+- **Line 49:** Sends the link through the mailer (printed locally until an email provider exists).
 - **Line 50:** Closes the object or block and continues the surrounding list.
-- **Line 51:** Adds Google as a sign-in option only when configured; otherwise undefined (no Google).
-- **Line 52:** Sessions last seven days and are refreshed at most once a day (both in seconds). They are stored in the database, so they can be revoked at any time.
-- **Line 53:** Advanced settings follow.
-- **Line 54:** Prefixes cookie names with “coachlab”, e.g. coachlab.session_token.
-- **Line 55:** Always marks production session cookies Secure; development keeps its existing HTTPS-dependent behavior.
-- **Line 56:** Reads the client address for rate limiting from x-forwarded-for, which the CoachLab dev proxy sets from the real connection (the backend only listens on this computer).
-- **Line 57:** Closes the object or block and continues the surrounding list.
-- **Line 58:** Rate limiting settings follow.
-- **Line 59:** Turns rate limiting on in every environment (the library only does so in production by default).
-- **Line 60:** Keeps the counters in the database, so restarting the server does not reset them.
+- **Line 51:** Keeps the existing local duplicate-account notice; production does not invoke the console mailer or expose addresses through this callback.
+- **Line 52:** Closes the object or block and continues the surrounding list.
+- **Line 53:** Adds Google as a sign-in option only when configured; otherwise undefined (no Google).
+- **Line 54:** Sessions last seven days and are refreshed at most once a day (both in seconds). They are stored in the database, so they can be revoked at any time.
+- **Line 55:** Advanced settings follow.
+- **Line 56:** Prefixes cookie names with “coachlab”, e.g. coachlab.session_token.
+- **Line 57:** Always marks production session cookies Secure; development keeps its existing HTTPS-dependent behavior.
+- **Line 58:** Reads the client address for rate limiting from x-forwarded-for, which the CoachLab dev proxy sets from the real connection (the backend only listens on this computer).
+- **Line 59:** Closes the object or block and continues the surrounding list.
+- **Line 60:** Rate limiting settings follow.
 
 ### Lines 61–90
 
 ```text
-61 |       window: 60,
-62 |       max: 120,
-63 |       customRules: {
-64 |         '/sign-in/email': { window: 300, max: 10 },
-65 |         '/sign-up/email': { window: 3600, max: 10 },
-66 |         '/request-password-reset': { window: 3600, max: 5 },
-67 |         '/reset-password': { window: 900, max: 10 },
-68 |       },
-69 |     },
-70 |     hooks: {
-71 |       before: createAuthMiddleware(async context => {
-72 |         const body = context.body ?? {};
-73 |         if (context.path === '/sign-up/email') {
-74 |           const problem = validateName(body.name) || validateEmail(body.email) || passwordProblem(body.password, body.email);
-75 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'INVALID_REGISTRATION' });
-76 |         }
-77 |         if (context.path === '/reset-password') {
-78 |           const problem = passwordProblem(body.newPassword);
-79 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'WEAK_PASSWORD' });
-80 |         }
-81 |         if (context.path === '/sign-in/email') {
-82 |           const problem = validateEmail(body.email);
-83 |           if (problem || typeof body.password !== 'string') throw new APIError('UNAUTHORIZED', { message: generic, code: 'INVALID_EMAIL_OR_PASSWORD' });
-84 |           if (loginLimiter.blocked(normalize(body.email))) throw new APIError('TOO_MANY_REQUESTS', { message: tooMany, code: 'TOO_MANY_ATTEMPTS' });
-85 |         }
-86 |       }),
-87 |       after: createAuthMiddleware(async context => {
-88 |         if (context.path !== '/sign-in/email') return;
-89 |         const key = normalize(context.body?.email);
-90 |         if (context.context.returned instanceof APIError) { if (context.context.returned.statusCode === 401) loginLimiter.hit(key); } else loginLimiter.clear(key);
+61 |       enabled: true,
+62 |       storage: 'database',
+63 |       window: 60,
+64 |       max: 120,
+65 |       customRules: {
+66 |         '/sign-in/email': { window: 300, max: 10 },
+67 |         '/sign-up/email': { window: 3600, max: 10 },
+68 |         '/request-password-reset': { window: 3600, max: 5 },
+69 |         '/reset-password': { window: 900, max: 10 },
+70 |       },
+71 |     },
+72 |     hooks: {
+73 |       before: createAuthMiddleware(async context => {
+74 |         if (!passwordResetEnabled && /^\/(request-password-reset|reset-password)(\/|$)/.test(context.path)) throw new APIError('FORBIDDEN', { message: 'Contact the coach to reset your password.', code: 'PASSWORD_RESET_DISABLED' });
+75 |         const body = context.body ?? {};
+76 |         if (context.path === '/sign-up/email') {
+77 |           const problem = validateName(body.name) || validateEmail(body.email) || passwordProblem(body.password, body.email);
+78 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'INVALID_REGISTRATION' });
+79 |         }
+80 |         if (context.path === '/reset-password') {
+81 |           const problem = passwordProblem(body.newPassword);
+82 |           if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'WEAK_PASSWORD' });
+83 |         }
+84 |         if (context.path === '/sign-in/email') {
+85 |           const problem = validateEmail(body.email);
+86 |           if (problem || typeof body.password !== 'string') throw new APIError('UNAUTHORIZED', { message: generic, code: 'INVALID_EMAIL_OR_PASSWORD' });
+87 |           if (loginLimiter.blocked(normalize(body.email))) throw new APIError('TOO_MANY_REQUESTS', { message: passwordResetEnabled ? tooMany : 'Too many sign-in attempts. Wait 15 minutes or contact the coach.', code: 'TOO_MANY_ATTEMPTS' });
+88 |         }
+89 |       }),
+90 |       after: createAuthMiddleware(async context => {
 ```
 
-- **Line 61:** Default window of 60 seconds.
-- **Line 62:** Default limit of 120 requests per window per client.
-- **Line 63:** Stricter rules for the sensitive routes follow.
-- **Line 64:** Sign-in: at most 10 attempts per 5 minutes per client address.
-- **Line 65:** Registration: at most 10 per hour.
-- **Line 66:** Reset requests: at most 5 per hour.
-- **Line 67:** Completing a reset: at most 10 per 15 minutes.
-- **Line 68:** Closes the object or block and continues the surrounding list.
-- **Line 69:** Closes the object or block and continues the surrounding list.
-- **Line 70:** Hooks that run around Better Auth’s own routes.
-- **Line 71:** Before every request: validate and throttle.
-- **Line 72:** The request body (empty object when missing).
-- **Line 73:** For registration…
-- **Line 74:** …checks the name, email and password with the shared rules.
-- **Line 75:** If any rule fails, refuses with a 400 and the plain-language reason.
-- **Line 76:** Closes the preceding block (function, object, or statement body).
-- **Line 77:** For finishing a password reset…
-- **Line 78:** …checks the new password with the same password rules.
-- **Line 79:** Refuses weak passwords with a 400.
-- **Line 80:** Closes the preceding block (function, object, or statement body).
-- **Line 81:** For sign-in…
-- **Line 82:** …checks the email shape.
-- **Line 83:** A malformed email or missing password gets the same generic 401 as a wrong password.
-- **Line 84:** If this account already had too many recent failures, refuses with 429 before any password is checked, whatever the client address. This stops slow password guessing spread over many addresses.
-- **Line 85:** Closes the preceding block (function, object, or statement body).
-- **Line 86:** Ends the after hook.
-- **Line 87:** After every request: update the failure counters.
-- **Line 88:** Only sign-in is of interest.
-- **Line 89:** The lowercase email of the attempt.
-- **Line 90:** A 401 failure counts against the account; a successful sign-in clears the counter.
+- **Line 61:** Turns rate limiting on in every environment (the library only does so in production by default).
+- **Line 62:** Keeps the counters in the database, so restarting the server does not reset them.
+- **Line 63:** Default window of 60 seconds.
+- **Line 64:** Default limit of 120 requests per window per client.
+- **Line 65:** Stricter rules for the sensitive routes follow.
+- **Line 66:** Sign-in: at most 10 attempts per 5 minutes per client address.
+- **Line 67:** Registration: at most 10 per hour.
+- **Line 68:** Reset requests: at most 5 per hour.
+- **Line 69:** Completing a reset: at most 10 per 15 minutes.
+- **Line 70:** Closes the object or block and continues the surrounding list.
+- **Line 71:** Closes the object or block and continues the surrounding list.
+- **Line 72:** Hooks that run around Better Auth’s own routes.
+- **Line 73:** Before every request: validate and throttle.
+- **Line 74:** Rejects both reset POST routes and the token callback route before lookup or token creation. The regular expression also matches a trailing token path.
+- **Line 75:** The request body (empty object when missing).
+- **Line 76:** For registration…
+- **Line 77:** …checks the name, email and password with the shared rules.
+- **Line 78:** If any rule fails, refuses with a 400 and the plain-language reason.
+- **Line 79:** Closes the preceding block (function, object, or statement body).
+- **Line 80:** For finishing a password reset…
+- **Line 81:** …checks the new password with the same password rules.
+- **Line 82:** Refuses weak passwords with a 400.
+- **Line 83:** Closes the preceding block (function, object, or statement body).
+- **Line 84:** For sign-in…
+- **Line 85:** …checks the email shape.
+- **Line 86:** A malformed email or missing password gets the same generic 401 as a wrong password.
+- **Line 87:** Preserves account lockout, but production advice suggests waiting or contacting the coach instead of a disabled reset action.
+- **Line 88:** Closes the preceding block (function, object, or statement body).
+- **Line 89:** Ends the after hook.
+- **Line 90:** After every request: update the failure counters.
 
-### Lines 91–109
+### Lines 91–113
 
 ```text
-91 |       }),
-92 |     },
-93 |   });
-94 |   return {
-95 |     auth,
-96 |     google: !!google,
-97 |     mailMode: mailer.mode,
-98 |     handler: toNodeHandler(auth),
-99 |     async getUser(request) {
-100 |       const result = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
-101 |       return result?.user ? { id: result.user.id, email: result.user.email, name: result.user.name } : null;
-102 |     },
-103 |     async prepare() {
-104 |       if (!sqlite) return;
-105 |       const { runMigrations } = await getMigrations(auth.options);
-106 |       await runMigrations();
-107 |     },
-108 |   };
-109 | }
+91 |         if (context.path !== '/sign-in/email') return;
+92 |         const key = normalize(context.body?.email);
+93 |         if (context.context.returned instanceof APIError) { if (context.context.returned.statusCode === 401) loginLimiter.hit(key); } else loginLimiter.clear(key);
+94 |       }),
+95 |     },
+96 |   });
+97 |   return {
+98 |     auth,
+99 |     passwordResetEnabled,
+100 |     google: !!google,
+101 |     mailMode: passwordResetEnabled ? mailer.mode : 'disabled',
+102 |     handler: toNodeHandler(auth),
+103 |     async getUser(request) {
+104 |       const result = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+105 |       return result?.user ? { id: result.user.id, email: result.user.email, name: result.user.name } : null;
+106 |     },
+107 |     async prepare() {
+108 |       if (!sqlite) return;
+109 |       const { runMigrations } = await getMigrations(auth.options);
+110 |       await runMigrations();
+111 |     },
+112 |   };
+113 | }
 ```
 
-- **Line 91:** Ends the after hook.
-- **Line 92:** Closes the object or block and continues the surrounding list.
-- **Line 93:** Closes the callback body and the function call that received it.
-- **Line 94:** Returns what the rest of CoachLab needs.
-- **Line 95:** The raw Better Auth object, for tests and advanced use.
-- **Line 96:** Tells the app whether Google sign-in is configured.
-- **Line 97:** Tells the app which mail mode is active.
-- **Line 98:** The Express-compatible request handler for all /api/auth routes.
-- **Line 99:** getUser turns the cookies of a request into the signed-in coach, or null.
-- **Line 100:** Asks Better Auth to look the session up on the server; an expired, revoked or forged cookie gives no session.
-- **Line 101:** Returns only the id, email and name that the rest of the app needs.
-- **Line 102:** Closes the object or block and continues the surrounding list.
-- **Line 103:** prepare creates the login tables when running on SQLite.
-- **Line 104:** PostgreSQL tables come from the reviewed Prisma migration instead, so nothing is done there.
-- **Line 105:** Asks the library which tables are missing.
-- **Line 106:** Creates them.
-- **Line 107:** Closes the object or block and continues the surrounding list.
-- **Line 108:** Closes the preceding block and ends the statement.
-- **Line 109:** Closes the preceding block (function, object, or statement body).
+- **Line 91:** Only sign-in is of interest.
+- **Line 92:** The lowercase email of the attempt.
+- **Line 93:** A 401 failure counts against the account; a successful sign-in clears the counter.
+- **Line 94:** Ends the after hook.
+- **Line 95:** Closes the object or block and continues the surrounding list.
+- **Line 96:** Closes the callback body and the function call that received it.
+- **Line 97:** Returns what the rest of CoachLab needs.
+- **Line 98:** The raw Better Auth object, for tests and advanced use.
+- **Line 99:** Exposes the non-secret reset capability to Express so the browser can hide unavailable actions.
+- **Line 100:** Tells the app whether Google sign-in is configured.
+- **Line 101:** Reports disabled mail in production while leaving the development mail mode unchanged.
+- **Line 102:** The Express-compatible request handler for all /api/auth routes.
+- **Line 103:** getUser turns the cookies of a request into the signed-in coach, or null.
+- **Line 104:** Asks Better Auth to look the session up on the server; an expired, revoked or forged cookie gives no session.
+- **Line 105:** Returns only the id, email and name that the rest of the app needs.
+- **Line 106:** Closes the object or block and continues the surrounding list.
+- **Line 107:** prepare creates the login tables when running on SQLite.
+- **Line 108:** PostgreSQL tables come from the reviewed Prisma migration instead, so nothing is done there.
+- **Line 109:** Asks the library which tables are missing.
+- **Line 110:** Creates them.
+- **Line 111:** Closes the object or block and continues the surrounding list.
+- **Line 112:** Closes the preceding block and ends the statement.
+- **Line 113:** Closes the preceding block (function, object, or statement body).
 
 ## server/auth.test.js
 
@@ -8715,444 +8727,490 @@ Production preparation: this file connects deployment configuration to the exist
 62 |   assert.ok(response.setCookie.some(cookie => /; Secure(?:;|$)/i.test(cookie)));
 63 | });
 64 |
-65 | test('registration validates input, hides whether an email already exists and never stores a plain password', async t => {
-66 |   const f = await fixture(t);
+65 | test('production disables password reset routes and emits no reset mail or tokens', async t => {
+66 |   const f = await fixture(t, { env: { NODE_ENV: 'production' } });
 67 |   const api = f.client();
-68 |   for (const [body, expected] of [[{ name: 'Ana', email: 'ana@example.com', password: 'short' }, /at least 10/], [{ name: 'Ana', email: 'nope', password: goodPassword }, /valid email/], [{ name: '', email: 'ana@example.com', password: goodPassword }, /Enter your name/], [{ name: 'Ana', email: 'ana@example.com', password: 'password123' }, /too common/]]) {
-69 |     const response = await api('/api/auth/sign-up/email', { method: 'POST', body });
-70 |     assert.equal(response.status, 400);
-71 |     assert.match(response.json.message, expected);
-72 |   }
-73 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 0);
-74 |   const first = await register(api, 'Ana@Example.com');
-75 |   assert.equal(first.status, 200);
-76 |   assert.equal(first.setCookie.length, 0);
-77 |   const again = await register(f.client('203.0.113.11'), 'ana@example.com', 'another-long-password-7');
-78 |   assert.equal(again.status, 200);
-79 |   assert.deepEqual(Object.keys(again.json.user).sort(), Object.keys(first.json.user).sort());
-80 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 1);
-81 |   assert.deepEqual(f.mailer.outbox, [{ kind: 'existing', to: 'ana@example.com' }]);
-82 |   const account = f.database.prepare("SELECT password FROM account WHERE providerId = 'credential'").get();
-83 |   assert.ok(account.password && !account.password.includes(goodPassword) && /^[0-9a-f]+:[0-9a-f]+$/.test(account.password));
-84 |   assert.equal(f.database.prepare('SELECT email FROM user').get().email, 'ana@example.com');
-85 | });
-86 |
-87 | test('sign in uses one error for wrong passwords and unknown emails, sets a safe session cookie and survives refresh', async t => {
-88 |   const f = await fixture(t);
-89 |   await register(f.client(), 'coach@example.com');
-90 |   const api = f.client();
+68 |   await register(api, 'production-reset@example.com');
+69 |   const config = await api('/api/auth-config');
+70 |   assert.equal(config.json.passwordReset, false);
+71 |   assert.equal(config.json.mail, 'disabled');
+72 |   for (const [path, options] of [
+73 |     ['/request-password-reset', { method: 'POST', body: { email: 'production-reset@example.com', redirectTo: '/reset-password' } }],
+74 |     ['/reset-password', { method: 'POST', body: { token: 'test-token', newPassword: goodPassword } }],
+75 |     ['/reset-password/test-token', { redirect: 'manual' }],
+76 |   ]) {
+77 |     const result = await api('/api/auth' + path, options);
+78 |     assert.equal(result.status, 403);
+79 |     assert.equal(result.json.code, 'PASSWORD_RESET_DISABLED');
+80 |   }
+81 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM verification').get().n, 0);
+82 |   assert.deepEqual(f.mailer.outbox, []);
+83 | });
+84 |
+85 | test('registration validates input, hides whether an email already exists and never stores a plain password', async t => {
+86 |   const f = await fixture(t);
+87 |   const api = f.client();
+88 |   for (const [body, expected] of [[{ name: 'Ana', email: 'ana@example.com', password: 'short' }, /at least 10/], [{ name: 'Ana', email: 'nope', password: goodPassword }, /valid email/], [{ name: '', email: 'ana@example.com', password: goodPassword }, /Enter your name/], [{ name: 'Ana', email: 'ana@example.com', password: 'password123' }, /too common/]]) {
+89 |     const response = await api('/api/auth/sign-up/email', { method: 'POST', body });
+90 |     assert.equal(response.status, 400);
 ```
 
 - **Line 61:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 62:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 63:** Closes the callback body and the function call that received it.
 - **Line 64:** Blank line separates related sections for readability; it performs no operation.
-- **Line 65:** Test: registration validates input, hides whether an email exists and never stores a plain password.
-- **Line 66:** Builds the fixture.
+- **Line 65:** Tests all production reset endpoints against disposable SQLite and checks that no reset token or mail is created.
+- **Line 66:** Creates the disposable authentication fixture with production cookie behavior enabled.
 - **Line 67:** Makes a new browser stand-in.
-- **Line 68:** Lists four bad registrations (short password, bad email, empty name, common password) with the message each must contain.
-- **Line 69:** Sends each one.
-- **Line 70:** Each must be refused with 400.
-- **Line 71:** The message must name the reason.
-- **Line 72:** Closes the preceding block (function, object, or statement body).
-- **Line 73:** No account was created by the failed attempts.
-- **Line 74:** Registers a real account; the email is typed with capital letters.
-- **Line 75:** Succeeds with 200.
-- **Line 76:** Registration sets no cookie: nobody is signed in automatically.
-- **Line 77:** Registers the same email again from another address with a different password.
-- **Line 78:** The answer is also 200, so the page cannot tell that the email was taken.
-- **Line 79:** The answer has exactly the same fields as the first registration.
-- **Line 80:** Still only one account exists, and the second password was not applied.
-- **Line 81:** The real owner received one “someone tried to register” notice.
-- **Line 82:** Reads the stored credential row.
-- **Line 83:** The stored value is not the password and looks like a salted hash (salt:hash in hexadecimal).
-- **Line 84:** The email was stored in lowercase.
-- **Line 85:** Closes the callback body and the function call that received it.
-- **Line 86:** Blank line separates related sections for readability; it performs no operation.
-- **Line 87:** Test: sign in uses one error for wrong passwords and unknown emails, sets a safe cookie and survives refresh.
-- **Line 88:** Builds the fixture.
-- **Line 89:** Registers a coach.
-- **Line 90:** Makes a new browser stand-in.
+- **Line 68:** Creates a temporary test account so rejection is tested even when the requested account exists.
+- **Line 69:** Requests the public capability response and checks it reports production reset as disabled below.
+- **Line 70:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 71:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 72:** Iterates over the request-link, set-new-password and token-callback cases, each with its HTTP options.
+- **Line 73:** Attempts to request a reset link for the temporary account; this must be refused before creating a token.
+- **Line 74:** Attempts a password change with a synthetic token; production must reject the route itself.
+- **Line 75:** Attempts the browser reset callback without following redirects, allowing the test to inspect its rejection.
+- **Line 76:** Closes the list of reset cases and opens the loop body for each case.
+- **Line 77:** Calls the local fixture route with that case’s method/body and captures the response.
+- **Line 78:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 79:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 80:** Closes the preceding block (function, object, or statement body).
+- **Line 81:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 82:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 83:** Closes the callback body and the function call that received it.
+- **Line 84:** Blank line separates related sections for readability; it performs no operation.
+- **Line 85:** Test: registration validates input, hides whether an email exists and never stores a plain password.
+- **Line 86:** Builds the fixture.
+- **Line 87:** Makes a new browser stand-in.
+- **Line 88:** Lists four bad registrations (short password, bad email, empty name, common password) with the message each must contain.
+- **Line 89:** Sends each one.
+- **Line 90:** Each must be refused with 400.
 
 ### Lines 91–120
 
 ```text
-91 |   const wrong = await signIn(api, 'coach@example.com', 'wrong-password-123');
-92 |   const unknown = await signIn(api, 'nobody@example.com', 'wrong-password-123');
-93 |   assert.equal(wrong.status, 401);
-94 |   assert.equal(unknown.status, 401);
-95 |   assert.deepEqual(wrong.json, unknown.json);
-96 |   assert.equal(wrong.json.message, 'Invalid email or password');
-97 |   assert.equal((await signIn(api, 'not-an-email', 'whatever-123456')).status, 401);
-98 |   const ok = await signIn(api, 'COACH@example.com');
-99 |   assert.equal(ok.status, 200);
-100 |   const cookie = ok.setCookie.find(line => line.startsWith('coachlab.session_token='));
-101 |   assert.ok(cookie && /HttpOnly/i.test(cookie) && /SameSite=Lax/i.test(cookie) && /Path=\//.test(cookie) && /Max-Age=604800/.test(cookie));
-102 |   assert.ok(!/Secure/i.test(cookie), 'plain http local development cannot use Secure cookies');
-103 |   assert.equal(ok.text.includes(goodPassword), false);
-104 |   for (let refresh = 0; refresh < 3; refresh++) {
-105 |     const session = await api('/api/auth/get-session');
-106 |     assert.equal(session.json.user.email, 'coach@example.com');
-107 |     assert.equal((await api('/api/lessons')).status, 200);
-108 |   }
-109 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 1);
-110 | });
-111 |
-112 | test('repeated wrong passwords lock one account for a while even from different addresses, and IP rate limits stop floods', async t => {
-113 |   const f = await fixture(t);
-114 |   await register(f.client(), 'target@example.com');
-115 |   for (let attempt = 0; attempt < 8; attempt++) assert.equal((await signIn(f.client(`198.51.100.${attempt + 1}`), 'target@example.com', 'wrong-password-123')).status, 401);
-116 |   const locked = await signIn(f.client('198.51.100.99'), 'target@example.com', goodPassword);
-117 |   assert.equal(locked.status, 429);
-118 |   assert.match(locked.json.message, /Too many sign-in attempts/);
-119 |   const flood = f.client('198.51.100.200');
-120 |   const statuses = [];
+91 |     assert.match(response.json.message, expected);
+92 |   }
+93 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 0);
+94 |   const first = await register(api, 'Ana@Example.com');
+95 |   assert.equal(first.status, 200);
+96 |   assert.equal(first.setCookie.length, 0);
+97 |   const again = await register(f.client('203.0.113.11'), 'ana@example.com', 'another-long-password-7');
+98 |   assert.equal(again.status, 200);
+99 |   assert.deepEqual(Object.keys(again.json.user).sort(), Object.keys(first.json.user).sort());
+100 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM user').get().n, 1);
+101 |   assert.deepEqual(f.mailer.outbox, [{ kind: 'existing', to: 'ana@example.com' }]);
+102 |   const account = f.database.prepare("SELECT password FROM account WHERE providerId = 'credential'").get();
+103 |   assert.ok(account.password && !account.password.includes(goodPassword) && /^[0-9a-f]+:[0-9a-f]+$/.test(account.password));
+104 |   assert.equal(f.database.prepare('SELECT email FROM user').get().email, 'ana@example.com');
+105 | });
+106 |
+107 | test('sign in uses one error for wrong passwords and unknown emails, sets a safe session cookie and survives refresh', async t => {
+108 |   const f = await fixture(t);
+109 |   await register(f.client(), 'coach@example.com');
+110 |   const api = f.client();
+111 |   const wrong = await signIn(api, 'coach@example.com', 'wrong-password-123');
+112 |   const unknown = await signIn(api, 'nobody@example.com', 'wrong-password-123');
+113 |   assert.equal(wrong.status, 401);
+114 |   assert.equal(unknown.status, 401);
+115 |   assert.deepEqual(wrong.json, unknown.json);
+116 |   assert.equal(wrong.json.message, 'Invalid email or password');
+117 |   assert.equal((await signIn(api, 'not-an-email', 'whatever-123456')).status, 401);
+118 |   const ok = await signIn(api, 'COACH@example.com');
+119 |   assert.equal(ok.status, 200);
+120 |   const cookie = ok.setCookie.find(line => line.startsWith('coachlab.session_token='));
 ```
 
-- **Line 91:** Signs in with a wrong password.
-- **Line 92:** Signs in with an unknown email.
-- **Line 93:** The wrong password gives 401.
-- **Line 94:** The unknown email gives 401.
-- **Line 95:** Both answers are identical, so nothing reveals which emails exist.
-- **Line 96:** The message is the generic one.
-- **Line 97:** A malformed email gets 401 as well.
-- **Line 98:** Signs in correctly (the email in capital letters still works).
-- **Line 99:** Succeeds.
-- **Line 100:** Finds the session cookie.
-- **Line 101:** The cookie is HttpOnly (JavaScript cannot read it), SameSite=Lax (not sent on cross-site posts), site-wide and lasts seven days.
-- **Line 102:** Over plain http the cookie is not marked Secure (browsers would drop it); it becomes Secure under https.
-- **Line 103:** The answer does not contain the password.
-- **Line 104:** Simulates three page refreshes.
-- **Line 105:** Asks for the session.
-- **Line 106:** The same coach is returned every time.
-- **Line 107:** The coach can read lessons.
-- **Line 108:** Closes the preceding block (function, object, or statement body).
-- **Line 109:** Only one session row exists, so refreshing does not create sessions.
-- **Line 110:** Closes the callback body and the function call that received it.
-- **Line 111:** Blank line separates related sections for readability; it performs no operation.
-- **Line 112:** Test: repeated wrong passwords lock one account, even from different addresses, and address-based limits stop floods.
-- **Line 113:** Builds the fixture.
-- **Line 114:** Registers the target account.
-- **Line 115:** Eight wrong passwords, each from a different address, all get 401.
-- **Line 116:** The next attempt, from yet another address and with the CORRECT password, is refused.
-- **Line 117:** It gets 429 (too many requests).
-- **Line 118:** With the lockout message.
-- **Line 119:** One address that will flood the server.
-- **Line 120:** Collects the statuses.
+- **Line 91:** The message must name the reason.
+- **Line 92:** Closes the preceding block (function, object, or statement body).
+- **Line 93:** No account was created by the failed attempts.
+- **Line 94:** Registers a real account; the email is typed with capital letters.
+- **Line 95:** Succeeds with 200.
+- **Line 96:** Registration sets no cookie: nobody is signed in automatically.
+- **Line 97:** Registers the same email again from another address with a different password.
+- **Line 98:** The answer is also 200, so the page cannot tell that the email was taken.
+- **Line 99:** The answer has exactly the same fields as the first registration.
+- **Line 100:** Still only one account exists, and the second password was not applied.
+- **Line 101:** The real owner received one “someone tried to register” notice.
+- **Line 102:** Reads the stored credential row.
+- **Line 103:** The stored value is not the password and looks like a salted hash (salt:hash in hexadecimal).
+- **Line 104:** The email was stored in lowercase.
+- **Line 105:** Closes the callback body and the function call that received it.
+- **Line 106:** Blank line separates related sections for readability; it performs no operation.
+- **Line 107:** Test: sign in uses one error for wrong passwords and unknown emails, sets a safe cookie and survives refresh.
+- **Line 108:** Builds the fixture.
+- **Line 109:** Registers a coach.
+- **Line 110:** Makes a new browser stand-in.
+- **Line 111:** Signs in with a wrong password.
+- **Line 112:** Signs in with an unknown email.
+- **Line 113:** The wrong password gives 401.
+- **Line 114:** The unknown email gives 401.
+- **Line 115:** Both answers are identical, so nothing reveals which emails exist.
+- **Line 116:** The message is the generic one.
+- **Line 117:** A malformed email gets 401 as well.
+- **Line 118:** Signs in correctly (the email in capital letters still works).
+- **Line 119:** Succeeds.
+- **Line 120:** Finds the session cookie.
 
 ### Lines 121–150
 
 ```text
-121 |   for (let attempt = 0; attempt < 12; attempt++) statuses.push((await signIn(flood, `nobody${attempt}@example.com`, 'wrong-password-123')).status);
-122 |   assert.ok(statuses.includes(429), statuses.join());
-123 |   const limiter = attemptLimiter({ max: 2, windowMs: 1000, now: (() => { let time = 0; return () => time; })() });
-124 |   limiter.hit('k'); limiter.hit('k');
-125 |   assert.equal(limiter.blocked('k'), true);
-126 |   limiter.clear('k');
-127 |   assert.equal(limiter.blocked('k'), false);
-128 | });
-129 |
-130 | test('protected routes reject anonymous users, logout ends the session on the server and old cookies stop working', async t => {
-131 |   const f = await fixture(t);
-132 |   const anonymous = f.client();
-133 |   for (const [method, path, body] of [['GET', '/api/lessons'], ['POST', '/api/lessons', { title: 'x', discipline: 'Boxing' }], ['PUT', '/api/lessons/1', { title: 'x', discipline: 'Boxing' }], ['DELETE', '/api/lessons/1'], ['GET', '/api/lesson-media'], ['GET', '/api/media/1/file'], ['DELETE', '/api/media/1'], ['POST', '/api/media/verify', { url: 'https://example.com/a.png' }], ['POST', '/api/media/suggest', { discipline: 'Boxing', sections: [] }], ['POST', '/api/ai/lesson-draft', {}], ['GET', '/api/nothing-here']]) {
-134 |     const response = await anonymous(path, { method, body });
-135 |     assert.equal(response.status, 401, `${method} ${path}`);
-136 |     assert.equal(response.json.error, 'Please sign in to continue.');
-137 |   }
-138 |   assert.equal((await anonymous('/api/health')).status, 200);
-139 |   assert.deepEqual((await anonymous('/api/auth-config')).json, { google: false, mail: 'memory' });
-140 |   const api = await signedIn(f, 'coach@example.com');
-141 |   const staleCookie = [...api.jar].map(([name, value]) => `${name}=${value}`).join('; ');
-142 |   assert.equal((await api('/api/lessons')).status, 200);
-143 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {} })).status, 200);
-144 |   assert.equal((await api('/api/lessons')).status, 401);
-145 |   const replay = await f.client()('/api/lessons', { headers: { cookie: staleCookie } });
-146 |   assert.equal(replay.status, 401);
-147 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 0);
-148 |   const forged = await f.client()('/api/lessons', { headers: { cookie: 'coachlab.session_token=forged.value' } });
-149 |   assert.equal(forged.status, 401);
-150 | });
+121 |   assert.ok(cookie && /HttpOnly/i.test(cookie) && /SameSite=Lax/i.test(cookie) && /Path=\//.test(cookie) && /Max-Age=604800/.test(cookie));
+122 |   assert.ok(!/Secure/i.test(cookie), 'plain http local development cannot use Secure cookies');
+123 |   assert.equal(ok.text.includes(goodPassword), false);
+124 |   for (let refresh = 0; refresh < 3; refresh++) {
+125 |     const session = await api('/api/auth/get-session');
+126 |     assert.equal(session.json.user.email, 'coach@example.com');
+127 |     assert.equal((await api('/api/lessons')).status, 200);
+128 |   }
+129 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 1);
+130 | });
+131 |
+132 | test('repeated wrong passwords lock one account for a while even from different addresses, and IP rate limits stop floods', async t => {
+133 |   const f = await fixture(t);
+134 |   await register(f.client(), 'target@example.com');
+135 |   for (let attempt = 0; attempt < 8; attempt++) assert.equal((await signIn(f.client(`198.51.100.${attempt + 1}`), 'target@example.com', 'wrong-password-123')).status, 401);
+136 |   const locked = await signIn(f.client('198.51.100.99'), 'target@example.com', goodPassword);
+137 |   assert.equal(locked.status, 429);
+138 |   assert.match(locked.json.message, /Too many sign-in attempts/);
+139 |   const flood = f.client('198.51.100.200');
+140 |   const statuses = [];
+141 |   for (let attempt = 0; attempt < 12; attempt++) statuses.push((await signIn(flood, `nobody${attempt}@example.com`, 'wrong-password-123')).status);
+142 |   assert.ok(statuses.includes(429), statuses.join());
+143 |   const limiter = attemptLimiter({ max: 2, windowMs: 1000, now: (() => { let time = 0; return () => time; })() });
+144 |   limiter.hit('k'); limiter.hit('k');
+145 |   assert.equal(limiter.blocked('k'), true);
+146 |   limiter.clear('k');
+147 |   assert.equal(limiter.blocked('k'), false);
+148 | });
+149 |
+150 | test('protected routes reject anonymous users, logout ends the session on the server and old cookies stop working', async t => {
 ```
 
-- **Line 121:** Twelve attempts on different emails from that one address.
-- **Line 122:** At least one must be answered 429, proving the per-address limit.
-- **Line 123:** Creates a limiter with a fake clock that never moves.
-- **Line 124:** Records two events.
-- **Line 125:** The key is now blocked.
-- **Line 126:** Clearing it…
-- **Line 127:** …unblocks it.
-- **Line 128:** Closes the callback body and the function call that received it.
-- **Line 129:** Blank line separates related sections for readability; it performs no operation.
-- **Line 130:** Test: protected routes reject anonymous users and logout really ends the session.
-- **Line 131:** Builds the fixture.
-- **Line 132:** A browser stand-in that is not signed in.
-- **Line 133:** Eleven protected routes, including an unknown one: lessons, media, uploads, link checks, suggestions, AI and a made-up route.
-- **Line 134:** Calls each without signing in.
-- **Line 135:** Each must answer 401.
-- **Line 136:** With the standard message.
-- **Line 137:** Closes the preceding block (function, object, or statement body).
-- **Line 138:** The health check stays public.
-- **Line 139:** The public settings route works and shows no secrets.
-- **Line 140:** Signs in a coach.
-- **Line 141:** Copies the session cookie, as an attacker who stole it would.
-- **Line 142:** The coach can read lessons.
-- **Line 143:** Logs out.
-- **Line 144:** Lessons are no longer reachable with the same browser.
-- **Line 145:** Replays the stolen old cookie from a different browser stand-in.
-- **Line 146:** It is rejected: logout ended the session on the server, not just in the browser.
-- **Line 147:** No session rows remain.
-- **Line 148:** A forged cookie value…
-- **Line 149:** …is rejected too.
-- **Line 150:** Closes the callback body and the function call that received it.
+- **Line 121:** The cookie is HttpOnly (JavaScript cannot read it), SameSite=Lax (not sent on cross-site posts), site-wide and lasts seven days.
+- **Line 122:** Over plain http the cookie is not marked Secure (browsers would drop it); it becomes Secure under https.
+- **Line 123:** The answer does not contain the password.
+- **Line 124:** Simulates three page refreshes.
+- **Line 125:** Asks for the session.
+- **Line 126:** The same coach is returned every time.
+- **Line 127:** The coach can read lessons.
+- **Line 128:** Closes the preceding block (function, object, or statement body).
+- **Line 129:** Only one session row exists, so refreshing does not create sessions.
+- **Line 130:** Closes the callback body and the function call that received it.
+- **Line 131:** Blank line separates related sections for readability; it performs no operation.
+- **Line 132:** Test: repeated wrong passwords lock one account, even from different addresses, and address-based limits stop floods.
+- **Line 133:** Builds the fixture.
+- **Line 134:** Registers the target account.
+- **Line 135:** Eight wrong passwords, each from a different address, all get 401.
+- **Line 136:** The next attempt, from yet another address and with the CORRECT password, is refused.
+- **Line 137:** It gets 429 (too many requests).
+- **Line 138:** With the lockout message.
+- **Line 139:** One address that will flood the server.
+- **Line 140:** Collects the statuses.
+- **Line 141:** Twelve attempts on different emails from that one address.
+- **Line 142:** At least one must be answered 429, proving the per-address limit.
+- **Line 143:** Creates a limiter with a fake clock that never moves.
+- **Line 144:** Records two events.
+- **Line 145:** The key is now blocked.
+- **Line 146:** Clearing it…
+- **Line 147:** …unblocks it.
+- **Line 148:** Closes the callback body and the function call that received it.
+- **Line 149:** Blank line separates related sections for readability; it performs no operation.
+- **Line 150:** Test: protected routes reject anonymous users and logout really ends the session.
 
 ### Lines 151–180
 
 ```text
-151 |
-152 | test('cross-site requests are blocked and private responses are never cached', async t => {
-153 |   const f = await fixture(t);
-154 |   const api = await signedIn(f, 'coach@example.com');
-155 |   for (const sent of [null, 'http://evil.example', 'null']) {
-156 |     const response = await api('/api/lessons', { method: 'POST', origin: sent, body: { title: 'Planted', discipline: 'Boxing' } });
-157 |     assert.equal(response.status, 403, String(sent));
-158 |   }
-159 |   assert.equal((await api('/api/lessons', { method: 'DELETE', origin: 'http://evil.example' })).status, 403);
-160 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {}, origin: 'http://evil.example' })).status, 403);
-161 |   assert.equal((await api('/api/lessons')).json.length, 0);
-162 |   const lessons = await api('/api/lessons');
-163 |   assert.equal(lessons.headers.get('cache-control'), 'no-store');
-164 |   assert.equal(lessons.headers.get('x-content-type-options'), 'nosniff');
-165 |   assert.equal(lessons.headers.get('x-powered-by'), null);
-166 |   const created = await api('/api/lessons', { method: 'POST', body: { title: 'Mine', discipline: 'Boxing' } });
-167 |   assert.equal(created.status, 201);
-168 | });
-169 |
-170 | test('password reset gives the same answer for every email, sends one single-use link, and ends old sessions', async t => {
-171 |   const f = await fixture(t);
-172 |   const api = await signedIn(f, 'coach@example.com');
-173 |   const other = f.client('203.0.113.50');
-174 |   const known = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
-175 |   const unknown = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'nobody@example.com', redirectTo: '/reset-password' } });
-176 |   assert.equal(known.status, 200);
-177 |   assert.deepEqual(known.json, unknown.json);
-178 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 1);
-179 |   const link = new URL(f.mailer.outbox.find(mail => mail.kind === 'reset').url);
-180 |   assert.equal(link.origin, origin);
+151 |   const f = await fixture(t);
+152 |   const anonymous = f.client();
+153 |   for (const [method, path, body] of [['GET', '/api/lessons'], ['POST', '/api/lessons', { title: 'x', discipline: 'Boxing' }], ['PUT', '/api/lessons/1', { title: 'x', discipline: 'Boxing' }], ['DELETE', '/api/lessons/1'], ['GET', '/api/lesson-media'], ['GET', '/api/media/1/file'], ['DELETE', '/api/media/1'], ['POST', '/api/media/verify', { url: 'https://example.com/a.png' }], ['POST', '/api/media/suggest', { discipline: 'Boxing', sections: [] }], ['POST', '/api/ai/lesson-draft', {}], ['GET', '/api/nothing-here']]) {
+154 |     const response = await anonymous(path, { method, body });
+155 |     assert.equal(response.status, 401, `${method} ${path}`);
+156 |     assert.equal(response.json.error, 'Please sign in to continue.');
+157 |   }
+158 |   assert.equal((await anonymous('/api/health')).status, 200);
+159 |   assert.deepEqual((await anonymous('/api/auth-config')).json, { google: false, mail: 'memory', passwordReset: true });
+160 |   const api = await signedIn(f, 'coach@example.com');
+161 |   const staleCookie = [...api.jar].map(([name, value]) => `${name}=${value}`).join('; ');
+162 |   assert.equal((await api('/api/lessons')).status, 200);
+163 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {} })).status, 200);
+164 |   assert.equal((await api('/api/lessons')).status, 401);
+165 |   const replay = await f.client()('/api/lessons', { headers: { cookie: staleCookie } });
+166 |   assert.equal(replay.status, 401);
+167 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get().n, 0);
+168 |   const forged = await f.client()('/api/lessons', { headers: { cookie: 'coachlab.session_token=forged.value' } });
+169 |   assert.equal(forged.status, 401);
+170 | });
+171 |
+172 | test('cross-site requests are blocked and private responses are never cached', async t => {
+173 |   const f = await fixture(t);
+174 |   const api = await signedIn(f, 'coach@example.com');
+175 |   for (const sent of [null, 'http://evil.example', 'null']) {
+176 |     const response = await api('/api/lessons', { method: 'POST', origin: sent, body: { title: 'Planted', discipline: 'Boxing' } });
+177 |     assert.equal(response.status, 403, String(sent));
+178 |   }
+179 |   assert.equal((await api('/api/lessons', { method: 'DELETE', origin: 'http://evil.example' })).status, 403);
+180 |   assert.equal((await api('/api/auth/sign-out', { method: 'POST', body: {}, origin: 'http://evil.example' })).status, 403);
 ```
 
-- **Line 151:** Blank line separates related sections for readability; it performs no operation.
-- **Line 152:** Test: cross-site requests are blocked and private responses are not cached.
-- **Line 153:** Builds the fixture.
-- **Line 154:** Signs in a coach.
-- **Line 155:** Tries three forged posts: no Origin header, an evil site and the string “null”.
-- **Line 156:** Sends each as the signed-in coach.
-- **Line 157:** Each must be refused with 403.
-- **Line 158:** Closes the preceding block (function, object, or statement body).
-- **Line 159:** A delete from an evil origin is refused.
-- **Line 160:** A sign-out from an evil origin is refused by the login library.
-- **Line 161:** Nothing was created by the forged requests.
-- **Line 162:** Reads the lesson list normally.
-- **Line 163:** The answer must not be cacheable.
-- **Line 164:** MIME sniffing is disabled.
-- **Line 165:** The server does not announce that it is Express.
-- **Line 166:** A genuine request from CoachLab’s own origin works.
-- **Line 167:** It creates the lesson.
-- **Line 168:** Closes the callback body and the function call that received it.
-- **Line 169:** Blank line separates related sections for readability; it performs no operation.
-- **Line 170:** Test: password reset gives the same answer for every email, sends one single-use link and ends old sessions.
-- **Line 171:** Builds the fixture.
-- **Line 172:** Signs in a coach.
-- **Line 173:** A separate browser asks for the reset.
-- **Line 174:** Requests a reset for the real account.
-- **Line 175:** Requests a reset for an unknown email.
-- **Line 176:** The real request succeeds.
-- **Line 177:** Both answers are identical.
-- **Line 178:** Only one email was “sent”, for the real account.
-- **Line 179:** Reads the reset link from the collector.
-- **Line 180:** The link points at CoachLab’s public address.
+- **Line 151:** Builds the fixture.
+- **Line 152:** A browser stand-in that is not signed in.
+- **Line 153:** Eleven protected routes, including an unknown one: lessons, media, uploads, link checks, suggestions, AI and a made-up route.
+- **Line 154:** Calls each without signing in.
+- **Line 155:** Each must answer 401.
+- **Line 156:** With the standard message.
+- **Line 157:** Closes the preceding block (function, object, or statement body).
+- **Line 158:** The health check stays public.
+- **Line 159:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 160:** Signs in a coach.
+- **Line 161:** Copies the session cookie, as an attacker who stole it would.
+- **Line 162:** The coach can read lessons.
+- **Line 163:** Logs out.
+- **Line 164:** Lessons are no longer reachable with the same browser.
+- **Line 165:** Replays the stolen old cookie from a different browser stand-in.
+- **Line 166:** It is rejected: logout ended the session on the server, not just in the browser.
+- **Line 167:** No session rows remain.
+- **Line 168:** A forged cookie value…
+- **Line 169:** …is rejected too.
+- **Line 170:** Closes the callback body and the function call that received it.
+- **Line 171:** Blank line separates related sections for readability; it performs no operation.
+- **Line 172:** Test: cross-site requests are blocked and private responses are not cached.
+- **Line 173:** Builds the fixture.
+- **Line 174:** Signs in a coach.
+- **Line 175:** Tries three forged posts: no Origin header, an evil site and the string “null”.
+- **Line 176:** Sends each as the signed-in coach.
+- **Line 177:** Each must be refused with 403.
+- **Line 178:** Closes the preceding block (function, object, or statement body).
+- **Line 179:** A delete from an evil origin is refused.
+- **Line 180:** A sign-out from an evil origin is refused by the login library.
 
 ### Lines 181–210
 
 ```text
-181 |   const opened = await other(link.pathname + link.search, { redirect: 'manual' });
-182 |   assert.equal(opened.status, 302);
-183 |   const token = new URL(opened.headers.get('location'), origin).searchParams.get('token');
-184 |   assert.ok(token && token.length > 10);
-185 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'short', token } })).status, 400);
-186 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'password123', token } })).status, 400);
-187 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token: 'invalid-token' } })).status, 400);
-188 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token } })).status, 200);
-189 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'another-new-password-9', token } })).status, 400);
-190 |   assert.equal((await api('/api/lessons')).status, 401, 'sessions from before the reset must end');
-191 |   assert.equal((await signIn(f.client('203.0.113.51'), 'coach@example.com', goodPassword)).status, 401);
-192 |   assert.equal((await signIn(f.client('203.0.113.52'), 'coach@example.com', 'blue-lantern-orchard-55')).status, 200);
-193 | });
-194 |
-195 | test('password reset links cannot be requested over and over to flood one inbox', async t => {
-196 |   const f = await fixture(t);
-197 |   await register(f.client(), 'coach@example.com');
-198 |   for (let request = 0; request < 5; request++) await f.client(`203.0.113.${60 + request}`)('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
-199 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 3);
-200 | });
-201 |
-202 | test('each coach sees only their own lessons and media; guesses return 404 and never reveal another coach', async t => {
-203 |   const f = await fixture(t);
-204 |   const a = await signedIn(f, 'a@example.com', '203.0.113.21');
-205 |   const b = await signedIn(f, 'b@example.com', '203.0.113.22');
-206 |   const upload = await (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'secret.png' } })).json;
-207 |   assert.ok(upload.id);
-208 |   const lesson = (await a('/api/lessons', { method: 'POST', body: { title: 'A private plan', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog', media: [{ id: upload.id, title: 'A picture', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/a.png', title: 'A link' }] } })).json;
-209 |   assert.ok(lesson.id);
-210 |   const orphan = (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'unsaved.png' } })).json;
+181 |   assert.equal((await api('/api/lessons')).json.length, 0);
+182 |   const lessons = await api('/api/lessons');
+183 |   assert.equal(lessons.headers.get('cache-control'), 'no-store');
+184 |   assert.equal(lessons.headers.get('x-content-type-options'), 'nosniff');
+185 |   assert.equal(lessons.headers.get('x-powered-by'), null);
+186 |   const created = await api('/api/lessons', { method: 'POST', body: { title: 'Mine', discipline: 'Boxing' } });
+187 |   assert.equal(created.status, 201);
+188 | });
+189 |
+190 | test('password reset gives the same answer for every email, sends one single-use link, and ends old sessions', async t => {
+191 |   const f = await fixture(t);
+192 |   const api = await signedIn(f, 'coach@example.com');
+193 |   const other = f.client('203.0.113.50');
+194 |   const known = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
+195 |   const unknown = await other('/api/auth/request-password-reset', { method: 'POST', body: { email: 'nobody@example.com', redirectTo: '/reset-password' } });
+196 |   assert.equal(known.status, 200);
+197 |   assert.deepEqual(known.json, unknown.json);
+198 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 1);
+199 |   const link = new URL(f.mailer.outbox.find(mail => mail.kind === 'reset').url);
+200 |   assert.equal(link.origin, origin);
+201 |   const opened = await other(link.pathname + link.search, { redirect: 'manual' });
+202 |   assert.equal(opened.status, 302);
+203 |   const token = new URL(opened.headers.get('location'), origin).searchParams.get('token');
+204 |   assert.ok(token && token.length > 10);
+205 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'short', token } })).status, 400);
+206 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'password123', token } })).status, 400);
+207 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token: 'invalid-token' } })).status, 400);
+208 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'blue-lantern-orchard-55', token } })).status, 200);
+209 |   assert.equal((await other('/api/auth/reset-password', { method: 'POST', body: { newPassword: 'another-new-password-9', token } })).status, 400);
+210 |   assert.equal((await api('/api/lessons')).status, 401, 'sessions from before the reset must end');
 ```
 
-- **Line 181:** Opens the link without following the redirect.
-- **Line 182:** It redirects (302) to the reset page.
-- **Line 183:** Reads the one-time token from the redirect.
-- **Line 184:** The token is a real, long value.
-- **Line 185:** A too-short new password is refused.
-- **Line 186:** A common new password is refused.
-- **Line 187:** A fake token is refused.
-- **Line 188:** A good password with the real token works.
-- **Line 189:** Using the same token again fails, so reset links are single-use.
-- **Line 190:** The coach’s earlier session no longer works: a reset signs out everyone.
-- **Line 191:** The old password no longer works.
-- **Line 192:** The new password works.
-- **Line 193:** Closes the callback body and the function call that received it.
-- **Line 194:** Blank line separates related sections for readability; it performs no operation.
-- **Line 195:** Test: reset links cannot be requested over and over to flood one inbox.
-- **Line 196:** Builds the fixture.
-- **Line 197:** Registers a coach.
-- **Line 198:** Requests five resets from five different addresses.
-- **Line 199:** Only three messages were sent, so one inbox cannot be flooded.
-- **Line 200:** Closes the callback body and the function call that received it.
-- **Line 201:** Blank line separates related sections for readability; it performs no operation.
-- **Line 202:** Test: each coach sees only their own lessons and media; guesses return 404.
-- **Line 203:** Builds the fixture.
-- **Line 204:** Signs in coach A.
-- **Line 205:** Signs in coach B.
-- **Line 206:** Coach A uploads a picture.
-- **Line 207:** The upload has an id.
-- **Line 208:** Coach A creates a lesson with that picture and a link attached.
-- **Line 209:** The lesson has an id.
-- **Line 210:** Coach A uploads a second picture that is not attached to any lesson.
+- **Line 181:** Nothing was created by the forged requests.
+- **Line 182:** Reads the lesson list normally.
+- **Line 183:** The answer must not be cacheable.
+- **Line 184:** MIME sniffing is disabled.
+- **Line 185:** The server does not announce that it is Express.
+- **Line 186:** A genuine request from CoachLab’s own origin works.
+- **Line 187:** It creates the lesson.
+- **Line 188:** Closes the callback body and the function call that received it.
+- **Line 189:** Blank line separates related sections for readability; it performs no operation.
+- **Line 190:** Test: password reset gives the same answer for every email, sends one single-use link and ends old sessions.
+- **Line 191:** Builds the fixture.
+- **Line 192:** Signs in a coach.
+- **Line 193:** A separate browser asks for the reset.
+- **Line 194:** Requests a reset for the real account.
+- **Line 195:** Requests a reset for an unknown email.
+- **Line 196:** The real request succeeds.
+- **Line 197:** Both answers are identical.
+- **Line 198:** Only one email was “sent”, for the real account.
+- **Line 199:** Reads the reset link from the collector.
+- **Line 200:** The link points at CoachLab’s public address.
+- **Line 201:** Opens the link without following the redirect.
+- **Line 202:** It redirects (302) to the reset page.
+- **Line 203:** Reads the one-time token from the redirect.
+- **Line 204:** The token is a real, long value.
+- **Line 205:** A too-short new password is refused.
+- **Line 206:** A common new password is refused.
+- **Line 207:** A fake token is refused.
+- **Line 208:** A good password with the real token works.
+- **Line 209:** Using the same token again fails, so reset links are single-use.
+- **Line 210:** The coach’s earlier session no longer works: a reset signs out everyone.
 
 ### Lines 211–240
 
 ```text
-211 |   assert.equal((await a('/api/lessons')).json.length, 1);
-212 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
-213 |   assert.equal((await a(`/api/media/${upload.id}/file`)).status, 200);
-214 |   assert.deepEqual((await b('/api/lessons')).json, []);
-215 |   assert.deepEqual((await b('/api/lesson-media')).json, []);
-216 |   for (const id of [upload.id, orphan.id]) {
-217 |     assert.equal((await b(`/api/media/${id}/file`)).status, 404);
-218 |     assert.equal((await b(`/api/media/${id}`, { method: 'DELETE' })).status, 404);
-219 |   }
-220 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'PUT', body: { title: 'Hijacked', discipline: 'MMA', media: [] } })).status, 404);
-221 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 404);
-222 |   const stolen = await b('/api/lessons', { method: 'POST', body: { title: 'Steal media', discipline: 'MMA', media: [{ id: upload.id }] } });
-223 |   assert.equal(stolen.status, 400);
-224 |   const stolenOrphan = await b('/api/lessons', { method: 'POST', body: { title: 'Steal upload', discipline: 'MMA', media: [{ id: orphan.id }] } });
-225 |   assert.equal(stolenOrphan.status, 400);
-226 |   const own = (await b('/api/lessons', { method: 'POST', body: { title: 'B plan', discipline: 'Wrestling' } })).json;
-227 |   assert.equal((await b(`/api/lessons/${own.id}`, { method: 'PUT', body: { title: 'B plan 2', discipline: 'Wrestling', media: [{ id: upload.id }] } })).status, 400);
-228 |   assert.equal((await b('/api/lessons')).json.map(item => item.title).join(), 'B plan');
-229 |   const survivors = (await a('/api/lessons')).json;
-230 |   assert.equal(survivors[0].title, 'A private plan');
-231 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
-232 |   assert.equal((await a(`/api/media/${orphan.id}`, { method: 'DELETE' })).status, 204);
-233 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM lessons WHERE owner_id IS NULL').get().n, 0);
-234 |   assert.equal((await a(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 204);
-235 |   assert.equal((await b('/api/lessons')).json.length, 1);
-236 | });
-237 |
-238 | test('lessons that existed before accounts have no owner, stay untouched in the database and are invisible to every coach', async t => {
-239 |   const f = await fixture(t);
-240 |   f.database.prepare("INSERT INTO lessons (title, discipline, drills) VALUES ('Old lesson', 'Boxing', 'Warm-up — 5 minutes')").run();
+211 |   assert.equal((await signIn(f.client('203.0.113.51'), 'coach@example.com', goodPassword)).status, 401);
+212 |   assert.equal((await signIn(f.client('203.0.113.52'), 'coach@example.com', 'blue-lantern-orchard-55')).status, 200);
+213 | });
+214 |
+215 | test('password reset links cannot be requested over and over to flood one inbox', async t => {
+216 |   const f = await fixture(t);
+217 |   await register(f.client(), 'coach@example.com');
+218 |   for (let request = 0; request < 5; request++) await f.client(`203.0.113.${60 + request}`)('/api/auth/request-password-reset', { method: 'POST', body: { email: 'coach@example.com', redirectTo: '/reset-password' } });
+219 |   assert.equal(f.mailer.outbox.filter(mail => mail.kind === 'reset').length, 3);
+220 | });
+221 |
+222 | test('each coach sees only their own lessons and media; guesses return 404 and never reveal another coach', async t => {
+223 |   const f = await fixture(t);
+224 |   const a = await signedIn(f, 'a@example.com', '203.0.113.21');
+225 |   const b = await signedIn(f, 'b@example.com', '203.0.113.22');
+226 |   const upload = await (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'secret.png' } })).json;
+227 |   assert.ok(upload.id);
+228 |   const lesson = (await a('/api/lessons', { method: 'POST', body: { title: 'A private plan', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog', media: [{ id: upload.id, title: 'A picture', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/a.png', title: 'A link' }] } })).json;
+229 |   assert.ok(lesson.id);
+230 |   const orphan = (await a('/api/media/upload', { method: 'POST', raw: true, body: png, headers: { 'content-type': 'image/png', 'x-file-name': 'unsaved.png' } })).json;
+231 |   assert.equal((await a('/api/lessons')).json.length, 1);
+232 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
+233 |   assert.equal((await a(`/api/media/${upload.id}/file`)).status, 200);
+234 |   assert.deepEqual((await b('/api/lessons')).json, []);
+235 |   assert.deepEqual((await b('/api/lesson-media')).json, []);
+236 |   for (const id of [upload.id, orphan.id]) {
+237 |     assert.equal((await b(`/api/media/${id}/file`)).status, 404);
+238 |     assert.equal((await b(`/api/media/${id}`, { method: 'DELETE' })).status, 404);
+239 |   }
+240 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'PUT', body: { title: 'Hijacked', discipline: 'MMA', media: [] } })).status, 404);
 ```
 
-- **Line 211:** Coach A sees exactly one lesson.
-- **Line 212:** A’s attachments are untouched.
-- **Line 213:** Coach A can download the picture.
-- **Line 214:** Coach B sees no lessons.
-- **Line 215:** Coach B sees no attachments.
-- **Line 216:** For both of A’s uploads (attached and unattached)…
-- **Line 217:** …coach B cannot download them (404, not 403, so their existence is not revealed)…
-- **Line 218:** …and cannot delete them.
-- **Line 219:** Closes the preceding block (function, object, or statement body).
-- **Line 220:** Coach B cannot change A’s lesson.
-- **Line 221:** Coach B cannot delete A’s lesson.
-- **Line 222:** Coach B tries to attach A’s upload to a new lesson of their own…
-- **Line 223:** …and is refused.
-- **Line 224:** Same attempt with A’s unattached upload…
-- **Line 225:** …also refused.
-- **Line 226:** Coach B creates their own lesson.
-- **Line 227:** B cannot attach A’s upload by editing their own lesson either.
-- **Line 228:** B still sees only their own lesson.
-- **Line 229:** Reads A’s lessons again.
-- **Line 230:** A’s lesson is untouched.
-- **Line 231:** A’s attachments are untouched.
-- **Line 232:** A can delete their own unsaved upload.
-- **Line 233:** No lesson in the database lacks an owner.
-- **Line 234:** A can delete their own lesson.
-- **Line 235:** B’s lesson is unaffected.
-- **Line 236:** Closes the callback body and the function call that received it.
-- **Line 237:** Blank line separates related sections for readability; it performs no operation.
-- **Line 238:** Test: lessons that existed before accounts have no owner and stay hidden and untouched.
-- **Line 239:** Builds the fixture.
-- **Line 240:** Inserts an old lesson directly into the database with no owner.
+- **Line 211:** The old password no longer works.
+- **Line 212:** The new password works.
+- **Line 213:** Closes the callback body and the function call that received it.
+- **Line 214:** Blank line separates related sections for readability; it performs no operation.
+- **Line 215:** Test: reset links cannot be requested over and over to flood one inbox.
+- **Line 216:** Builds the fixture.
+- **Line 217:** Registers a coach.
+- **Line 218:** Requests five resets from five different addresses.
+- **Line 219:** Only three messages were sent, so one inbox cannot be flooded.
+- **Line 220:** Closes the callback body and the function call that received it.
+- **Line 221:** Blank line separates related sections for readability; it performs no operation.
+- **Line 222:** Test: each coach sees only their own lessons and media; guesses return 404.
+- **Line 223:** Builds the fixture.
+- **Line 224:** Signs in coach A.
+- **Line 225:** Signs in coach B.
+- **Line 226:** Coach A uploads a picture.
+- **Line 227:** The upload has an id.
+- **Line 228:** Coach A creates a lesson with that picture and a link attached.
+- **Line 229:** The lesson has an id.
+- **Line 230:** Coach A uploads a second picture that is not attached to any lesson.
+- **Line 231:** Coach A sees exactly one lesson.
+- **Line 232:** A’s attachments are untouched.
+- **Line 233:** Coach A can download the picture.
+- **Line 234:** Coach B sees no lessons.
+- **Line 235:** Coach B sees no attachments.
+- **Line 236:** For both of A’s uploads (attached and unattached)…
+- **Line 237:** …coach B cannot download them (404, not 403, so their existence is not revealed)…
+- **Line 238:** …and cannot delete them.
+- **Line 239:** Closes the preceding block (function, object, or statement body).
+- **Line 240:** Coach B cannot change A’s lesson.
 
-### Lines 241–262
+### Lines 241–270
 
 ```text
-241 |   f.database.prepare("INSERT INTO lesson_media (kind, origin, url, title) VALUES ('youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Old video')").run();
-242 |   const api = await signedIn(f, 'new@example.com');
-243 |   assert.deepEqual((await api('/api/lessons')).json, []);
-244 |   assert.deepEqual((await api('/api/lesson-media')).json, []);
-245 |   assert.equal((await api('/api/lessons/1', { method: 'DELETE' })).status, 404);
-246 |   assert.equal((await api('/api/lessons/1', { method: 'PUT', body: { title: 'Taken', discipline: 'MMA' } })).status, 404);
-247 |   assert.equal(f.database.prepare('SELECT title FROM lessons WHERE id = 1').get().title, 'Old lesson');
-248 |   assert.equal(f.database.prepare('SELECT owner_id FROM lessons WHERE id = 1').get().owner_id, null);
-249 | });
-250 |
-251 | test('Google sign-in is offered only when its credentials are configured on the server', async t => {
-252 |   const without = await fixture(t);
-253 |   assert.equal((await without.client()('/api/auth-config')).json.google, false);
-254 |   const withGoogle = await fixture(t, { env: { GOOGLE_CLIENT_ID: 'client-id.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'client-secret-value' } });
-255 |   assert.equal((await withGoogle.client()('/api/auth-config')).json.google, true);
-256 |   const start = await withGoogle.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
-257 |   assert.equal(start.status, 200);
-258 |   assert.match(start.json.url, /^https:\/\/accounts\.google\.com\//);
-259 |   assert.ok(!start.text.includes('client-secret-value'));
-260 |   const refused = await without.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
-261 |   assert.ok(refused.status >= 400);
-262 | });
+241 |   assert.equal((await b(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 404);
+242 |   const stolen = await b('/api/lessons', { method: 'POST', body: { title: 'Steal media', discipline: 'MMA', media: [{ id: upload.id }] } });
+243 |   assert.equal(stolen.status, 400);
+244 |   const stolenOrphan = await b('/api/lessons', { method: 'POST', body: { title: 'Steal upload', discipline: 'MMA', media: [{ id: orphan.id }] } });
+245 |   assert.equal(stolenOrphan.status, 400);
+246 |   const own = (await b('/api/lessons', { method: 'POST', body: { title: 'B plan', discipline: 'Wrestling' } })).json;
+247 |   assert.equal((await b(`/api/lessons/${own.id}`, { method: 'PUT', body: { title: 'B plan 2', discipline: 'Wrestling', media: [{ id: upload.id }] } })).status, 400);
+248 |   assert.equal((await b('/api/lessons')).json.map(item => item.title).join(), 'B plan');
+249 |   const survivors = (await a('/api/lessons')).json;
+250 |   assert.equal(survivors[0].title, 'A private plan');
+251 |   assert.equal((await a('/api/lesson-media')).json.length, 2);
+252 |   assert.equal((await a(`/api/media/${orphan.id}`, { method: 'DELETE' })).status, 204);
+253 |   assert.equal(f.database.prepare('SELECT count(*) AS n FROM lessons WHERE owner_id IS NULL').get().n, 0);
+254 |   assert.equal((await a(`/api/lessons/${lesson.id}`, { method: 'DELETE' })).status, 204);
+255 |   assert.equal((await b('/api/lessons')).json.length, 1);
+256 | });
+257 |
+258 | test('lessons that existed before accounts have no owner, stay untouched in the database and are invisible to every coach', async t => {
+259 |   const f = await fixture(t);
+260 |   f.database.prepare("INSERT INTO lessons (title, discipline, drills) VALUES ('Old lesson', 'Boxing', 'Warm-up — 5 minutes')").run();
+261 |   f.database.prepare("INSERT INTO lesson_media (kind, origin, url, title) VALUES ('youtube', 'link', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'Old video')").run();
+262 |   const api = await signedIn(f, 'new@example.com');
+263 |   assert.deepEqual((await api('/api/lessons')).json, []);
+264 |   assert.deepEqual((await api('/api/lesson-media')).json, []);
+265 |   assert.equal((await api('/api/lessons/1', { method: 'DELETE' })).status, 404);
+266 |   assert.equal((await api('/api/lessons/1', { method: 'PUT', body: { title: 'Taken', discipline: 'MMA' } })).status, 404);
+267 |   assert.equal(f.database.prepare('SELECT title FROM lessons WHERE id = 1').get().title, 'Old lesson');
+268 |   assert.equal(f.database.prepare('SELECT owner_id FROM lessons WHERE id = 1').get().owner_id, null);
+269 | });
+270 |
 ```
 
-- **Line 241:** Inserts an old attachment with no owner.
-- **Line 242:** Signs in a brand-new coach.
-- **Line 243:** The new coach sees no lessons, so old lessons are not assigned to the first account.
-- **Line 244:** The new coach sees no attachments.
-- **Line 245:** The new coach cannot delete the old lesson.
-- **Line 246:** The new coach cannot edit it either.
-- **Line 247:** The old lesson is unchanged in the database.
-- **Line 248:** And it still has no owner.
-- **Line 249:** Closes the callback body and the function call that received it.
-- **Line 250:** Blank line separates related sections for readability; it performs no operation.
-- **Line 251:** Test: Google sign-in is offered only when its credentials are configured on the server.
-- **Line 252:** Builds a fixture without Google keys.
-- **Line 253:** It reports that Google is not available.
-- **Line 254:** Builds a fixture with fake Google keys.
-- **Line 255:** It reports that Google is available.
-- **Line 256:** Starts a Google sign-in.
-- **Line 257:** The server answers 200.
-- **Line 258:** The answer is a Google sign-in address (https://accounts.google.com/…).
-- **Line 259:** The Google client secret is not in the answer.
-- **Line 260:** Starting Google sign-in without keys…
-- **Line 261:** …is refused.
-- **Line 262:** Closes the callback body and the function call that received it.
+- **Line 241:** Coach B cannot delete A’s lesson.
+- **Line 242:** Coach B tries to attach A’s upload to a new lesson of their own…
+- **Line 243:** …and is refused.
+- **Line 244:** Same attempt with A’s unattached upload…
+- **Line 245:** …also refused.
+- **Line 246:** Coach B creates their own lesson.
+- **Line 247:** B cannot attach A’s upload by editing their own lesson either.
+- **Line 248:** B still sees only their own lesson.
+- **Line 249:** Reads A’s lessons again.
+- **Line 250:** A’s lesson is untouched.
+- **Line 251:** A’s attachments are untouched.
+- **Line 252:** A can delete their own unsaved upload.
+- **Line 253:** No lesson in the database lacks an owner.
+- **Line 254:** A can delete their own lesson.
+- **Line 255:** B’s lesson is unaffected.
+- **Line 256:** Closes the callback body and the function call that received it.
+- **Line 257:** Blank line separates related sections for readability; it performs no operation.
+- **Line 258:** Test: lessons that existed before accounts have no owner and stay hidden and untouched.
+- **Line 259:** Builds the fixture.
+- **Line 260:** Inserts an old lesson directly into the database with no owner.
+- **Line 261:** Inserts an old attachment with no owner.
+- **Line 262:** Signs in a brand-new coach.
+- **Line 263:** The new coach sees no lessons, so old lessons are not assigned to the first account.
+- **Line 264:** The new coach sees no attachments.
+- **Line 265:** The new coach cannot delete the old lesson.
+- **Line 266:** The new coach cannot edit it either.
+- **Line 267:** The old lesson is unchanged in the database.
+- **Line 268:** And it still has no owner.
+- **Line 269:** Closes the callback body and the function call that received it.
+- **Line 270:** Blank line separates related sections for readability; it performs no operation.
+
+### Lines 271–282
+
+```text
+271 | test('Google sign-in is offered only when its credentials are configured on the server', async t => {
+272 |   const without = await fixture(t);
+273 |   assert.equal((await without.client()('/api/auth-config')).json.google, false);
+274 |   const withGoogle = await fixture(t, { env: { GOOGLE_CLIENT_ID: 'client-id.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'client-secret-value' } });
+275 |   assert.equal((await withGoogle.client()('/api/auth-config')).json.google, true);
+276 |   const start = await withGoogle.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
+277 |   assert.equal(start.status, 200);
+278 |   assert.match(start.json.url, /^https:\/\/accounts\.google\.com\//);
+279 |   assert.ok(!start.text.includes('client-secret-value'));
+280 |   const refused = await without.client()('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google', callbackURL: '/' } });
+281 |   assert.ok(refused.status >= 400);
+282 | });
+```
+
+- **Line 271:** Test: Google sign-in is offered only when its credentials are configured on the server.
+- **Line 272:** Builds a fixture without Google keys.
+- **Line 273:** It reports that Google is not available.
+- **Line 274:** Builds a fixture with fake Google keys.
+- **Line 275:** It reports that Google is available.
+- **Line 276:** Starts a Google sign-in.
+- **Line 277:** The server answers 200.
+- **Line 278:** The answer is a Google sign-in address (https://accounts.google.com/…).
+- **Line 279:** The Google client secret is not in the answer.
+- **Line 280:** Starting Google sign-in without keys…
+- **Line 281:** …is refused.
+- **Line 282:** Closes the callback body and the function call that received it.
 
 ## server/claim-lessons.js
 
