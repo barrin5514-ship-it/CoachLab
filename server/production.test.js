@@ -6,11 +6,22 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { createApp } from './app.js';
 import { listenerSettings } from './web.js';
+import { productionDatabaseSettings } from './production-database.js';
 
 test('production binds the hosting port while development stays local', () => {
   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
+});
+
+test('production database configuration rejects unsafe or mismatched targets without connecting', () => {
+  const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
+  const settings = productionDatabaseSettings(env);
+  assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
+  assert.equal(new URL(settings.pooled).search, '');
+  for (const override of [{ NODE_ENV: 'development' }, { COACHLAB_DB_ENV: 'development' }, { COACHLAB_DATABASE: 'sqlite' }, { DATABASE_URL: 'invalid' }, { PRODUCTION_DB_NAME: 'wrong' }, { DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:other') }, { DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=disable') }, { DIRECT_URL: env.DATABASE_URL }, { COACHLAB_DEV_EXPECTED_HOST: 'ep-production-pooler.example.neon.tech' }]) {
+    assert.throws(() => productionDatabaseSettings({ ...env, ...override }));
+  }
 });
 
 test('production serves React browser routes without swallowing API or missing assets', async t => {

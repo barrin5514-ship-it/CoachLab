@@ -719,7 +719,7 @@ Production preparation: this file connects deployment configuration to the exist
 10 | try {
 11 |   const production = process.env.NODE_ENV === 'production';
 12 |   const { port, host } = listenerSettings();
-13 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
+13 |   const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
 14 |   let lessons;
 15 |   let auth;
 16 |   const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
@@ -734,8 +734,8 @@ Production preparation: this file connects deployment configuration to the exist
 25 |     await auth.prepare();
 26 |     lessons = database;
 27 |   } else if (selected === 'postgresql') {
-28 |     const { createDevelopmentClient } = await import('./prisma-development.js');
-29 |     const client = createDevelopmentClient();
+28 |     const module = await import(production ? './prisma-production.js' : './prisma-development.js');
+29 |     const client = production ? module.createProductionClient() : module.createDevelopmentClient();
 30 |     close = () => client.$disconnect();
 ```
 
@@ -751,7 +751,7 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 10:** Opens a try block for startup work that can throw.
 - **Line 11:** Remembers whether the server is running in production mode; development is not inferred from database settings.
 - **Line 12:** Destructures the validated listening address and port from the web helper.
-- **Line 13:** Reads the explicit server-only selector, defaulting to SQLite only when absent/empty; it does not catch failures and fall back.
+- **Line 13:** Production always uses PostgreSQL; development retains the existing explicit selector and SQLite default.
 - **Line 14:** Declares the store or SQLite connection that startup will pass to createApp.
 - **Line 15:** Declares the variable that will hold the login system.
 - **Line 16:** Reads the public website address from the environment (default is the local development address) and removes trailing slashes.
@@ -766,65 +766,67 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 25:** Creates the login tables in SQLite if they are missing (PostgreSQL gets them from the reviewed migration instead).
 - **Line 26:** Supplies the SQLite connection; createApp adapts it to the shared lesson store.
 - **Line 27:** Chooses PostgreSQL only for this exact selector value.
-- **Line 28:** Loads the generated-client wrapper only when PostgreSQL is selected, so default SQLite startup does not need it.
-- **Line 29:** Constructs the client after checking the development environment, expected pooled host/database and TLS settings.
+- **Line 28:** Loads exactly the selected environment client factory without changing the development factory.
+- **Line 29:** Constructs the appropriate guarded Prisma client for the selected environment.
 - **Line 30:** Defines shutdown cleanup for Prisma's connection pool.
 
-### Lines 31–55
+### Lines 31–56
 
 ```text
 31 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
-32 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
-33 |     await client.lesson.count();
-34 |     auth = createAuth({ ...authSettings, prisma: client });
-35 |     lessons = prismaLessons(client);
-36 |   } else {
-37 |     throw new Error('Unsupported database selection.');
-38 |   }
-39 |   const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
-40 |     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
-41 |   });
-42 |   server.on('error', async () => {
-43 |     await close();
-44 |     console.error('Could not start CoachLab API. Check whether the configured port is already in use.');
-45 |     process.exitCode = 1;
-46 |   });
-47 |   for (const signal of ['SIGINT', 'SIGTERM']) {
-48 |     process.once(signal, () => server.close(async () => { await close(); }));
-49 |   }
-50 | } catch (error) {
-51 |   await close().catch(() => {});
-52 |   if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
-53 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
-54 |   process.exitCode = 1;
-55 | }
+32 |     const expected = production ? process.env.PRODUCTION_DB_NAME : process.env.COACHLAB_DEV_EXPECTED_DATABASE;
+33 |     if (identity[0].name !== expected) throw new Error('Database identity mismatch.');
+34 |     await client.lesson.count();
+35 |     auth = createAuth({ ...authSettings, prisma: client });
+36 |     lessons = prismaLessons(client);
+37 |   } else {
+38 |     throw new Error('Unsupported database selection.');
+39 |   }
+40 |   const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
+41 |     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
+42 |   });
+43 |   server.on('error', async () => {
+44 |     await close();
+45 |     console.error('Could not start CoachLab API. Check whether the configured port is already in use.');
+46 |     process.exitCode = 1;
+47 |   });
+48 |   for (const signal of ['SIGINT', 'SIGTERM']) {
+49 |     process.once(signal, () => server.close(async () => { await close(); }));
+50 |   }
+51 | } catch (error) {
+52 |   await close().catch(() => {});
+53 |   if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
+54 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
+55 |   process.exitCode = 1;
+56 | }
 ```
 
 - **Line 31:** Runs a fixed read-only query to authenticate the actual current database name before accepting HTTP traffic.
-- **Line 32:** Fails startup if the authenticated database differs from the explicitly expected database.
-- **Line 33:** Checks that the selected lessons table is reachable before the application starts listening.
-- **Line 34:** In PostgreSQL mode, builds the login system on the Prisma client, so accounts and lessons live in the same database.
-- **Line 35:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
-- **Line 36:** Closes the preceding choice and starts the alternative branch.
-- **Line 37:** Rejects unknown selectors rather than silently choosing another database.
-- **Line 38:** Closes the catch block.
-- **Line 39:** Builds the existing authenticated API with production hosting when needed, then starts listening on the validated address.
-- **Line 40:** Logs only the port and database type; interpolation inserts these non-secret values without printing credentials.
-- **Line 41:** Closes the error callback and event registration.
-- **Line 42:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
-- **Line 43:** Waits for the selected connection or pool to close before reporting listener failure.
-- **Line 44:** Reports a safe listening failure without assuming the development port was used.
-- **Line 45:** Sets the failure exit status so scripts can detect startup failure.
-- **Line 46:** Closes the error callback and event registration.
-- **Line 47:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
-- **Line 48:** Handles a termination signal once, first closing the HTTP server and then its database connection.
-- **Line 49:** Closes the catch block.
-- **Line 50:** The startup catch block now keeps the error so it can recognise a missing secret.
-- **Line 51:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
-- **Line 52:** If the secret is missing or too short, prints a clear instruction to set BETTER_AUTH_SECRET. The secret itself is never printed.
-- **Line 53:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
-- **Line 54:** Sets the failure exit status so scripts can detect startup failure.
-- **Line 55:** Closes the catch block.
+- **Line 32:** Selects the expected database name for the existing startup identity query.
+- **Line 33:** Stops if PostgreSQL reports a database other than the expected target; no fallback occurs.
+- **Line 34:** Checks that the selected lessons table is reachable before the application starts listening.
+- **Line 35:** In PostgreSQL mode, builds the login system on the Prisma client, so accounts and lessons live in the same database.
+- **Line 36:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
+- **Line 37:** Closes the preceding choice and starts the alternative branch.
+- **Line 38:** Rejects unknown selectors rather than silently choosing another database.
+- **Line 39:** Closes the catch block.
+- **Line 40:** Builds the existing authenticated API with production hosting when needed, then starts listening on the validated address.
+- **Line 41:** Logs only the port and database type; interpolation inserts these non-secret values without printing credentials.
+- **Line 42:** Closes the error callback and event registration.
+- **Line 43:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
+- **Line 44:** Waits for the selected connection or pool to close before reporting listener failure.
+- **Line 45:** Reports a safe listening failure without assuming the development port was used.
+- **Line 46:** Sets the failure exit status so scripts can detect startup failure.
+- **Line 47:** Closes the error callback and event registration.
+- **Line 48:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
+- **Line 49:** Handles a termination signal once, first closing the HTTP server and then its database connection.
+- **Line 50:** Closes the catch block.
+- **Line 51:** The startup catch block now keeps the error so it can recognise a missing secret.
+- **Line 52:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
+- **Line 53:** If the secret is missing or too short, prints a clear instruction to set BETTER_AUTH_SECRET. The secret itself is never printed.
+- **Line 54:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
+- **Line 55:** Sets the failure exit status so scripts can detect startup failure.
+- **Line 56:** Closes the catch block.
 
 ## package.json
 
@@ -10085,28 +10087,28 @@ Offline deployment checks use temporary HTML and a disposable loopback server. N
 6 | import { once } from 'node:events';
 7 | import { createApp } from './app.js';
 8 | import { listenerSettings } from './web.js';
-9 |
-10 | test('production binds the hosting port while development stays local', () => {
-11 |   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
-12 |   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
-13 |   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
-14 | });
-15 |
-16 | test('production serves React browser routes without swallowing API or missing assets', async t => {
-17 |   const directory = mkdtempSync(join(tmpdir(), 'coachlab-web-'));
-18 |   writeFileSync(join(directory, 'index.html'), '<html>CoachLab test shell</html>');
-19 |   writeFileSync(join(directory, 'example.js'), '/* test asset */');
-20 |   const auth = { getUser: async () => ({ id: 'test-coach' }) };
-21 |   const app = createApp({ list: async () => [] }, { auth, production: true, frontendDirectory: directory });
-22 |   const server = app.listen(0, '127.0.0.1');
-23 |   await once(server, 'listening');
-24 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true }); });
-25 |   const base = `http://127.0.0.1:${server.address().port}`;
-26 |   for (const path of ['/', '/lesson/123', '/reset-password']) {
-27 |     const response = await fetch(base + path, { headers: { accept: 'text/html' } });
-28 |     assert.equal(response.status, 200);
-29 |     assert.match(await response.text(), /CoachLab test shell/);
-30 |   }
+9 | import { productionDatabaseSettings } from './production-database.js';
+10 |
+11 | test('production binds the hosting port while development stays local', () => {
+12 |   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
+13 |   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
+14 |   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
+15 | });
+16 |
+17 | test('production database configuration rejects unsafe or mismatched targets without connecting', () => {
+18 |   const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
+19 |   const settings = productionDatabaseSettings(env);
+20 |   assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
+21 |   assert.equal(new URL(settings.pooled).search, '');
+22 |   for (const override of [{ NODE_ENV: 'development' }, { COACHLAB_DB_ENV: 'development' }, { COACHLAB_DATABASE: 'sqlite' }, { DATABASE_URL: 'invalid' }, { PRODUCTION_DB_NAME: 'wrong' }, { DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:other') }, { DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=disable') }, { DIRECT_URL: env.DATABASE_URL }, { COACHLAB_DEV_EXPECTED_HOST: 'ep-production-pooler.example.neon.tech' }]) {
+23 |     assert.throws(() => productionDatabaseSettings({ ...env, ...override }));
+24 |   }
+25 | });
+26 |
+27 | test('production serves React browser routes without swallowing API or missing assets', async t => {
+28 |   const directory = mkdtempSync(join(tmpdir(), 'coachlab-web-'));
+29 |   writeFileSync(join(directory, 'index.html'), '<html>CoachLab test shell</html>');
+30 |   writeFileSync(join(directory, 'example.js'), '/* test asset */');
 ```
 
 - **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
@@ -10117,43 +10119,171 @@ Offline deployment checks use temporary HTML and a disposable loopback server. N
 - **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 9:** Blank line separates related operations for readability.
-- **Line 10:** Starts an offline test of environment selection and port validation.
-- **Line 11:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Blank line separates related operations for readability.
+- **Line 11:** Starts an offline test of environment selection and port validation.
 - **Line 12:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 13:** Loops over invalid port examples and requires each to fail before a server can start.
-- **Line 14:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 15:** Blank line separates related operations for readability.
-- **Line 16:** Starts an asynchronous HTTP routing test; t registers cleanup of its temporary resources.
-- **Line 17:** Creates a uniquely named temporary folder outside the project for disposable frontend test files.
-- **Line 18:** Writes a tiny test entry page so routing can be checked without building React for each test.
-- **Line 19:** Creates a harmless JavaScript asset to check ordinary static-file serving.
-- **Line 20:** Supplies a fake signed-in user for this routing test; real authentication is covered by separate tests.
-- **Line 21:** Uses an empty in-memory lesson stub and temporary HTML with production routing enabled; no database is contacted.
-- **Line 22:** Listens only on loopback using a free temporary port selected by the operating system.
-- **Line 23:** Waits for the server to be ready before sending test requests.
-- **Line 24:** Registers cleanup: close this test server, then remove only the unique temporary folder this test created.
-- **Line 25:** Constructs this test server's local URL from its actual assigned port.
-- **Line 26:** Checks the homepage and nested browser paths so refreshing those URLs still loads React.
-- **Line 27:** Makes a local GET request asking for HTML; await pauses this test until the response arrives.
-- **Line 28:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 29:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 30:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 13:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 14:** Loops over invalid port examples and requires each to fail before a server can start.
+- **Line 15:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 16:** Blank line separates related operations for readability.
+- **Line 17:** Tests production connection safety with dummy URLs only; no remote database is contacted.
+- **Line 18:** Defines entirely fictional matching production endpoints and test credentials for offline validation.
+- **Line 19:** Validates the fictional environment to test the successful configuration path.
+- **Line 20:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 21:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 22:** Tries wrong environment, database type, malformed URL, identity, credentials, TLS, connection kind and a development endpoint; each must be rejected.
+- **Line 23:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 24:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 25:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 26:** Blank line separates related operations for readability.
+- **Line 27:** Starts an asynchronous HTTP routing test; t registers cleanup of its temporary resources.
+- **Line 28:** Creates a uniquely named temporary folder outside the project for disposable frontend test files.
+- **Line 29:** Writes a tiny test entry page so routing can be checked without building React for each test.
+- **Line 30:** Creates a harmless JavaScript asset to check ordinary static-file serving.
 
-### Lines 31–36
+### Lines 31–47
 
 ```text
-31 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
-32 |   assert.equal((await fetch(base + '/api/missing')).status, 404);
-33 |   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
-34 |   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
-35 |   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
-36 | });
+31 |   const auth = { getUser: async () => ({ id: 'test-coach' }) };
+32 |   const app = createApp({ list: async () => [] }, { auth, production: true, frontendDirectory: directory });
+33 |   const server = app.listen(0, '127.0.0.1');
+34 |   await once(server, 'listening');
+35 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true }); });
+36 |   const base = `http://127.0.0.1:${server.address().port}`;
+37 |   for (const path of ['/', '/lesson/123', '/reset-password']) {
+38 |     const response = await fetch(base + path, { headers: { accept: 'text/html' } });
+39 |     assert.equal(response.status, 200);
+40 |     assert.match(await response.text(), /CoachLab test shell/);
+41 |   }
+42 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
+43 |   assert.equal((await fetch(base + '/api/missing')).status, 404);
+44 |   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
+45 |   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
+46 |   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
+47 | });
 ```
 
-- **Line 31:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 32:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 33:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 35:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 36:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 31:** Supplies a fake signed-in user for this routing test; real authentication is covered by separate tests.
+- **Line 32:** Uses an empty in-memory lesson stub and temporary HTML with production routing enabled; no database is contacted.
+- **Line 33:** Listens only on loopback using a free temporary port selected by the operating system.
+- **Line 34:** Waits for the server to be ready before sending test requests.
+- **Line 35:** Registers cleanup: close this test server, then remove only the unique temporary folder this test created.
+- **Line 36:** Constructs this test server's local URL from its actual assigned port.
+- **Line 37:** Checks the homepage and nested browser paths so refreshing those URLs still loads React.
+- **Line 38:** Makes a local GET request asking for HTML; await pauses this test until the response arrives.
+- **Line 39:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 40:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 41:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 42:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 43:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 44:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 45:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 46:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 47:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+
+## server/production-database.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\production-database.js`
+
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
+
+### Lines 1–18
+
+```text
+1 | export function productionDatabaseSettings(env = process.env) {
+2 |   if (env.NODE_ENV !== 'production' || env.COACHLAB_DB_ENV !== 'production') throw new Error('Explicit production database environment required.');
+3 |   if (env.COACHLAB_DATABASE && env.COACHLAB_DATABASE !== 'postgresql') throw new Error('Production requires PostgreSQL.');
+4 |   let pooled;
+5 |   let direct;
+6 |   try { pooled = new URL(env.DATABASE_URL); direct = new URL(env.DIRECT_URL); } catch { throw new Error('Production database configuration is missing or invalid.'); }
+7 |   for (const url of [pooled, direct]) {
+8 |     if (url.protocol !== 'postgresql:' || !url.hostname.endsWith('.neon.tech') || !url.username || !url.password || url.hash) throw new Error('Authenticated Neon PostgreSQL connections required.');
+9 |     if (!['require', 'verify-full'].includes(url.searchParams.get('sslmode')) || [...url.searchParams.keys()].some(key => !['sslmode', 'channel_binding'].includes(key))) throw new Error('Production database requires verified TLS and supported connection options.');
+10 |   }
+11 |   if (!pooled.hostname.includes('-pooler.') || direct.hostname.includes('-pooler.')) throw new Error('Use pooled application and direct migration connections.');
+12 |   if (pooled.hostname.replace('-pooler.', '.') !== direct.hostname || pooled.pathname !== direct.pathname || pooled.username !== direct.username || pooled.password !== direct.password || pooled.port !== direct.port) throw new Error('Production connections must target the same database and role.');
+13 |   if (direct.hostname !== env.PRODUCTION_DB_HOST || decodeURIComponent(direct.pathname.slice(1)) !== env.PRODUCTION_DB_NAME) throw new Error('Production target does not match the expected host and database.');
+14 |   if (env.COACHLAB_DEV_EXPECTED_HOST?.replace('-pooler.', '.') === direct.hostname) throw new Error('Production must not use the configured development endpoint.');
+15 |   direct.searchParams.set('sslmode', 'verify-full');
+16 |   pooled.search = '';
+17 |   return { pooled: pooled.href, direct: direct.href };
+18 | }
+```
+
+- **Line 1:** Exports shared production validation used by both the runtime client and the separate migration configuration. Tests pass fake settings; no connection is opened here.
+- **Line 2:** Requires two explicit production flags so local development cannot accidentally select this connection path.
+- **Line 3:** Rejects an explicit SQLite or unsupported production selection rather than silently falling back.
+- **Line 4:** Declares the parsed application URL; let allows assignment after validation.
+- **Line 5:** Declares the parsed migration URL separately from the pooled application connection.
+- **Line 6:** Parses both private server settings. Parsing failures become a generic error that never includes the supplied URLs.
+- **Line 7:** Applies the same security checks to both parsed connections.
+- **Line 8:** Accepts authenticated Neon PostgreSQL URLs only; rejects URL fragments and other providers or protocols.
+- **Line 9:** Requires TLS and rejects unreviewed query options; spread turns the parameter iterator into an array for checking.
+- **Line 10:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 11:** Ensures runtime uses Neon pooling while migrations use the direct endpoint.
+- **Line 12:** Compares endpoint, database, role, password and port without printing them; a mismatch stops startup or migrations.
+- **Line 13:** Checks independently supplied expected hostname and database name; decoding removes URL encoding from the database path.
+- **Line 14:** Rejects a match with the known development endpoint when that local setting is present; optional chaining handles its absence.
+- **Line 15:** Makes the migration connection explicitly verify the TLS certificate and server name.
+- **Line 16:** Removes URL options before passing the pooled URL to pg, whose explicit TLS options take precedence safely.
+- **Line 17:** Returns the private validated connection strings only to trusted server code; they are never logged or sent to React.
+- **Line 18:** Closes this function, conditional block or object; execution continues after the block.
+
+## server/prisma-production.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\prisma-production.js`
+
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
+
+### Lines 1–9
+
+```text
+1 | import { PrismaClient } from './generated-runtime/client.js';
+2 | import { PrismaPg } from '@prisma/adapter-pg';
+3 | import { productionDatabaseSettings } from './production-database.js';
+4 |
+5 | export function createProductionClient(env = process.env) {
+6 |   const { pooled } = productionDatabaseSettings(env);
+7 |   const adapter = new PrismaPg({ connectionString: pooled, ssl: { rejectUnauthorized: true }, max: 5, connectionTimeoutMillis: 10000, idleTimeoutMillis: 10000, statement_timeout: 15000 });
+8 |   return new PrismaClient({ adapter });
+9 | }
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Blank line separates related operations for readability.
+- **Line 5:** Creates the production Prisma client using validated settings; development keeps its existing separate factory.
+- **Line 6:** Reads only the pooled connection after the shared production checks pass.
+- **Line 7:** Configures the PostgreSQL driver with verified TLS, at most five connections, ten-second connect/idle limits and a fifteen-second statement timeout.
+- **Line 8:** Returns Prisma wired to the PostgreSQL adapter; queries use the existing generated Lesson and account models.
+- **Line 9:** Closes this function, conditional block or object; execution continues after the block.
+
+## prisma.production.config.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma.production.config.js`
+
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
+
+### Lines 1–8
+
+```text
+1 | import { defineConfig } from 'prisma/config';
+2 | import { productionDatabaseSettings } from './server/production-database.js';
+3 |
+4 | export default defineConfig({
+5 |   schema: 'prisma/schema.prisma',
+6 |   migrations: { path: 'prisma/migrations' },
+7 |   datasource: { url: productionDatabaseSettings().direct },
+8 | });
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Blank line separates related operations for readability.
+- **Line 4:** Exports Prisma CLI configuration using its supported configuration helper.
+- **Line 5:** Points Prisma at the existing data model; no new model or migration is introduced.
+- **Line 6:** Uses the existing ordered migration directory so migrate deploy applies the reviewed schema history.
+- **Line 7:** Uses the validated direct production URL only in this explicitly selected CLI configuration; default development configuration remains offline.
+- **Line 8:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.

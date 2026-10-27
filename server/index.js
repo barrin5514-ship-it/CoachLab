@@ -10,7 +10,7 @@ let close = async () => {};
 try {
   const production = process.env.NODE_ENV === 'production';
   const { port, host } = listenerSettings();
-  const selected = process.env.COACHLAB_DATABASE || 'sqlite';
+  const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
   let auth;
   const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
@@ -25,11 +25,12 @@ try {
     await auth.prepare();
     lessons = database;
   } else if (selected === 'postgresql') {
-    const { createDevelopmentClient } = await import('./prisma-development.js');
-    const client = createDevelopmentClient();
+    const module = await import(production ? './prisma-production.js' : './prisma-development.js');
+    const client = production ? module.createProductionClient() : module.createDevelopmentClient();
     close = () => client.$disconnect();
     const identity = await client.$queryRaw`SELECT current_database() AS name`;
-    if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
+    const expected = production ? process.env.PRODUCTION_DB_NAME : process.env.COACHLAB_DEV_EXPECTED_DATABASE;
+    if (identity[0].name !== expected) throw new Error('Database identity mismatch.');
     await client.lesson.count();
     auth = createAuth({ ...authSettings, prisma: client });
     lessons = prismaLessons(client);

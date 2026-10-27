@@ -4348,3 +4348,5 @@ REPORT BACK (in one code block)
 ```
 
 Assistant outcome, step 1: inspected instructions and source; baseline 68/68 passed serially. Added production-only listener and static frontend routing, preserving the local development port and API behavior. Two routing/listener tests passed. No real environment file read or changed; no remote database operations. Initial inspection mistakenly looked for prisma.config.ts; corrected to the existing prisma.config.js. Existing auth fixture warnings appeared during passing baseline tests; no production database warning was observed. Walkthrough updated for touched source/test lines. Commit subject: "Serve built React and hosting port in production"; hash recorded in the next step.
+
+Step 2 outcome: production connection validation and separate Prisma production configuration added. Development factory and default CLI configuration unchanged. Offline tests: 8/8 passed, including all five existing Prisma checks and three production checks. Migration SQL is unchanged; no migrations or remote queries executed. Step 1 commit: 51143ed. Step 2 commit subject: "Add guarded production Neon and migration configuration".
