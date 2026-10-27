@@ -702,9 +702,9 @@ Executed when server/index.js imports it. It exports the path used by database.j
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\index.js`
 
-Local backend entry point selecting SQLite by default or explicit PostgreSQL Development. Fails closed, starts only after connection checks and cleans up on shutdown.
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import { createApp } from './app.js';
@@ -713,25 +713,30 @@ Local backend entry point selecting SQLite by default or explicit PostgreSQL Dev
 4 | import { prismaLessons } from './lesson-store.js';
 5 | import { createAuth } from './auth.js';
 6 | import { consoleMailer } from './mailer.js';
-7 |
-8 | let close = async () => {};
-9 | try {
-10 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
-11 |   let lessons;
-12 |   let auth;
-13 |   const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
-14 |   const sameMachine = publicUrl.replace('//127.0.0.1', '//localhost');
-15 |   const allowedOrigins = [...new Set((process.env.COACHLAB_ALLOWED_ORIGINS || publicUrl).split(',').map(origin => origin.trim()).filter(Boolean).concat(process.env.COACHLAB_ALLOWED_ORIGINS ? [] : [sameMachine]))];
-16 |   const authSettings = { secret: process.env.BETTER_AUTH_SECRET, baseURL: publicUrl, trustedOrigins: allowedOrigins, mailer: consoleMailer(), env: process.env };
-17 |   if (selected === 'sqlite') {
-18 |     const database = openDatabase();
-19 |     close = async () => database.close();
-20 |     migrate(database);
-21 |     auth = createAuth({ ...authSettings, database });
-22 |     await auth.prepare();
-23 |     lessons = database;
-24 |   } else if (selected === 'postgresql') {
-25 |     const { createDevelopmentClient } = await import('./prisma-development.js');
+7 | import { listenerSettings } from './web.js';
+8 |
+9 | let close = async () => {};
+10 | try {
+11 |   const production = process.env.NODE_ENV === 'production';
+12 |   const { port, host } = listenerSettings();
+13 |   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
+14 |   let lessons;
+15 |   let auth;
+16 |   const publicUrl = (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
+17 |   const sameMachine = publicUrl.replace('//127.0.0.1', '//localhost');
+18 |   const allowedOrigins = [...new Set((process.env.COACHLAB_ALLOWED_ORIGINS || publicUrl).split(',').map(origin => origin.trim()).filter(Boolean).concat(process.env.COACHLAB_ALLOWED_ORIGINS ? [] : [sameMachine]))];
+19 |   const authSettings = { secret: process.env.BETTER_AUTH_SECRET, baseURL: publicUrl, trustedOrigins: allowedOrigins, mailer: consoleMailer(), env: process.env };
+20 |   if (selected === 'sqlite') {
+21 |     const database = openDatabase();
+22 |     close = async () => database.close();
+23 |     migrate(database);
+24 |     auth = createAuth({ ...authSettings, database });
+25 |     await auth.prepare();
+26 |     lessons = database;
+27 |   } else if (selected === 'postgresql') {
+28 |     const { createDevelopmentClient } = await import('./prisma-development.js');
+29 |     const client = createDevelopmentClient();
+30 |     close = () => client.$disconnect();
 ```
 
 - **Line 1:** Imports the factory that constructs Express routes using an open database.
@@ -740,91 +745,86 @@ Local backend entry point selecting SQLite by default or explicit PostgreSQL Dev
 - **Line 4:** Imports { prismaLessons } from './lesson-store.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 5:** Imports the function that builds the login system.
 - **Line 6:** Imports the console mailer, which prints reset links in the backend window until a real email provider is configured.
-- **Line 7:** Blank line separates related sections for readability; it performs no operation.
-- **Line 8:** Initializes a harmless async cleanup function; startup replaces it after opening the selected database.
-- **Line 9:** Opens a try block for startup work that can throw.
-- **Line 10:** Reads the explicit server-only selector, defaulting to SQLite only when absent/empty; it does not catch failures and fall back.
-- **Line 11:** Declares the store or SQLite connection that startup will pass to createApp.
-- **Line 12:** Declares the variable that will hold the login system.
-- **Line 13:** Reads the public website address from the environment (default is the local development address) and removes trailing slashes.
-- **Line 14:** Makes the localhost twin of that address, so visiting http://localhost:5174 works as well as http://127.0.0.1:5174.
-- **Line 15:** Builds the list of browser origins allowed to send changes: either the list in COACHLAB_ALLOWED_ORIGINS or the public address plus its localhost twin; Set removes duplicates.
-- **Line 16:** Collects the login settings in one object: the secret, the base address, trusted origins, the mailer and the environment (for optional Google keys).
-- **Line 17:** Begins the explicitly selected SQLite startup branch.
-- **Line 18:** Opens the configured external SQLite database only in the explicitly selected SQLite branch.
-- **Line 19:** Defines shutdown cleanup for the opened SQLite connection.
-- **Line 20:** Applies outstanding versioned SQLite migrations in that branch; PostgreSQL startup never calls this function.
-- **Line 21:** In SQLite mode, builds the login system on the same SQLite database.
-- **Line 22:** Creates the login tables in SQLite if they are missing (PostgreSQL gets them from the reviewed migration instead).
-- **Line 23:** Supplies the SQLite connection; createApp adapts it to the shared lesson store.
-- **Line 24:** Chooses PostgreSQL only for this exact selector value.
-- **Line 25:** Loads the generated-client wrapper only when PostgreSQL is selected, so default SQLite startup does not need it.
+- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 8:** Blank line separates related sections for readability; it performs no operation.
+- **Line 9:** Initializes a harmless async cleanup function; startup replaces it after opening the selected database.
+- **Line 10:** Opens a try block for startup work that can throw.
+- **Line 11:** Remembers whether the server is running in production mode; development is not inferred from database settings.
+- **Line 12:** Destructures the validated listening address and port from the web helper.
+- **Line 13:** Reads the explicit server-only selector, defaulting to SQLite only when absent/empty; it does not catch failures and fall back.
+- **Line 14:** Declares the store or SQLite connection that startup will pass to createApp.
+- **Line 15:** Declares the variable that will hold the login system.
+- **Line 16:** Reads the public website address from the environment (default is the local development address) and removes trailing slashes.
+- **Line 17:** Makes the localhost twin of that address, so visiting http://localhost:5174 works as well as http://127.0.0.1:5174.
+- **Line 18:** Builds the list of browser origins allowed to send changes: either the list in COACHLAB_ALLOWED_ORIGINS or the public address plus its localhost twin; Set removes duplicates.
+- **Line 19:** Collects the login settings in one object: the secret, the base address, trusted origins, the mailer and the environment (for optional Google keys).
+- **Line 20:** Begins the explicitly selected SQLite startup branch.
+- **Line 21:** Opens the configured external SQLite database only in the explicitly selected SQLite branch.
+- **Line 22:** Defines shutdown cleanup for the opened SQLite connection.
+- **Line 23:** Applies outstanding versioned SQLite migrations in that branch; PostgreSQL startup never calls this function.
+- **Line 24:** In SQLite mode, builds the login system on the same SQLite database.
+- **Line 25:** Creates the login tables in SQLite if they are missing (PostgreSQL gets them from the reviewed migration instead).
+- **Line 26:** Supplies the SQLite connection; createApp adapts it to the shared lesson store.
+- **Line 27:** Chooses PostgreSQL only for this exact selector value.
+- **Line 28:** Loads the generated-client wrapper only when PostgreSQL is selected, so default SQLite startup does not need it.
+- **Line 29:** Constructs the client after checking the development environment, expected pooled host/database and TLS settings.
+- **Line 30:** Defines shutdown cleanup for Prisma's connection pool.
 
-### Lines 26–50
-
-```text
-26 |     const client = createDevelopmentClient();
-27 |     close = () => client.$disconnect();
-28 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
-29 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
-30 |     await client.lesson.count();
-31 |     auth = createAuth({ ...authSettings, prisma: client });
-32 |     lessons = prismaLessons(client);
-33 |   } else {
-34 |     throw new Error('Unsupported database selection.');
-35 |   }
-36 |   const server = createApp(lessons, { auth, allowedOrigins }).listen(3001, '127.0.0.1', () => {
-37 |     console.log(`CoachLab API listening at http://127.0.0.1:3001; database=${selected}`);
-38 |   });
-39 |   server.on('error', async () => {
-40 |     await close();
-41 |     console.error('Could not start CoachLab API. Check whether port 3001 is already in use.');
-42 |     process.exitCode = 1;
-43 |   });
-44 |   for (const signal of ['SIGINT', 'SIGTERM']) {
-45 |     process.once(signal, () => server.close(async () => { await close(); }));
-46 |   }
-47 | } catch (error) {
-48 |   await close().catch(() => {});
-49 |   if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
-50 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
-```
-
-- **Line 26:** Constructs the client after checking the development environment, expected pooled host/database and TLS settings.
-- **Line 27:** Defines shutdown cleanup for Prisma's connection pool.
-- **Line 28:** Runs a fixed read-only query to authenticate the actual current database name before accepting HTTP traffic.
-- **Line 29:** Fails startup if the authenticated database differs from the explicitly expected database.
-- **Line 30:** Checks that the selected lessons table is reachable before the application starts listening.
-- **Line 31:** In PostgreSQL mode, builds the login system on the Prisma client, so accounts and lessons live in the same database.
-- **Line 32:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
-- **Line 33:** Closes the preceding choice and starts the alternative branch.
-- **Line 34:** Rejects unknown selectors rather than silently choosing another database.
-- **Line 35:** Closes the signal-registration loop.
-- **Line 36:** Starts the Express app with the login system and allowed origins; the app cannot be created without them.
-- **Line 37:** Prints only the local URL and database type, never credentials or full database URLs.
-- **Line 38:** Closes the error callback and event registration.
-- **Line 39:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
-- **Line 40:** Waits for the selected connection or pool to close before reporting listener failure.
-- **Line 41:** Prints a safe explanation suggesting a port conflict; no internal error object is printed.
-- **Line 42:** Sets Node's exit status to failure; this does not forcibly terminate the outer development watch process.
-- **Line 43:** Closes the error callback and event registration.
-- **Line 44:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
-- **Line 45:** Handles a termination signal once, first closing the HTTP server and then its database connection.
-- **Line 46:** Closes the signal-registration loop.
-- **Line 47:** The startup catch block now keeps the error so it can recognise a missing secret.
-- **Line 48:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
-- **Line 49:** If the secret is missing or too short, prints a clear instruction to set BETTER_AUTH_SECRET. The secret itself is never printed.
-- **Line 50:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
-
-### Lines 51–52
+### Lines 31–55
 
 ```text
-51 |   process.exitCode = 1;
-52 | }
+31 |     const identity = await client.$queryRaw`SELECT current_database() AS name`;
+32 |     if (identity[0].name !== process.env.COACHLAB_DEV_EXPECTED_DATABASE) throw new Error('Database identity mismatch.');
+33 |     await client.lesson.count();
+34 |     auth = createAuth({ ...authSettings, prisma: client });
+35 |     lessons = prismaLessons(client);
+36 |   } else {
+37 |     throw new Error('Unsupported database selection.');
+38 |   }
+39 |   const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
+40 |     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
+41 |   });
+42 |   server.on('error', async () => {
+43 |     await close();
+44 |     console.error('Could not start CoachLab API. Check whether the configured port is already in use.');
+45 |     process.exitCode = 1;
+46 |   });
+47 |   for (const signal of ['SIGINT', 'SIGTERM']) {
+48 |     process.once(signal, () => server.close(async () => { await close(); }));
+49 |   }
+50 | } catch (error) {
+51 |   await close().catch(() => {});
+52 |   if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
+53 |   console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
+54 |   process.exitCode = 1;
+55 | }
 ```
 
-- **Line 51:** Sets the failure exit status so scripts can detect startup failure.
-- **Line 52:** Closes the catch block.
+- **Line 31:** Runs a fixed read-only query to authenticate the actual current database name before accepting HTTP traffic.
+- **Line 32:** Fails startup if the authenticated database differs from the explicitly expected database.
+- **Line 33:** Checks that the selected lessons table is reachable before the application starts listening.
+- **Line 34:** In PostgreSQL mode, builds the login system on the Prisma client, so accounts and lessons live in the same database.
+- **Line 35:** Wraps the initialized Prisma client in the shared asynchronous lesson-store interface.
+- **Line 36:** Closes the preceding choice and starts the alternative branch.
+- **Line 37:** Rejects unknown selectors rather than silently choosing another database.
+- **Line 38:** Closes the catch block.
+- **Line 39:** Builds the existing authenticated API with production hosting when needed, then starts listening on the validated address.
+- **Line 40:** Logs only the port and database type; interpolation inserts these non-secret values without printing credentials.
+- **Line 41:** Closes the error callback and event registration.
+- **Line 42:** Registers asynchronous cleanup and safe logging when the HTTP listener cannot start.
+- **Line 43:** Waits for the selected connection or pool to close before reporting listener failure.
+- **Line 44:** Reports a safe listening failure without assuming the development port was used.
+- **Line 45:** Sets the failure exit status so scripts can detect startup failure.
+- **Line 46:** Closes the error callback and event registration.
+- **Line 47:** Loops over the two normal termination signals, SIGINT (such as Ctrl+C) and SIGTERM.
+- **Line 48:** Handles a termination signal once, first closing the HTTP server and then its database connection.
+- **Line 49:** Closes the catch block.
+- **Line 50:** The startup catch block now keeps the error so it can recognise a missing secret.
+- **Line 51:** Attempts cleanup after startup failure without letting a cleanup rejection expose private connection details.
+- **Line 52:** If the secret is missing or too short, prints a clear instruction to set BETTER_AUTH_SECRET. The secret itself is never printed.
+- **Line 53:** Prints a generic startup failure and explicitly states there was no automatic database fallback.
+- **Line 54:** Sets the failure exit status so scripts can detect startup failure.
+- **Line 55:** Closes the catch block.
 
 ## package.json
 
@@ -1486,9 +1486,9 @@ Validates and normalizes the POST body before any write. It returns either an er
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\app.js`
 
-Express JSON API shared by both databases. Routes validate inputs and IDs, await store methods, and return safe HTTP errors. It now also verifies and stores lesson attachments, accepts file uploads, serves stored files with byte ranges, checks pasted links and finds suggested media for AI drafts.
+Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import express from 'express';
@@ -1501,21 +1501,26 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 8 | import { sniffMedia } from './media-sniff.js';
 9 | import { mediaLimits, uploadTypes } from '../client/src/media.js';
 10 | import { disciplines } from '../client/src/lesson-draft.js';
-11 |
-12 | const orphanAgeMs = 24 * 60 * 60 * 1000;
-13 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
-14 |
-15 | function sendFile(request, response, file) {
-16 |   const data = Buffer.from(file.data);
-17 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
-18 |   const range = request.headers.range;
-19 |   if (!range) return response.status(200).send(data);
-20 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-21 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
-22 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
-23 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
-24 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
-25 | }
+11 | import { serveFrontend } from './web.js';
+12 |
+13 | const orphanAgeMs = 24 * 60 * 60 * 1000;
+14 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
+15 |
+16 | function sendFile(request, response, file) {
+17 |   const data = Buffer.from(file.data);
+18 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+19 |   const range = request.headers.range;
+20 |   if (!range) return response.status(200).send(data);
+21 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+22 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
+23 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
+24 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
+25 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
+26 | }
+27 |
+28 | export function createApp(database, options = {}) {
+29 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
+30 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
 ```
 
 - **Line 1:** Imports Express from the existing installed package.
@@ -1528,387 +1533,380 @@ Express JSON API shared by both databases. Routes validate inputs and IDs, await
 - **Line 8:** Imports the file-type sniffer.
 - **Line 9:** Imports the shared size limits and allowed upload types.
 - **Line 10:** Imports the six discipline names so the suggest route can reject unknown ones.
-- **Line 11:** Blank line separates related sections; it performs no operation.
-- **Line 12:** One day in milliseconds: unsaved uploads older than this are purged.
-- **Line 13:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
-- **Line 14:** Blank line separates related sections; it performs no operation.
-- **Line 15:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
-- **Line 16:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
-- **Line 17:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
-- **Line 18:** Reads the Range header the browser sends when playing or seeking a video.
-- **Line 19:** Without a Range header, sends the whole file with status 200.
-- **Line 20:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
-- **Line 21:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
-- **Line 22:** Works out the last byte: the given end (capped at the file end) or the end of the file.
-- **Line 23:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
-- **Line 24:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
-- **Line 25:** Closes createApp.
+- **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 12:** Blank line separates related sections; it performs no operation.
+- **Line 13:** One day in milliseconds: unsaved uploads older than this are purged.
+- **Line 14:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
+- **Line 15:** Blank line separates related sections; it performs no operation.
+- **Line 16:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
+- **Line 17:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
+- **Line 18:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
+- **Line 19:** Reads the Range header the browser sends when playing or seeking a video.
+- **Line 20:** Without a Range header, sends the whole file with status 200.
+- **Line 21:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
+- **Line 22:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
+- **Line 23:** Works out the last byte: the given end (capped at the file end) or the end of the file.
+- **Line 24:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
+- **Line 25:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
+- **Line 26:** Closes createApp.
+- **Line 27:** Blank line separates related sections; it performs no operation.
+- **Line 28:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
+- **Line 29:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
+- **Line 30:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
 
-### Lines 26–50
-
-```text
-26 |
-27 | export function createApp(database, options = {}) {
-28 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
-29 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
-30 |   const { auth, allowedOrigins = [] } = options;
-31 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
-32 |   const app = express();
-33 |   app.disable('x-powered-by');
-34 |   app.use('/api', (request, response, next) => {
-35 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-36 |     next();
-37 |   });
-38 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
-39 |   app.use(express.json({ limit: '32kb' }));
-40 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-41 |   let suggestions = [];
-42 |   let suggesting = false;
-43 |
-44 |   async function verifiedMedia(rawMedia) {
-45 |     const checked = validateMediaList(rawMedia);
-46 |     if (checked.error) return { error: checked.error };
-47 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
-48 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
-49 |     const media = [];
-50 |     for (const [index, result] of results.entries()) {
-```
-
-- **Line 26:** Blank line separates related sections; it performs no operation.
-- **Line 27:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
-- **Line 28:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
-- **Line 29:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
-- **Line 30:** Reads the login adapter and the list of allowed browser origins from the options.
-- **Line 31:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
-- **Line 32:** Creates an Express application object.
-- **Line 33:** Stops Express from announcing itself in a response header.
-- **Line 34:** For every /api request, adds safety headers before anything else runs.
-- **Line 35:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
-- **Line 36:** Continues from the parameter guard into the matching route handler.
-- **Line 37:** Closes the error callback and registration.
-- **Line 38:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
-- **Line 39:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
-- **Line 40:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 41:** Remembers the times of recent media searches for rate limiting.
-- **Line 42:** True while a media search is running, so only one runs at a time.
-- **Line 43:** Blank line separates related sections; it performs no operation.
-- **Line 44:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
-- **Line 45:** Validates and cleans the submitted list.
-- **Line 46:** Returns the validation message if it failed.
-- **Line 47:** Stores without media support (such as a test double) refuse media cleanly.
-- **Line 48:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
-- **Line 49:** The verified entries will be collected here.
-- **Line 50:** Walks through the results in order.
-
-### Lines 51–75
+### Lines 31–60
 
 ```text
-51 |       const item = checked.media[index];
-52 |       if (result.status === 'rejected') {
-53 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
-54 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
-55 |       }
-56 |       if (item.id) { media.push(item); continue; }
-57 |       const info = result.value;
-58 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
-59 |     }
-60 |     return { media };
-61 |   }
-62 |   async function saveWithMedia(request, response, save) {
-63 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-64 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
-65 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
-66 |     const result = validateLesson(hasMedia ? fields : request.body);
-67 |     if (result.error) return response.status(400).json({ error: result.error });
-68 |     let media;
-69 |     if (hasMedia) {
-70 |       const checked = await verifiedMedia(rawMedia);
-71 |       if (checked.error) return response.status(400).json({ error: checked.error });
-72 |       media = checked.media;
-73 |     }
-74 |     try {
-75 |       return await save(result.lesson, media);
+31 |   const { auth, allowedOrigins = [] } = options;
+32 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
+33 |   const app = express();
+34 |   app.disable('x-powered-by');
+35 |   app.use('/api', (request, response, next) => {
+36 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+37 |     next();
+38 |   });
+39 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
+40 |   app.use(express.json({ limit: '32kb' }));
+41 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+42 |   let suggestions = [];
+43 |   let suggesting = false;
+44 |
+45 |   async function verifiedMedia(rawMedia) {
+46 |     const checked = validateMediaList(rawMedia);
+47 |     if (checked.error) return { error: checked.error };
+48 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+49 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
+50 |     const media = [];
+51 |     for (const [index, result] of results.entries()) {
+52 |       const item = checked.media[index];
+53 |       if (result.status === 'rejected') {
+54 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+55 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+56 |       }
+57 |       if (item.id) { media.push(item); continue; }
+58 |       const info = result.value;
+59 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+60 |     }
 ```
 
-- **Line 51:** The matching submitted entry.
-- **Line 52:** Handles a failed check.
-- **Line 53:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
-- **Line 54:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
-- **Line 55:** Closes the preceding block (function, object, or statement body).
-- **Line 56:** Stored attachments are kept as they are.
-- **Line 57:** The successful check result.
-- **Line 58:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
-- **Line 59:** Closes the preceding block (function, object, or statement body).
-- **Line 60:** Returns the verified list.
-- **Line 61:** Closes the preceding block (function, object, or statement body).
-- **Line 62:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
-- **Line 63:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 64:** True when the body is an ordinary object that contains a media key.
-- **Line 65:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
-- **Line 66:** Validates the nine lesson fields exactly as before, without the media key.
-- **Line 67:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 68:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
-- **Line 69:** Only when media was sent.
-- **Line 70:** Validates and verifies it before touching the database.
-- **Line 71:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
-- **Line 72:** Uses the verified list.
-- **Line 73:** Closes the preceding block (function, object, or statement body).
-- **Line 74:** Starts the database step.
-- **Line 75:** Calls the store’s save function (create or update) and returns its response.
+- **Line 31:** Reads the login adapter and the list of allowed browser origins from the options.
+- **Line 32:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
+- **Line 33:** Creates an Express application object.
+- **Line 34:** Stops Express from announcing itself in a response header.
+- **Line 35:** For every /api request, adds safety headers before anything else runs.
+- **Line 36:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
+- **Line 37:** Continues from the parameter guard into the matching route handler.
+- **Line 38:** Closes the error callback and registration.
+- **Line 39:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
+- **Line 40:** Registers JSON parsing with a 32 KB request-byte limit. Parser failures go to error middleware, before route validation or database writes.
+- **Line 41:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 42:** Remembers the times of recent media searches for rate limiting.
+- **Line 43:** True while a media search is running, so only one runs at a time.
+- **Line 44:** Blank line separates related sections; it performs no operation.
+- **Line 45:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 46:** Validates and cleans the submitted list.
+- **Line 47:** Returns the validation message if it failed.
+- **Line 48:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 49:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
+- **Line 50:** The verified entries will be collected here.
+- **Line 51:** Walks through the results in order.
+- **Line 52:** The matching submitted entry.
+- **Line 53:** Handles a failed check.
+- **Line 54:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 55:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 56:** Closes createApp.
+- **Line 57:** Stored attachments are kept as they are.
+- **Line 58:** The successful check result.
+- **Line 59:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
+- **Line 60:** Closes createApp.
 
-### Lines 76–100
+### Lines 61–90
 
 ```text
-76 |     } catch (error) {
-77 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
-78 |       throw error;
-79 |     }
-80 |   }
-81 |
-82 |   app.get('/api/health', (request, response) => {
-83 |     response.json({ status: 'ok', service: 'CoachLab API' });
-84 |   });
-85 |   app.get('/api/auth-config', (request, response) => {
-86 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
-87 |   });
-88 |   app.use('/api', async (request, response, next) => {
-89 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
-90 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
-91 |     }
-92 |     const user = await auth.getUser(request);
-93 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
-94 |     request.user = user;
-95 |     next();
-96 |   });
-97 |   app.get('/api/lessons', async (request, response) => {
-98 |     response.json(await lessons.list(request.user.id));
-99 |   });
-100 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
+61 |     return { media };
+62 |   }
+63 |   async function saveWithMedia(request, response, save) {
+64 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+65 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+66 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+67 |     const result = validateLesson(hasMedia ? fields : request.body);
+68 |     if (result.error) return response.status(400).json({ error: result.error });
+69 |     let media;
+70 |     if (hasMedia) {
+71 |       const checked = await verifiedMedia(rawMedia);
+72 |       if (checked.error) return response.status(400).json({ error: checked.error });
+73 |       media = checked.media;
+74 |     }
+75 |     try {
+76 |       return await save(result.lesson, media);
+77 |     } catch (error) {
+78 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+79 |       throw error;
+80 |     }
+81 |   }
+82 |
+83 |   app.get('/api/health', (request, response) => {
+84 |     response.json({ status: 'ok', service: 'CoachLab API' });
+85 |   });
+86 |   app.get('/api/auth-config', (request, response) => {
+87 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none' });
+88 |   });
+89 |   app.use('/api', async (request, response, next) => {
+90 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
 ```
 
-- **Line 76:** Catches store errors.
-- **Line 77:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
-- **Line 78:** Any other error continues to the general safe 500 handler.
-- **Line 79:** Closes the preceding block (function, object, or statement body).
-- **Line 80:** Closes the preceding block (function, object, or statement body).
-- **Line 81:** Blank line separates related sections; it performs no operation.
-- **Line 82:** Registers the existing GET health route with request/response callback parameters.
-- **Line 83:** Returns the same health JSON as before, normally with HTTP 200.
-- **Line 84:** Closes the error callback and registration.
-- **Line 85:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
-- **Line 86:** Answers whether Google sign-in is configured and which mail mode is active.
-- **Line 87:** Closes the error callback and registration.
-- **Line 88:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
-- **Line 89:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
-- **Line 90:** Blocks such a request with 403 and a plain message.
-- **Line 91:** Closes the preceding block (function, object, or statement body).
-- **Line 92:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
-- **Line 93:** No valid session: answers 401 and never reaches the route.
-- **Line 94:** Remembers who is asking, so every route below can only touch that coach’s data.
-- **Line 95:** Continues from the parameter guard into the matching route handler.
-- **Line 96:** Closes the error callback and registration.
-- **Line 97:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 98:** Lists only the signed-in coach’s lessons.
-- **Line 99:** Closes the error callback and registration.
-- **Line 100:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
+- **Line 61:** Returns the verified list.
+- **Line 62:** Closes createApp.
+- **Line 63:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 64:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 65:** True when the body is an ordinary object that contains a media key.
+- **Line 66:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 67:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 68:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 69:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 70:** Only when media was sent.
+- **Line 71:** Validates and verifies it before touching the database.
+- **Line 72:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 73:** Uses the verified list.
+- **Line 74:** Closes createApp.
+- **Line 75:** Starts the database step.
+- **Line 76:** Calls the store’s save function (create or update) and returns its response.
+- **Line 77:** Catches store errors.
+- **Line 78:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 79:** Any other error continues to the general safe 500 handler.
+- **Line 80:** Closes createApp.
+- **Line 81:** Closes createApp.
+- **Line 82:** Blank line separates related sections; it performs no operation.
+- **Line 83:** Registers the existing GET health route with request/response callback parameters.
+- **Line 84:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 85:** Closes the error callback and registration.
+- **Line 86:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
+- **Line 87:** Answers whether Google sign-in is configured and which mail mode is active.
+- **Line 88:** Closes the error callback and registration.
+- **Line 89:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
+- **Line 90:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
 
-### Lines 101–125
+### Lines 91–120
 
 ```text
-101 |   app.param('id', (request, response, next, value) => {
-102 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-103 |     request.lessonId = Number(value);
-104 |     next();
-105 |   });
-106 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-107 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
-108 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-109 |     return response.json(saved);
-110 |   }));
-111 |   app.delete('/api/lessons/:id', async (request, response) => {
-112 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
-113 |     response.status(204).end();
-114 |   });
-115 |
-116 |   app.get('/api/lesson-media', async (request, response) => {
-117 |     if (!lessons.media) return response.json([]);
-118 |     response.json(await lessons.media.list(request.user.id));
-119 |   });
-120 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
-121 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
-122 |     next();
-123 |   });
-124 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
-125 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+91 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
+92 |     }
+93 |     const user = await auth.getUser(request);
+94 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
+95 |     request.user = user;
+96 |     next();
+97 |   });
+98 |   app.get('/api/lessons', async (request, response) => {
+99 |     response.json(await lessons.list(request.user.id));
+100 |   });
+101 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
+102 |   app.param('id', (request, response, next, value) => {
+103 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+104 |     request.lessonId = Number(value);
+105 |     next();
+106 |   });
+107 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+108 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
+109 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
+110 |     return response.json(saved);
+111 |   }));
+112 |   app.delete('/api/lessons/:id', async (request, response) => {
+113 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+114 |     response.status(204).end();
+115 |   });
+116 |
+117 |   app.get('/api/lesson-media', async (request, response) => {
+118 |     if (!lessons.media) return response.json([]);
+119 |     response.json(await lessons.media.list(request.user.id));
+120 |   });
 ```
 
-- **Line 101:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 102:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 103:** Converts the validated URL ID to a number and stores it on this request.
-- **Line 104:** Continues from the parameter guard into the matching route handler.
-- **Line 105:** Closes the error callback and registration.
-- **Line 106:** Updating a lesson goes through saveWithMedia as well.
-- **Line 107:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
-- **Line 108:** A missing lesson still returns 404.
-- **Line 109:** Returns the updated lesson.
-- **Line 110:** Closes the handler and the route.
-- **Line 111:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 112:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
-- **Line 113:** Finishes a successful deletion response without a JSON body.
-- **Line 114:** Closes the error callback and registration.
-- **Line 115:** Blank line separates related sections; it performs no operation.
-- **Line 116:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
-- **Line 117:** Stores without media support return an empty list.
-- **Line 118:** Lists only the signed-in coach’s attachments.
-- **Line 119:** Closes the error callback and registration.
-- **Line 120:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
-- **Line 121:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
-- **Line 122:** Continues from the parameter guard into the matching route handler.
-- **Line 123:** Closes the error callback and registration.
-- **Line 124:** New route: uploads one file. The browser sends the file bytes as the body.
-- **Line 125:** Refuses when the store has no media support.
+- **Line 91:** Blocks such a request with 403 and a plain message.
+- **Line 92:** Closes createApp.
+- **Line 93:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
+- **Line 94:** No valid session: answers 401 and never reaches the route.
+- **Line 95:** Remembers who is asking, so every route below can only touch that coach’s data.
+- **Line 96:** Continues from the parameter guard into the matching route handler.
+- **Line 97:** Closes the error callback and registration.
+- **Line 98:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 99:** Lists only the signed-in coach’s lessons.
+- **Line 100:** Closes the error callback and registration.
+- **Line 101:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
+- **Line 102:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 103:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 104:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 105:** Continues from the parameter guard into the matching route handler.
+- **Line 106:** Closes the error callback and registration.
+- **Line 107:** Updating a lesson goes through saveWithMedia as well.
+- **Line 108:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
+- **Line 109:** A missing lesson still returns 404.
+- **Line 110:** Returns the updated lesson.
+- **Line 111:** Closes the handler and the route.
+- **Line 112:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 113:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
+- **Line 114:** Finishes a successful deletion response without a JSON body.
+- **Line 115:** Closes the error callback and registration.
+- **Line 116:** Blank line separates related sections; it performs no operation.
+- **Line 117:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 118:** Stores without media support return an empty list.
+- **Line 119:** Lists only the signed-in coach’s attachments.
+- **Line 120:** Closes the error callback and registration.
 
-### Lines 126–150
+### Lines 121–150
 
 ```text
-126 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-127 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
-128 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-129 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
-130 |     const detected = sniffMedia(data);
-131 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
-132 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
-133 |     let name = '';
-134 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
-135 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
-136 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-137 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
-138 |   });
-139 |   app.get('/api/media/:id/file', async (request, response) => {
-140 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
-141 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
-142 |     sendFile(request, response, file);
-143 |   });
-144 |   app.delete('/api/media/:id', async (request, response) => {
-145 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
-146 |     response.status(204).end();
-147 |   });
-148 |   app.post('/api/media/verify', async (request, response) => {
-149 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
-150 |     try {
+121 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024 })(request, response, error => {
+122 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+123 |     next();
+124 |   });
+125 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+126 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+127 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+128 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+129 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+130 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+131 |     const detected = sniffMedia(data);
+132 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+133 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+134 |     let name = '';
+135 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+136 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+137 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+138 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
+139 |   });
+140 |   app.get('/api/media/:id/file', async (request, response) => {
+141 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
+142 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+143 |     sendFile(request, response, file);
+144 |   });
+145 |   app.delete('/api/media/:id', async (request, response) => {
+146 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+147 |     response.status(204).end();
+148 |   });
+149 |   app.post('/api/media/verify', async (request, response) => {
+150 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
 ```
 
-- **Line 126:** The type the browser declared, without parameters, in lowercase.
-- **Line 127:** Only the listed picture and video types are accepted (415 otherwise).
-- **Line 128:** The body as a Buffer, or an empty one if nothing usable arrived.
-- **Line 129:** Empty uploads are rejected.
-- **Line 130:** Looks at the file’s real first bytes.
-- **Line 131:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
-- **Line 132:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
-- **Line 133:** Prepares the default caption.
-- **Line 134:** Decodes the file name from the header, ignoring malformed encodings.
-- **Line 135:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
-- **Line 136:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
-- **Line 137:** Stores an upload as belonging to the signed-in coach.
-- **Line 138:** Closes the error callback and registration.
-- **Line 139:** New route: sends a stored file to the browser.
-- **Line 140:** Sends a stored file only if it belongs to the signed-in coach.
-- **Line 141:** Unknown file: 404.
-- **Line 142:** Sends it, honoring byte ranges.
-- **Line 143:** Closes the error callback and registration.
-- **Line 144:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
-- **Line 145:** Deletes an unsaved upload only if it belongs to the signed-in coach.
-- **Line 146:** Finishes a successful deletion response without a JSON body.
-- **Line 147:** Closes the error callback and registration.
-- **Line 148:** New route: checks one pasted link.
-- **Line 149:** Requires JSON containing a text url.
-- **Line 150:** Starts the database step.
+- **Line 121:** Defines the upload body reader: raw bytes of any content type, limited to the largest allowed video plus 1 KB. A too-large body gets a clear 413 message instead of the generic JSON one.
+- **Line 122:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 123:** Continues from the parameter guard into the matching route handler.
+- **Line 124:** Closes the error callback and registration.
+- **Line 125:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 126:** Refuses when the store has no media support.
+- **Line 127:** The type the browser declared, without parameters, in lowercase.
+- **Line 128:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 129:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 130:** Empty uploads are rejected.
+- **Line 131:** Looks at the file’s real first bytes.
+- **Line 132:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 133:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 134:** Prepares the default caption.
+- **Line 135:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 136:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 137:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 138:** Stores an upload as belonging to the signed-in coach.
+- **Line 139:** Closes the error callback and registration.
+- **Line 140:** New route: sends a stored file to the browser.
+- **Line 141:** Sends a stored file only if it belongs to the signed-in coach.
+- **Line 142:** Unknown file: 404.
+- **Line 143:** Sends it, honoring byte ranges.
+- **Line 144:** Closes the error callback and registration.
+- **Line 145:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 146:** Deletes an unsaved upload only if it belongs to the signed-in coach.
+- **Line 147:** Finishes a successful deletion response without a JSON body.
+- **Line 148:** Closes the error callback and registration.
+- **Line 149:** New route: checks one pasted link.
+- **Line 150:** Requires JSON containing a text url.
 
-### Lines 151–175
+### Lines 151–180
 
 ```text
-151 |       response.json(await verifyLink(request.body.url));
-152 |     } catch (error) {
-153 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
-154 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
-155 |     }
-156 |   });
-157 |   app.post('/api/media/suggest', async (request, response) => {
-158 |     const body = request.body;
-159 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
-160 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
-161 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
-162 |     const now = Date.now();
-163 |     suggestions = suggestions.filter(time => now - time < 86400000);
-164 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
-165 |     suggestions.push(now);
-166 |     suggesting = true;
-167 |     try {
-168 |       response.json(await findMedia({ discipline: body.discipline, sections }));
-169 |     } catch {
-170 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
-171 |     } finally {
-172 |       suggesting = false;
-173 |     }
-174 |   });
-175 |
+151 |     try {
+152 |       response.json(await verifyLink(request.body.url));
+153 |     } catch (error) {
+154 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+155 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+156 |     }
+157 |   });
+158 |   app.post('/api/media/suggest', async (request, response) => {
+159 |     const body = request.body;
+160 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+161 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+162 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+163 |     const now = Date.now();
+164 |     suggestions = suggestions.filter(time => now - time < 86400000);
+165 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+166 |     suggestions.push(now);
+167 |     suggesting = true;
+168 |     try {
+169 |       response.json(await findMedia({ discipline: body.discipline, sections }));
+170 |     } catch {
+171 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
+172 |     } finally {
+173 |       suggesting = false;
+174 |     }
+175 |   });
+176 |
+177 |   registerAiRoute(app, options);
+178 |   if (options.production) serveFrontend(app, options.frontendDirectory);
+179 |   app.use((request, response) => {
+180 |     response.status(404).json({ error: 'Route not found.' });
 ```
 
-- **Line 151:** Returns what the checker found.
-- **Line 152:** Catches store errors.
-- **Line 153:** A link that cannot be used returns 400 with the explanation.
-- **Line 154:** Unexpected problems return 502 with a neutral message.
-- **Line 155:** Closes the preceding block (function, object, or statement body).
-- **Line 156:** Closes the error callback and registration.
-- **Line 157:** New route: finds and verifies pictures and videos for an AI draft.
-- **Line 158:** The request body.
-- **Line 159:** The sections list, or null if it is missing.
-- **Line 160:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
-- **Line 161:** Invalid requests get a 400.
-- **Line 162:** The current time.
-- **Line 163:** Forgets searches older than one day.
-- **Line 164:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
-- **Line 165:** Records this search.
-- **Line 166:** Marks a search as running.
-- **Line 167:** Starts the database step.
-- **Line 168:** Runs the finder and returns its verified results.
-- **Line 169:** Any failure is reported without technical details.
-- **Line 170:** A 502 with advice that media can still be added by hand.
-- **Line 171:** Whatever happened, finishes with…
-- **Line 172:** …allowing the next search.
-- **Line 173:** Closes the preceding block (function, object, or statement body).
-- **Line 174:** Closes the error callback and registration.
-- **Line 175:** Blank line separates related sections; it performs no operation.
+- **Line 151:** Starts the database step.
+- **Line 152:** Returns what the checker found.
+- **Line 153:** Catches store errors.
+- **Line 154:** A link that cannot be used returns 400 with the explanation.
+- **Line 155:** Unexpected problems return 502 with a neutral message.
+- **Line 156:** Closes createApp.
+- **Line 157:** Closes the error callback and registration.
+- **Line 158:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 159:** The request body.
+- **Line 160:** The sections list, or null if it is missing.
+- **Line 161:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 162:** Invalid requests get a 400.
+- **Line 163:** The current time.
+- **Line 164:** Forgets searches older than one day.
+- **Line 165:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 166:** Records this search.
+- **Line 167:** Marks a search as running.
+- **Line 168:** Starts the database step.
+- **Line 169:** Runs the finder and returns its verified results.
+- **Line 170:** Any failure is reported without technical details.
+- **Line 171:** A 502 with advice that media can still be added by hand.
+- **Line 172:** Whatever happened, finishes with…
+- **Line 173:** …allowing the next search.
+- **Line 174:** Closes createApp.
+- **Line 175:** Closes the error callback and registration.
+- **Line 176:** Blank line separates related sections; it performs no operation.
+- **Line 177:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 178:** Adds production static hosting only when explicitly requested; tests may substitute a temporary build directory.
+- **Line 179:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 180:** Sends HTTP 404 with a short route-not-found JSON error.
 
-### Lines 176–187
+### Lines 181–189
 
 ```text
-176 |   registerAiRoute(app, options);
-177 |   app.use((request, response) => {
-178 |     response.status(404).json({ error: 'Route not found.' });
-179 |   });
-180 |   app.use((error, request, response, next) => {
-181 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-182 |     if (status === 500) logError(error);
-183 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-184 |     response.status(status).json({ error: messages[status] });
-185 |   });
-186 |   return app;
-187 | }
+181 |   });
+182 |   app.use((error, request, response, next) => {
+183 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+184 |     if (status === 500) logError(error);
+185 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+186 |     response.status(status).json({ error: messages[status] });
+187 |   });
+188 |   return app;
+189 | }
 ```
 
-- **Line 176:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
-- **Line 177:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 178:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 179:** Closes the error callback and registration.
-- **Line 180:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 181:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 182:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
-- **Line 183:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 184:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 185:** Closes the error callback and registration.
-- **Line 186:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 187:** Closes createApp.
+- **Line 181:** Closes the error callback and registration.
+- **Line 182:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 183:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 184:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
+- **Line 185:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 186:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 187:** Closes the error callback and registration.
+- **Line 188:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 189:** Closes createApp.
 
 ## server/api.test.js
 
@@ -10013,3 +10011,149 @@ Test-only helpers. The real application always uses server/auth.js (Better Auth)
 - **Line 41:** Returns the request function.
 - **Line 42:** Closes the preceding block and ends the statement.
 - **Line 43:** Closes the preceding block (function, object, or statement body).
+
+## server/web.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\web.js`
+
+Production-only web hosting. index.js uses listenerSettings; app.js uses serveFrontend after registering API routes. Development keeps its separate Vite server.
+
+### Lines 1–22
+
+```text
+1 | import express from 'express';
+2 | import { existsSync } from 'node:fs';
+3 | import { fileURLToPath } from 'node:url';
+4 | import { join } from 'node:path';
+5 |
+6 | export function listenerSettings(env = process.env) {
+7 |   if (env.NODE_ENV !== 'production') return { port: 3001, host: '127.0.0.1' };
+8 |   const port = Number(env.PORT || 10000);
+9 |   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid production PORT.');
+10 |   return { port, host: '0.0.0.0' };
+11 | }
+12 |
+13 | export function serveFrontend(app, directory = fileURLToPath(new URL('../client/dist/', import.meta.url))) {
+14 |   const index = join(directory, 'index.html');
+15 |   if (!existsSync(index)) throw new Error('Build the React application before starting production.');
+16 |   app.use('/api', (request, response) => response.status(404).json({ error: 'Route not found.' }));
+17 |   app.use(express.static(directory, { index: false }));
+18 |   app.get('/{*path}', (request, response, next) => {
+19 |     if (request.path.startsWith('/assets/') || !request.accepts('html')) return next();
+20 |     response.set('Cache-Control', 'no-cache').sendFile(index);
+21 |   });
+22 | }
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Blank line separates related operations for readability.
+- **Line 6:** Exports a function that reads environment settings, defaulting to the current process. Tests can supply a harmless object instead.
+- **Line 7:** Leaves development on its existing local-only address and port; production continues to the hosting settings below.
+- **Line 8:** Converts the hosting PORT string to a number, using Render's default 10000 when absent.
+- **Line 9:** Rejects fractional, invalid or out-of-range ports before listening; || means any of these failures is enough.
+- **Line 10:** Returns the chosen port and all-interface address so Render's proxy can reach Express.
+- **Line 11:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 12:** Blank line separates related operations for readability.
+- **Line 13:** Exports the frontend installer. The default directory is Vite's build output resolved relative to this module, independent of the terminal's working folder.
+- **Line 14:** Builds the platform-correct absolute path to the React entry HTML file.
+- **Line 15:** Stops production startup with a clear error if the frontend build is missing.
+- **Line 16:** Ends unmatched API requests with JSON, preventing the browser-page fallback from masking API errors.
+- **Line 17:** Serves only files inside the build directory; disables automatic index serving so the explicit browser handler sets its cache policy.
+- **Line 18:** Registers Express 5's named wildcard, including the root page, for browser GET requests after static files and API routes.
+- **Line 19:** Leaves missing build assets and requests that reject HTML to the normal 404 handler instead of returning a misleading page.
+- **Line 20:** Sends the React entry page and requires browsers to revalidate it, so deployments can load new asset names.
+- **Line 21:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 22:** Closes this function, conditional block or object; execution continues after the block.
+
+## server/production.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\production.test.js`
+
+Offline deployment checks use temporary HTML and a disposable loopback server. No real database, secrets, Gemini requests or deployment is involved.
+
+### Lines 1–30
+
+```text
+1 | import test from 'node:test';
+2 | import assert from 'node:assert/strict';
+3 | import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+4 | import { tmpdir } from 'node:os';
+5 | import { join } from 'node:path';
+6 | import { once } from 'node:events';
+7 | import { createApp } from './app.js';
+8 | import { listenerSettings } from './web.js';
+9 |
+10 | test('production binds the hosting port while development stays local', () => {
+11 |   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
+12 |   assert.deepEqual(listenerSettings({ NODE_ENV: 'production', PORT: '12345' }), { port: 12345, host: '0.0.0.0' });
+13 |   for (const port of ['0', '65536', 'abc']) assert.throws(() => listenerSettings({ NODE_ENV: 'production', PORT: port }));
+14 | });
+15 |
+16 | test('production serves React browser routes without swallowing API or missing assets', async t => {
+17 |   const directory = mkdtempSync(join(tmpdir(), 'coachlab-web-'));
+18 |   writeFileSync(join(directory, 'index.html'), '<html>CoachLab test shell</html>');
+19 |   writeFileSync(join(directory, 'example.js'), '/* test asset */');
+20 |   const auth = { getUser: async () => ({ id: 'test-coach' }) };
+21 |   const app = createApp({ list: async () => [] }, { auth, production: true, frontendDirectory: directory });
+22 |   const server = app.listen(0, '127.0.0.1');
+23 |   await once(server, 'listening');
+24 |   t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true }); });
+25 |   const base = `http://127.0.0.1:${server.address().port}`;
+26 |   for (const path of ['/', '/lesson/123', '/reset-password']) {
+27 |     const response = await fetch(base + path, { headers: { accept: 'text/html' } });
+28 |     assert.equal(response.status, 200);
+29 |     assert.match(await response.text(), /CoachLab test shell/);
+30 |   }
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 9:** Blank line separates related operations for readability.
+- **Line 10:** Starts an offline test of environment selection and port validation.
+- **Line 11:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 12:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 13:** Loops over invalid port examples and requires each to fail before a server can start.
+- **Line 14:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 15:** Blank line separates related operations for readability.
+- **Line 16:** Starts an asynchronous HTTP routing test; t registers cleanup of its temporary resources.
+- **Line 17:** Creates a uniquely named temporary folder outside the project for disposable frontend test files.
+- **Line 18:** Writes a tiny test entry page so routing can be checked without building React for each test.
+- **Line 19:** Creates a harmless JavaScript asset to check ordinary static-file serving.
+- **Line 20:** Supplies a fake signed-in user for this routing test; real authentication is covered by separate tests.
+- **Line 21:** Uses an empty in-memory lesson stub and temporary HTML with production routing enabled; no database is contacted.
+- **Line 22:** Listens only on loopback using a free temporary port selected by the operating system.
+- **Line 23:** Waits for the server to be ready before sending test requests.
+- **Line 24:** Registers cleanup: close this test server, then remove only the unique temporary folder this test created.
+- **Line 25:** Constructs this test server's local URL from its actual assigned port.
+- **Line 26:** Checks the homepage and nested browser paths so refreshing those URLs still loads React.
+- **Line 27:** Makes a local GET request asking for HTML; await pauses this test until the response arrives.
+- **Line 28:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 29:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 30:** Closes this function, conditional block or object; execution continues after the block.
+
+### Lines 31–36
+
+```text
+31 |   assert.deepEqual(await (await fetch(base + '/api/lessons')).json(), []);
+32 |   assert.equal((await fetch(base + '/api/missing')).status, 404);
+33 |   assert.equal((await fetch(base + '/assets/missing.js')).status, 404);
+34 |   assert.match(await (await fetch(base + '/example.js')).text(), /test asset/);
+35 |   assert.throws(() => createApp({}, { auth, production: true, frontendDirectory: join(directory, 'absent') }), /Build the React/);
+36 | });
+```
+
+- **Line 31:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 32:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 33:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 35:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 36:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.

@@ -8,6 +8,7 @@ import { findMedia as defaultFind } from './media-finder.js';
 import { sniffMedia } from './media-sniff.js';
 import { mediaLimits, uploadTypes } from '../client/src/media.js';
 import { disciplines } from '../client/src/lesson-draft.js';
+import { serveFrontend } from './web.js';
 
 const orphanAgeMs = 24 * 60 * 60 * 1000;
 const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
@@ -174,6 +175,7 @@ export function createApp(database, options = {}) {
   });
 
   registerAiRoute(app, options);
+  if (options.production) serveFrontend(app, options.frontendDirectory);
   app.use((request, response) => {
     response.status(404).json({ error: 'Route not found.' });
   });

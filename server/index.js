@@ -4,9 +4,12 @@ import { migrate } from './migrations.js';
 import { prismaLessons } from './lesson-store.js';
 import { createAuth } from './auth.js';
 import { consoleMailer } from './mailer.js';
+import { listenerSettings } from './web.js';
 
 let close = async () => {};
 try {
+  const production = process.env.NODE_ENV === 'production';
+  const { port, host } = listenerSettings();
   const selected = process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
   let auth;
@@ -33,12 +36,12 @@ try {
   } else {
     throw new Error('Unsupported database selection.');
   }
-  const server = createApp(lessons, { auth, allowedOrigins }).listen(3001, '127.0.0.1', () => {
-    console.log(`CoachLab API listening at http://127.0.0.1:3001; database=${selected}`);
+  const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
+    console.log(`CoachLab API listening on port ${port}; database=${selected}`);
   });
   server.on('error', async () => {
     await close();
-    console.error('Could not start CoachLab API. Check whether port 3001 is already in use.');
+    console.error('Could not start CoachLab API. Check whether the configured port is already in use.');
     process.exitCode = 1;
   });
   for (const signal of ['SIGINT', 'SIGTERM']) {

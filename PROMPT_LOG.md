@@ -4286,3 +4286,65 @@ Deliver a secure, tested login system that supports multiple coaches without exp
 ### Response and outcome
 
 Chose Better Auth 1.7.10 (MIT, maintained, 0 audit findings, works with Express 5, Prisma 7 and SQLite). Added registration, sign in and out, 7-day server-side sessions in HttpOnly SameSite=Lax cookies, single-use one-hour reset links (printed in the backend window until an email provider exists), optional Google sign-in (not exercised live), password rules, per-address rate limits stored in the database and a per-account lockout, enumeration-safe sign-in, sign-up and reset, an Origin check on every changing request, an owner on every lesson, upload and attachment with owner-filtered queries (foreign ids answer 404), protected routes, mobile-friendly login screens, and the `npm run claim-lessons` process for lessons from before accounts (dry run by default, verified backup, unowned lessons only). Database: additive migration verified on a disposable schema, then applied to Development after a verified backup (5 lessons and 6 attachments, identical fingerprint before and after, no owned rows). Tests: npm test 68/68, test:prisma 5/5, prisma validate, build, npm audit 0, opt-in PostgreSQL tests (existing API and new Better Auth + Prisma isolation, claim, reset and logout) pass, walkthrough 68 files / 4,167 lines; browser tests on a disposable schema. Genuine mistakes: a shell quoting slip repeatedly turned backslashes into other characters in generated patch text (caught by syntax errors and a failing test); a first draft of the claim CLI explanations numbered one line wrongly (found by a side-by-side review); the browser first appeared stuck on "Loading" because the first session lookup was slow (cold start), not a bug; a signed-in coach opening an invalid reset link saw the dashboard instead of the message (fixed in Gate). The user's previous real database grew from 2 to 5 lessons by their own use; all 5 were backed up and preserved. Committed locally; nothing pushed. Details: AUTH_SECURITY_REPORT.md.
+
+## 2026-10-27 — Production deployment preparation (approved, no deployment)
+
+Exact user prompt:
+
+```text
+COACHLAB — PREPARE FOR PRODUCTION DEPLOY (Render + Neon)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+GOAL
+Make CoachLab ready to deploy as ONE Render web service (Express serves
+the built React app) using a SEPARATE Neon production database.
+Do NOT deploy. Do NOT touch any other project.
+
+RULES
+- PC is low on RAM: run one thing at a time, run tests serially.
+- Small, separate commits, one per step below, each with a clear message.
+- Never print, commit, or edit real secrets or .env values.
+- Do not change existing features or the development setup.
+- Stop and report if anything is risky or unclear.
+
+STEPS
+1. Production server:
+   - Listen on process.env.PORT and 0.0.0.0.
+   - In production, serve the built React files from Express and send
+     index.html for browser routes (API routes still work).
+2. Production database config:
+   - Allow a production DATABASE_URL (currently the client requires
+     Development). Keep development working as-is.
+   - Use "prisma migrate deploy" for production, never "migrate dev"
+     or reset.
+3. Build/start scripts:
+   - Root "build" script: install, generate Prisma Client, build React.
+   - Root "start" script: run migrations (deploy), start Express in
+     production mode.
+4. Security for HTTPS:
+   - Secure cookies in production, trust proxy set correctly for Render,
+     auth/CORS origin read from an env variable (APP_URL).
+5. Password reset in production:
+   - Do NOT build email now. In production, hide/disable the
+     "forgot password" link and route, showing a short message like
+     "Contact the coach to reset your password." Development unchanged.
+6. Add a file DEPLOY.md written for a beginner:
+   - Exact list of environment variables needed on Render (names only,
+     with a one-line plain-English description each).
+   - Step-by-step clicks to create the Neon production database and
+     the Render web service, and the build and start commands to paste.
+   - How to check it works after deploy (sign up, create lesson,
+     refresh, log out/in, second account cannot see first account's
+     lessons).
+7. Run the production build locally once and run the test suite
+   serially. Fix only what this change broke.
+
+REPORT BACK (in one code block)
+- What changed, per commit (hash + one line).
+- Test and build results (fresh, from today).
+- The environment variable list.
+- Anything I must do by hand, in order.
+- Any risks or open questions.
+```
+
+Assistant outcome, step 1: inspected instructions and source; baseline 68/68 passed serially. Added production-only listener and static frontend routing, preserving the local development port and API behavior. Two routing/listener tests passed. No real environment file read or changed; no remote database operations. Initial inspection mistakenly looked for prisma.config.ts; corrected to the existing prisma.config.js. Existing auth fixture warnings appeared during passing baseline tests; no production database warning was observed. Walkthrough updated for touched source/test lines. Commit subject: "Serve built React and hosting port in production"; hash recorded in the next step.
