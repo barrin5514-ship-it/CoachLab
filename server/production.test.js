@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { createApp } from './app.js';
 import { listenerSettings } from './web.js';
 import { productionDatabaseSettings } from './production-database.js';
+import { deployMigrations } from './deploy-migrations.js';
 
 test('production binds the hosting port while development stays local', () => {
   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
@@ -17,6 +18,20 @@ test('production binds the hosting port while development stays local', () => {
 test('production database configuration rejects unsafe or mismatched targets without connecting', () => {
   const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
   const settings = productionDatabaseSettings(env);
+  let calls = 0;
+  const run = (command, args, options) => {
+    calls++;
+    assert.equal(command, process.execPath);
+    assert.deepEqual(args.slice(1, 4), ['migrate', 'deploy', '--config']);
+    assert.equal(options.env, env);
+    assert.equal(options.stdio, 'pipe');
+    return { status: 0 };
+  };
+  deployMigrations(env, run);
+  assert.equal(calls, 1);
+  assert.throws(() => deployMigrations(env, () => ({ status: 1 })), /Startup stopped/);
+  assert.throws(() => deployMigrations({}, run));
+  assert.equal(calls, 1);
   assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
   assert.equal(new URL(settings.pooled).search, '');
   for (const override of [{ NODE_ENV: 'development' }, { COACHLAB_DB_ENV: 'development' }, { COACHLAB_DATABASE: 'sqlite' }, { DATABASE_URL: 'invalid' }, { PRODUCTION_DB_NAME: 'wrong' }, { DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:other') }, { DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=disable') }, { DIRECT_URL: env.DATABASE_URL }, { COACHLAB_DEV_EXPECTED_HOST: 'ep-production-pooler.example.neon.tech' }]) {
