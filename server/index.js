@@ -6,8 +6,10 @@ import { createAuth } from './auth.js';
 import { consoleMailer } from './mailer.js';
 import { listenerSettings } from './web.js';
 import { productionSecuritySettings } from './production-security.js';
+import { StartupCheckError, startupFailure } from './startup-errors.js';
 
 let close = async () => {};
+let startupStage = 'application configuration';
 try {
   const production = process.env.NODE_ENV === 'production';
   const { port, host } = listenerSettings();
@@ -27,18 +29,23 @@ try {
     await auth.prepare();
     lessons = database;
   } else if (selected === 'postgresql') {
+    startupStage = 'Prisma Client module loading and initialization';
     const module = await import(production ? './prisma-production.js' : './prisma-development.js');
     const client = production ? module.createProductionClient() : module.createDevelopmentClient();
     close = () => client.$disconnect();
+    startupStage = 'pooled DATABASE_URL connection and database identity query';
     const identity = await client.$queryRaw`SELECT current_database() AS name`;
     const expected = production ? process.env.PRODUCTION_DB_NAME : process.env.COACHLAB_DEV_EXPECTED_DATABASE;
-    if (identity[0].name !== expected) throw new Error('Database identity mismatch.');
+    if (identity[0].name !== expected) throw new StartupCheckError('Connected database does not match the expected database name.');
+    startupStage = 'Lesson table query after migrations';
     await client.lesson.count();
+    startupStage = 'authentication initialization';
     auth = createAuth({ ...authSettings, prisma: client });
     lessons = prismaLessons(client);
   } else {
     throw new Error('Unsupported database selection.');
   }
+  startupStage = 'Express and built React initialization';
   const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
   });
@@ -52,7 +59,11 @@ try {
   }
 } catch (error) {
   await close().catch(() => {});
-  if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
-  console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
+  if (process.env.NODE_ENV === 'production') {
+    console.error(startupFailure(startupStage, error));
+  } else {
+    if (/authentication secret/.test(error?.message)) console.error('Login is not configured: set BETTER_AUTH_SECRET (at least 32 random characters) in the ignored .env file. CoachLab will not serve lessons without login.');
+    console.error('Could not initialize the selected database. Check server configuration and connectivity. No fallback was attempted.');
+  }
   process.exitCode = 1;
 }

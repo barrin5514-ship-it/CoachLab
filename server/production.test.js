@@ -10,6 +10,8 @@ import { productionDatabaseSettings } from './production-database.js';
 import { deployMigrations } from './deploy-migrations.js';
 import { productionSecuritySettings } from './production-security.js';
 import { productionApiGuard } from './request-guard.js';
+import { startProduction } from './production-startup.js';
+import { StartupCheckError, startupFailure } from './startup-errors.js';
 
 test('production binds the hosting port while development stays local', () => {
   assert.deepEqual(listenerSettings({}), { port: 3001, host: '127.0.0.1' });
@@ -38,7 +40,7 @@ test('production database configuration rejects unsafe or mismatched targets wit
   };
   deployMigrations(env, run);
   assert.equal(calls, 1);
-  assert.throws(() => deployMigrations(env, () => ({ status: 1 })), /Startup stopped/);
+  assert.throws(() => deployMigrations(env, () => ({ status: 1 })), /prisma migrate deploy failed/);
   assert.throws(() => deployMigrations({}, run));
   assert.equal(calls, 1);
   assert.equal(new URL(settings.direct).searchParams.get('sslmode'), 'verify-full');
@@ -98,4 +100,60 @@ test('production API limiter bounds memory, separates clients and expires limits
   time += 60000;
   assert.equal(call('client-c').next, true);
   assert.equal(call('client-a').next, true);
+});
+
+test('startup diagnostics identify settings without disclosing their values', () => {
+  const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
+  const cases = [
+    [{ NODE_ENV: 'private-sentinel' }, /NODE_ENV/],
+    [{ COACHLAB_DB_ENV: 'private-sentinel' }, /COACHLAB_DB_ENV/],
+    [{ COACHLAB_DATABASE: 'private-sentinel' }, /COACHLAB_DATABASE/],
+    [{ DATABASE_URL: 'private-sentinel' }, /DATABASE_URL.*valid URL/],
+    [{ DIRECT_URL: 'private-sentinel' }, /DIRECT_URL.*valid URL/],
+    [{ PRODUCTION_DB_HOST: 'private-sentinel' }, /PRODUCTION_DB_HOST.*host/],
+    [{ PRODUCTION_DB_NAME: 'private-sentinel' }, /PRODUCTION_DB_NAME.*name/],
+    [{ DIRECT_URL: env.DIRECT_URL.replace('test:test', 'test:private-sentinel') }, /match on password/],
+    [{ DIRECT_URL: env.DATABASE_URL }, /DIRECT_URL.*without -pooler/],
+    [{ DATABASE_URL: env.DIRECT_URL }, /DATABASE_URL.*pooled/],
+    [{ DIRECT_URL: env.DIRECT_URL.replace('sslmode=require', 'sslmode=private-sentinel') }, /DIRECT_URL.*sslmode/],
+    [{ DIRECT_URL: env.DIRECT_URL + '&private-sentinel=yes' }, /unsupported query parameters/],
+  ];
+  for (const [override, expected] of cases) {
+    assert.throws(() => productionDatabaseSettings({ ...env, ...override }), error => {
+      const message = startupFailure('configuration', error);
+      assert.match(message, expected);
+      assert.doesNotMatch(message, /private-sentinel|postgresql:\/\/|ep-production/);
+      return true;
+    });
+  }
+  for (const code of ['P1000', 'P1001', 'P1011', 'P1012', 'P3005', 'P3009', 'P3018', 'P9999']) {
+    assert.throws(() => deployMigrations(env, () => ({ status: 1, stderr: `Error: ${code} private-sentinel ${env.DIRECT_URL}` })), error => {
+      assert.match(error.message, /prisma migrate deploy failed/);
+      assert.doesNotMatch(error.message, /private-sentinel|postgresql:\/\/|ep-production|P9999/);
+      if (code !== 'P9999') assert.ok(error.message.includes(code));
+      return true;
+    });
+  }
+  assert.throws(() => deployMigrations(env, () => ({ error: { code: 'ETIMEDOUT', message: 'private-sentinel' } })), /five-minute/);
+  assert.throws(() => deployMigrations(env, () => ({ error: { code: 'ENOENT', message: 'private-sentinel' } })), /could not execute/);
+  assert.doesNotMatch(startupFailure('database query', new Error('private-sentinel')), /private-sentinel/);
+  assert.match(startupFailure('Lesson table query', { code: 'P2021', message: 'private-sentinel' }), /P2021/);
+});
+
+test('startup migrates an empty database before loading application and stops on migration failure', async () => {
+  const env = { APP_URL: 'https://coachlab.example', BETTER_AUTH_SECRET: 'test-only-secret-'.repeat(4) };
+  const tables = [];
+  await startProduction({ ...env }, async () => { tables.push('lessons'); }, async () => {
+    assert.deepEqual(tables, ['lessons']);
+  });
+  let started = false;
+  await assert.rejects(startProduction({ ...env }, async () => { throw new StartupCheckError('prisma migrate deploy failed.'); }, async () => { started = true; }), /database configuration and prisma migrate deploy/);
+  assert.equal(started, false);
+  await assert.rejects(startProduction({ ...env, APP_URL: 'private-sentinel' }), /APP_URL and BETTER_AUTH_SECRET validation/);
+  await assert.rejects(startProduction({ ...env, PORT: 'invalid' }), /PORT validation/);
+  await assert.rejects(startProduction({ ...env }, async () => {}, async () => { throw new Error('private-sentinel'); }), error => {
+    assert.match(error.message, /application module loading/);
+    assert.doesNotMatch(error.message, /private-sentinel/);
+    return true;
+  });
 });

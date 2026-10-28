@@ -4416,3 +4416,58 @@ Inspection corrections: first npm metadata queries failed EPERM on the default c
 Production protection outcome: added production-only bounded API counters (120 requests/minute/address, maximum 1,024 tracked addresses, expiration and Retry-After), plus compressed-body rejection before auth/parsing and inflation disabled in JSON/raw parsers. Existing 32 KB JSON, upload bounds and auth/AI/media limits remain; development behavior unchanged. Tests exercise compressed lesson/upload/login requests, address separation, full-map rejection, expiry and health checks. Final npm test 75/75 passed serially. Production build ran ONCE for this triage and passed (install, Prisma generation/TypeScript compilation, Vite 31 modules). After build: schema validation and 5/5 offline Prisma tests passed; full audit remained zero. Syntax checks passed for three changed/new JS files. Updated CODE_WALKTHROUGH.md for all their lines. No live services, secrets, real databases or deployment touched.
 
 Documentation helper correction: a prefix matched an earlier const response statement instead of the new fake-response object. The helper refused to write incomplete explanations; corrected the exact matching key and reran successfully before staging. Dependency commit: 860bddb. SECURITY_NOTES.md now lists all eleven original entries, actual reachability, fixes, limits and a conditional GO for a small supervised demo. DEPLOY.md's obsolete hold is superseded; original verification history retained with a pointer to current results. Current commit subject: "Bound production API requests and document verified security triage". Next action: authorized normal GitHub push; stop on Git login failure. No deployment authorized.
+
+## 2026-10-28 — Specific, secret-safe Render startup errors
+
+### Exact user prompt
+
+```text
+COACHLAB — RENDER STARTUP FAILS: MAKE THE ERROR SPECIFIC
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+PROBLEM
+On Render, the build succeeds, but startup stops with:
+"Production startup stopped. Verify production settings and migration
+status securely. No development fallback was attempted."
+Exited with status 1. We can't tell which check failed.
+
+Render env vars set: NODE_VERSION, NODE_ENV=production,
+COACHLAB_DB_ENV=production, DATABASE_URL (Neon pooled),
+DIRECT_URL (Neon direct), PRODUCTION_DB_HOST (host copied from the
+DIRECT_URL), PRODUCTION_DB_NAME, APP_URL=https://coachlab-q2ck.onrender.com,
+BETTER_AUTH_SECRET (Render-generated), GEMINI_API_KEY, YOUTUBE_API_KEY.
+The Neon production database is brand new and empty.
+
+TASKS
+1. Read server/start-production.js and everything it calls. List every
+   check it does, in plain English, and the exact value format each env
+   var must have (e.g. host with or without "-pooler", trailing slash,
+   https, etc.).
+2. Change the startup error so it names WHICH check failed and why,
+   e.g. "PRODUCTION_DB_HOST does not match DIRECT_URL host."
+   NEVER print secret values, passwords, full URLs, or keys.
+   Safe to print: env var NAMES, and true/false results.
+3. Make sure a brand-new empty Neon database is allowed: migrations
+   should run (prisma migrate deploy), not be required to exist first.
+   If the code blocks an empty database, fix it.
+4. Run tests serially (low RAM). Small commit. Push to origin/main.
+
+REPORT BACK (in one code block)
+- Each startup check in plain English + required format.
+- Your best guess at which setting is wrong, based on my list above.
+- What changed (commit hash + one line), test results, push result.
+```
+
+### Actual work and results (assistant outcome summary)
+
+- Started with clean main at 9af6ada61444ad3dcbbc89211cf661ef2f7fbfa1. Read the startup entry, security/database settings, migration runner/configuration, production Prisma adapter, index, web serving, auth/app integration and migration SQL. No real .env values were read or changed. No database was connected to or migrated.
+- Added server/startup-errors.js and server/production-startup.js. Updated start-production.js, production-database.js, production-security.js, deploy-migrations.js, index.js, web.js and production.test.js. Configuration errors now name specific variables/mismatched fields; runtime errors name the operation. Only trusted source-authored errors and allowlisted Prisma codes are logged. Unknown provider text stays hidden.
+- Added explicit invalid/empty database path diagnostics. Kept production migrations before application initialization; an empty database was already allowed. Mocked order tests prove the sequencing and fail-closed behavior, not live PostgreSQL migration success. SQL review confirms existing versioned migrations create tables before subsequent alterations.
+- Updated DEPLOY.md with every startup check and precise formats. Updated CODE_WALKTHROUGH.md with current numbered listings and explanations for all nine changed/new JavaScript files.
+- Fresh serial npm test: 77 passed, 0 failed, 0 skipped. Includes SQLite CRUD/persistence, mocked Gemini/media, auth/isolation, production settings/static serving, diagnostic redaction, and mocked empty-database startup ordering. Better Auth emitted schema-mismatch/invalid-login diagnostics from temporary test fixtures; the suite passed. These are not Render database results.
+- Fresh npm run test:prisma: generated Prisma Client 7.10.0, compiled TypeScript and passed 5 offline tests, 0 failed. npm run prisma:validate passed. npm run build:client passed (31 modules). No live Gemini, Neon or Render requests were made.
+- Genuine tooling mistakes: an initial patch attempted delete/add of the same path in one patch; the patch tool rejected it without changing files. Reissued as an update successfully. A read-only search named nonexistent server/media-api.js; corrected the inspection to actual app/media files. Neither changed application behavior.
+- The precise Render cause remains unknown until the safe diagnostics run there. APP_URL supplied by the user has valid format. Exact host/database matching or migration connectivity is a hypothesis, not a verified diagnosis.
+- Commit for this work: identify by subject "fix: identify production startup failures without exposing secrets" (its own hash cannot be embedded before committing). Push/hash verification will be reported in the final response.
+- Final verification: node --check passed for all nine changed/new JavaScript files. All 366 source/test lines match the walkthrough listings and numbered explanations. An actual subprocess invocation of server/start-production.js with a deliberately invalid dummy APP_URL exited 1 before migrations and reported the security stage without echoing its sentinel value.
+- Diff whitespace verification initially caught trailing spaces in newly generated explanations; trimmed those explanations and reran git diff --check successfully. The media-file search also required rg's -g glob option on Windows; corrected without file changes. Reviewed source/tests and documentation, with no real credentials or database files included.

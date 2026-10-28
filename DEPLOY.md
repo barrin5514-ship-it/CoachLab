@@ -95,3 +95,28 @@ Production credentials, actual remote migrations, Render proxy behavior and the 
 - [Neon projects](https://neon.com/docs/manage/projects)
 - [Neon connections](https://neon.com/docs/connect/connect-from-any-app)
 - [Prisma migration commands](https://docs.prisma.io/docs/cli/v7/migrate)
+
+## Startup diagnostics and exact setting formats (2026-10-28)
+
+Startup logs now identify the failed check or operation. Messages show variable names and safe Prisma codes, never supplied setting values or raw provider output. Unknown provider errors identify the stage but deliberately withhold details. Do not paste connection strings into support messages.
+
+Checks, in execution order:
+
+1. `npm start` sets `NODE_ENV=production`. `NODE_VERSION=24.19.0` selects the supported Render runtime; CoachLab's startup wrapper does not itself validate that setting. The package declares Node >=24.19.0 and <25.
+2. `APP_URL` must be a public HTTPS origin, with no credentials, path beyond `/`, query or fragment. A trailing `/` is accepted and normalized. The supplied `https://coachlab-q2ck.onrender.com` has the correct format. Localhost and 127.0.0.1 are rejected. This string also controls authentication and allowed browser origins.
+3. `BETTER_AUTH_SECRET` must be a string of at least 32 characters. Use a long randomly generated secret; the code checks length, not randomness.
+4. `PORT` must convert to an integer from 1 to 65535. Render supplies it; if absent/empty the code uses 10000. Production binds to `0.0.0.0`.
+5. `COACHLAB_DB_ENV` must be exactly `production`. `COACHLAB_DATABASE` may be absent/empty or exactly `postgresql`; it must not select SQLite.
+6. `DATABASE_URL` and `DIRECT_URL` must be parseable `postgresql://` URLs with a hostname ending in `.neon.tech`, a username, a password, one database path and no fragment. Copy Neon strings privately, without surrounding quotes or spaces. Percent-encode special characters in credentials.
+7. Each URL requires `sslmode=require` or `sslmode=verify-full`. Only `sslmode` and optional `channel_binding` query parameters are accepted. The code does not independently validate the value of `channel_binding`; keep Neon's generated value. Migration TLS is strengthened to `verify-full`; application TLS explicitly verifies the certificate.
+8. `DATABASE_URL` hostname must contain `-pooler.`. `DIRECT_URL` must not. After removing that marker, hostnames must match. URL pathname, username, password and port must also match exactly as parsed. Use identical explicit ports, or omit the port on both. Different percent-encoded representations of the same credentials/path may fail the exact comparison; copy both from the same Neon connection selection.
+9. `PRODUCTION_DB_HOST` must exactly match the DIRECT hostname alone: no `postgresql://`, credentials, port, slash, query or `-pooler`. Do not include quotes or whitespace. `PRODUCTION_DB_NAME` must exactly match the decoded database path (for example `neondb`), with no slash. An empty database name, invalid percent encoding or trailing slash is rejected.
+10. If `COACHLAB_DEV_EXPECTED_HOST` is present, it must not identify this production endpoint, with or without the pooling marker. Matching endpoints stop startup. This is an extra safeguard, not independent proof of branch ownership; the operator must still verify the production project in Neon Console.
+11. The installed Prisma CLI runs `migrate deploy --config prisma.production.config.js`, using DIRECT_URL, with a five-minute timeout and a 1 MiB captured-output limit. It must complete successfully. No application-table check runs before this operation. Existing versioned SQL creates lessons, lesson_media and account/ownership tables on a new empty database. No reset, db push or migrate dev is used.
+12. After migration success, the generated Prisma Client must load. The pooled connection must authenticate with verified TLS; its pool allows five connections, with 10-second connection/idle timeouts and a 15-second statement timeout. `current_database()` must match PRODUCTION_DB_NAME. A Lesson count query must succeed; zero lessons is valid. Authentication and Express must initialize, and `client/dist/index.html` must exist. Finally the configured port must be available to bind.
+
+GEMINI_API_KEY and YOUTUBE_API_KEY are used when their respective features are requested, not as startup prerequisites. Missing or invalid provider keys cannot explain this particular production configuration/migration error. Google sign-in remains optional. No real secrets were inspected to prepare this guide.
+
+Safe migration diagnostics distinguish authentication (P1000), unreachable server (P1001), timeout (P1002), missing database (P1003), permissions (P1010), TLS (P1011), schema/configuration (P1012), missing table/column (P2021/P2022), nonempty unmanaged database (P3005), previously failed migration (P3009), and failed migration SQL (P3018). Do not reset a database to address these messages. An unknown error still requires investigation; raw diagnostics must be reviewed securely by an authorized operator.
+
+Best guess, not a diagnosis: an exact target-format mismatch (PRODUCTION_DB_HOST or PRODUCTION_DB_NAME), a pooled/direct mismatch, or the migration connection itself. The variable list alone cannot distinguish these. An empty database is supported and is not itself a startup error. After deploying this commit, read the new safe stage/reason before changing settings.
