@@ -88,7 +88,7 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
+Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
 
 ### Lines 1–30
 
@@ -97,270 +97,284 @@ Audience support: this file connects the optional class-group field to validatio
 2 | import LessonForm from './LessonForm.jsx';
 3 | import LessonCard from './LessonCard.jsx';
 4 | import AiLessonForm from './AiLessonForm.jsx';
-5 | import { fetchMedia } from './media.js';
-6 |
-7 | export default function App({ user, onLogOut }) {
-8 |   const [lessons, setLessons] = useState([]);
-9 |   const [audience, setAudience] = useState('All');
-10 |   const visibleLessons = lessons.filter(lesson => audience === 'All' || (lesson.audience ?? 'Unspecified') === audience);
-11 |   const [loading, setLoading] = useState(true);
-12 |   const [error, setError] = useState('');
-13 |   const [notice, setNotice] = useState(null);
-14 |   const [opening, setOpening] = useState(false);
-15 |   const [formOpen, setFormOpen] = useState(false);
-16 |   const [reload, setReload] = useState(0);
-17 |   const [editing, setEditing] = useState(null);
-18 |   const [media, setMedia] = useState([]);
-19 |   const [mediaError, setMediaError] = useState('');
-20 |   const [mediaReload, setMediaReload] = useState(0);
-21 |
-22 |   useEffect(() => {
-23 |     const controller = new AbortController();
-24 |     async function loadLessons() {
-25 |       setLoading(true);
-26 |       setError('');
-27 |       try {
-28 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-29 |         if (!response.ok) throw new Error('Unable to load lessons.');
-30 |         const data = await response.json();
+5 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
+6 | import { fetchMedia } from './media.js';
+7 |
+8 | export default function App({ user, onLogOut }) {
+9 |   const [lessons, setLessons] = useState([]);
+10 |   const [audience, setAudience] = useState('All');
+11 |   const [discipline, setDiscipline] = useState('All');
+12 |   const visibleLessons = filterLessons(lessons, audience, discipline);
+13 |   const [loading, setLoading] = useState(true);
+14 |   const [error, setError] = useState('');
+15 |   const [notice, setNotice] = useState(null);
+16 |   const [opening, setOpening] = useState(false);
+17 |   const [formOpen, setFormOpen] = useState(false);
+18 |   const [reload, setReload] = useState(0);
+19 |   const [editing, setEditing] = useState(null);
+20 |   const [media, setMedia] = useState([]);
+21 |   const [mediaError, setMediaError] = useState('');
+22 |   const [mediaReload, setMediaReload] = useState(0);
+23 |
+24 |   useEffect(() => {
+25 |     const controller = new AbortController();
+26 |     async function loadLessons() {
+27 |       setLoading(true);
+28 |       setError('');
+29 |       try {
+30 |         const response = await fetch('/api/lessons', { signal: controller.signal });
 ```
 
 - **Line 1:** Imports React for JSX plus effect and state hooks from the installed React package.
 - **Line 2:** Imports the neighboring form component as LessonForm.
 - **Line 3:** Imports the neighboring card component as LessonCard.
 - **Line 4:** Imports the new browser component for requesting, reviewing and approving an AI draft.
-- **Line 5:** Imports the shared function that loads attachments.
-- **Line 6:** Blank line separates related sections; it performs no operation.
-- **Line 7:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
-- **Line 8:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 9:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
-- **Line 10:** Keeps lessons matching the selected audience; All bypasses filtering and ?? treats an absent or null audience as Unspecified.
-- **Line 11:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 12:** Stores the list error message; empty text means no error.
-- **Line 13:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
-- **Line 14:** True while a lesson is being opened for editing and its attachments are being fetched.
-- **Line 15:** Stores whether the form is mounted; false initially hides it.
-- **Line 16:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 17:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 18:** State for every saved attachment returned by the server.
-- **Line 19:** State for an error message when attachments could not be loaded.
-- **Line 20:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 21:** Blank line separates related sections; it performs no operation.
-- **Line 22:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 23:** Creates a request cancellation controller scoped to this effect run.
-- **Line 24:** Declares an async helper, allowing await inside its braces.
-- **Line 25:** Marks the list request as running.
-- **Line 26:** Clears the previous list error before retrying.
-- **Line 27:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 28:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 29:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 30:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 6:** Imports the shared function that loads attachments.
+- **Line 7:** Blank line separates related sections; it performs no operation.
+- **Line 8:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
+- **Line 9:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 10:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
+- **Line 11:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
+- **Line 12:** Combines the audience and discipline filters using the shared, tested helper without modifying the source lessons.
+- **Line 13:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 14:** Stores the list error message; empty text means no error.
+- **Line 15:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 16:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 17:** Stores whether the form is mounted; false initially hides it.
+- **Line 18:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 19:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 20:** State for every saved attachment returned by the server.
+- **Line 21:** State for an error message when attachments could not be loaded.
+- **Line 22:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 23:** Blank line separates related sections; it performs no operation.
+- **Line 24:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 25:** Creates a request cancellation controller scoped to this effect run.
+- **Line 26:** Declares an async helper, allowing await inside its braces.
+- **Line 27:** Marks the list request as running.
+- **Line 28:** Clears the previous list error before retrying.
+- **Line 29:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 30:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
 
 ### Lines 31–60
 
 ```text
-31 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-32 |         setLessons(data);
-33 |       } catch (failure) {
-34 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-35 |       } finally {
-36 |         if (!controller.signal.aborted) setLoading(false);
-37 |       }
-38 |     }
-39 |     loadLessons();
-40 |     return () => controller.abort();
-41 |   }, [reload]);
-42 |
-43 |   useEffect(() => {
-44 |     const controller = new AbortController();
-45 |     async function loadMedia() {
-46 |       try {
-47 |         const data = await fetchMedia(controller.signal);
-48 |         setMedia(data);
-49 |         setMediaError('');
-50 |       } catch (failure) {
-51 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-52 |       }
-53 |     }
-54 |     loadMedia();
-55 |     return () => controller.abort();
-56 |   }, [reload, mediaReload]);
-57 |
-58 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+31 |         if (!response.ok) throw new Error('Unable to load lessons.');
+32 |         const data = await response.json();
+33 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+34 |         setLessons(data);
+35 |       } catch (failure) {
+36 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+37 |       } finally {
+38 |         if (!controller.signal.aborted) setLoading(false);
+39 |       }
+40 |     }
+41 |     loadLessons();
+42 |     return () => controller.abort();
+43 |   }, [reload]);
+44 |
+45 |   useEffect(() => {
+46 |     const controller = new AbortController();
+47 |     async function loadMedia() {
+48 |       try {
+49 |         const data = await fetchMedia(controller.signal);
+50 |         setMedia(data);
+51 |         setMediaError('');
+52 |       } catch (failure) {
+53 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+54 |       }
+55 |     }
+56 |     loadMedia();
+57 |     return () => controller.abort();
+58 |   }, [reload, mediaReload]);
 59 |
-60 |   async function handleEdit(lesson) {
+60 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
 ```
 
-- **Line 31:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 32:** Stores the backend records, triggering a render.
-- **Line 33:** Closes try and catches failures under the name failure.
-- **Line 34:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 35:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 36:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 37:** Closes the App function.
-- **Line 38:** Closes the App function.
-- **Line 39:** Starts the helper; its own try/catch handles its failures.
-- **Line 40:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 41:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 42:** Blank line separates related sections; it performs no operation.
-- **Line 43:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 44:** Creates a request cancellation controller scoped to this effect run.
-- **Line 45:** Declares the loader for attachments inside the effect.
-- **Line 46:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 47:** The attachment loader now uses fetchMedia, with the abort signal.
-- **Line 48:** Stores the attachments.
-- **Line 49:** Clears any earlier media error.
-- **Line 50:** Closes try and catches failures under the name failure.
-- **Line 51:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 52:** Closes the App function.
-- **Line 53:** Closes the App function.
-- **Line 54:** Starts the load.
-- **Line 55:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 56:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 57:** Blank line separates related sections; it performs no operation.
-- **Line 58:** Helper that returns only the attachments of one lesson.
+- **Line 31:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 32:** Awaits parsing the JSON body into a JavaScript value.
+- **Line 33:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 34:** Stores the backend records, triggering a render.
+- **Line 35:** Closes try and catches failures under the name failure.
+- **Line 36:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 37:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 38:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 39:** Closes the App function.
+- **Line 40:** Closes the App function.
+- **Line 41:** Starts the helper; its own try/catch handles its failures.
+- **Line 42:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 43:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 44:** Blank line separates related sections; it performs no operation.
+- **Line 45:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 46:** Creates a request cancellation controller scoped to this effect run.
+- **Line 47:** Declares the loader for attachments inside the effect.
+- **Line 48:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 49:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 50:** Stores the attachments.
+- **Line 51:** Clears any earlier media error.
+- **Line 52:** Closes try and catches failures under the name failure.
+- **Line 53:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 54:** Closes the App function.
+- **Line 55:** Closes the App function.
+- **Line 56:** Starts the load.
+- **Line 57:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 58:** Ends the effect; it re-runs when either reload counter changes.
 - **Line 59:** Blank line separates related sections; it performs no operation.
-- **Line 60:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
+- **Line 60:** Helper that returns only the attachments of one lesson.
 
 ### Lines 61–90
 
 ```text
-61 |     setNotice(null);
-62 |     setOpening(true);
-63 |     try {
-64 |       setMedia(await fetchMedia());
-65 |       setMediaError('');
-66 |       setEditing(lesson);
-67 |       setFormOpen('manual');
-68 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-69 |     } catch {
-70 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-71 |     } finally { setOpening(false); }
-72 |   }
-73 |
-74 |   async function handleSaved(lesson, sent) {
-75 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-76 |     setAudience('All');
-77 |     setFormOpen(false);
-78 |     setEditing(null);
-79 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-80 |     let text = `Saved “${lesson.title}”.`;
-81 |     let tone = 'success';
-82 |     try {
-83 |       const fresh = await fetchMedia();
-84 |       setMedia(fresh);
-85 |       setMediaError('');
-86 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-87 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-88 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-89 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-90 |     } catch {
+61 |
+62 |   async function handleEdit(lesson) {
+63 |     setNotice(null);
+64 |     setOpening(true);
+65 |     try {
+66 |       setMedia(await fetchMedia());
+67 |       setMediaError('');
+68 |       setEditing(lesson);
+69 |       setFormOpen('manual');
+70 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+71 |     } catch {
+72 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+73 |     } finally { setOpening(false); }
+74 |   }
+75 |
+76 |   async function handleSaved(lesson, sent) {
+77 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+78 |     setAudience('All');
+79 |     setDiscipline('All');
+80 |     setFormOpen(false);
+81 |     setEditing(null);
+82 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+83 |     let text = `Saved “${lesson.title}”.`;
+84 |     let tone = 'success';
+85 |     try {
+86 |       const fresh = await fetchMedia();
+87 |       setMedia(fresh);
+88 |       setMediaError('');
+89 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+90 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
 ```
 
-- **Line 61:** Clears any old message.
-- **Line 62:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 63:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 64:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
-- **Line 65:** Clears any earlier media error.
-- **Line 66:** Remembers which lesson is being edited.
-- **Line 67:** Opens the manual form.
-- **Line 68:** Scrolls to the top where the form appears, as before.
-- **Line 69:** Catches failure without including private exception details in public hosting logs.
-- **Line 70:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 71:** Always ends the opening state.
-- **Line 72:** Closes the App function.
-- **Line 73:** Blank line separates related sections; it performs no operation.
-- **Line 74:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 75:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 76:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 77:** Closes the form; unmounting it discards its input state after success.
-- **Line 78:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 79:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 80:** Starts the final message text.
-- **Line 81:** Starts as a success tone.
-- **Line 82:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 83:** Asks the server what attachments are really stored now.
-- **Line 84:** Replaces the page’s attachment list with that fresh copy.
-- **Line 85:** Clears any earlier media error.
-- **Line 86:** Counts the stored attachments of this lesson.
-- **Line 87:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 88:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 89:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 90:** Catches failure without including private exception details in public hosting logs.
+- **Line 61:** Blank line separates related sections; it performs no operation.
+- **Line 62:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
+- **Line 63:** Clears any old message.
+- **Line 64:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 65:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 66:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
+- **Line 67:** Clears any earlier media error.
+- **Line 68:** Remembers which lesson is being edited.
+- **Line 69:** Opens the manual form.
+- **Line 70:** Scrolls to the top where the form appears, as before.
+- **Line 71:** Catches failure without including private exception details in public hosting logs.
+- **Line 72:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 73:** Always ends the opening state.
+- **Line 74:** Closes the App function.
+- **Line 75:** Blank line separates related sections; it performs no operation.
+- **Line 76:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 77:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 78:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 79:** Resets discipline filtering after a save so the saved lesson can be seen.
+- **Line 80:** Closes the form; unmounting it discards its input state after success.
+- **Line 81:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 82:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 83:** Starts the final message text.
+- **Line 84:** Starts as a success tone.
+- **Line 85:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 86:** Asks the server what attachments are really stored now.
+- **Line 87:** Replaces the page’s attachment list with that fresh copy.
+- **Line 88:** Clears any earlier media error.
+- **Line 89:** Counts the stored attachments of this lesson.
+- **Line 90:** If the form did not send a media list, only mentions the count when there is one.
 
 ### Lines 91–120
 
 ```text
-91 |       tone = 'warning';
-92 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-93 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-94 |     }
-95 |     setNotice({ tone, text });
-96 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-97 |   }
-98 |
-99 |   return (
-100 |     <main>
-101 |       <header className="hero">
-102 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-103 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-104 |       </header>
-105 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-106 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-107 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-108 |       <section aria-labelledby="lessons-heading">
-109 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
-110 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-111 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match this audience.</p>}
-112 |         {loading && <p role="status">Loading lesson plans…</p>}
-113 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-114 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-115 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-116 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-117 |       </section>
-118 |     </main>
-119 |   );
-120 | }
+91 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+92 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+93 |     } catch {
+94 |       tone = 'warning';
+95 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+96 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+97 |     }
+98 |     setNotice({ tone, text });
+99 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+100 |   }
+101 |
+102 |   return (
+103 |     <main>
+104 |       <header className="hero">
+105 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+106 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+107 |       </header>
+108 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+109 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+110 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+111 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+112 |       <section aria-labelledby="lessons-heading">
+113 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
+114 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+115 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+116 |         {loading && <p role="status">Loading lesson plans…</p>}
+117 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+118 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+119 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+120 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
 ```
 
-- **Line 91:** …uses a warning tone,
-- **Line 92:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 93:** …and shows the retry banner.
-- **Line 94:** Closes the App function.
-- **Line 95:** Shows the final message.
-- **Line 96:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 91:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 92:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 93:** Catches failure without including private exception details in public hosting logs.
+- **Line 94:** …uses a warning tone,
+- **Line 95:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 96:** …and shows the retry banner.
 - **Line 97:** Closes the App function.
-- **Line 98:** Blank line separates related sections; it performs no operation.
-- **Line 99:** Begins returning a parenthesized JSX tree.
-- **Line 100:** Opens the semantic main content element.
-- **Line 101:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 102:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
-- **Line 103:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 104:** Closes the header.
-- **Line 105:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 106:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
-- **Line 107:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 108:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 109:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
-- **Line 110:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 111:** Shows an accessible status message only after loading succeeds, saved lessons exist, and the selected filter has no matches.
-- **Line 112:** Conditionally shows loading text as a live status paragraph.
-- **Line 113:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 114:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 115:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 116:** Maps the filtered lessons into cards. Stable IDs preserve React identity; editing and deletion callbacks still update lessons, media and notices without changing account access.
-- **Line 117:** Closes the lesson section.
-- **Line 118:** Closes main.
-- **Line 119:** Closes the parenthesized return statement with a semicolon.
-- **Line 120:** Closes the App function.
+- **Line 98:** Shows the final message.
+- **Line 99:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 100:** Closes the App function.
+- **Line 101:** Blank line separates related sections; it performs no operation.
+- **Line 102:** Begins returning a parenthesized JSX tree.
+- **Line 103:** Opens the semantic main content element.
+- **Line 104:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 105:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 106:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 107:** Closes the header.
+- **Line 108:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
+- **Line 109:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 110:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
+- **Line 111:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 112:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 113:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
+- **Line 114:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 115:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 116:** Conditionally shows loading text as a live status paragraph.
+- **Line 117:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 118:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 119:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 120:** Maps the filtered lessons into cards. Stable IDs preserve React identity; editing and deletion callbacks still update lessons, media and notices without changing account access.
+
+### Lines 121–124
+
+```text
+121 |       </section>
+122 |     </main>
+123 |   );
+124 | }
+```
+
+- **Line 121:** Closes the lesson section.
+- **Line 122:** Closes main.
+- **Line 123:** Closes the parenthesized return statement with a semicolon.
+- **Line 124:** Closes the App function.
 
 ## client/src/styles.css
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\styles.css`
 
-Current implementation; connections and behavior are explained alongside every source line below.
+Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | :root { font-family: system-ui, sans-serif; color: #172d3a; background: #f3f6f7; line-height: 1.6; }
@@ -388,6 +402,11 @@ Current implementation; connections and behavior are explained alongside every s
 23 | small { display: block; color: #52666e; font-weight: 400; }
 24 | .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
 25 | .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+26 | .check-label { display: flex; gap: 12px; align-items: flex-start; }
+27 | .check-label input { width: auto; flex-shrink: 0; margin-top: 8px; }
+28 | .draft-section { border-top: 1px solid #d7e0e4; padding-top: 20px; }
+29 | .section-heading { margin-bottom: 20px; }
+30 | .section-heading h2 { margin: 0; }
 ```
 
 - **Line 1:** :root styles the document: font-family prefers the system font with sans-serif fallback; color sets dark text; background sets the pale canvas; line-height sets line spacing to 1.6 times the font size.
@@ -415,15 +434,15 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 23:** Small helper text displays on its own block, in muted color with normal weight.
 - **Line 24:** The form row is a grid of three equally flexible columns (1fr each) separated by 20px.
 - **Line 25:** The action row uses flex layout, a 12px gap, and wraps buttons if necessary.
+- **Line 26:** Uses flex layout for checkbox/text labels, a twelve-pixel gap and top alignment.
+- **Line 27:** Overrides full-width input styling for checkboxes: automatic width, no shrinking, and eight pixels of top spacing.
+- **Line 28:** Separates timed draft sections with a one-pixel pale divider and twenty pixels of padding above content.
+- **Line 29:** Adds bottom spacing to the lesson section heading row.
+- **Line 30:** Removes margins from its h2.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 | .check-label { display: flex; gap: 12px; align-items: flex-start; }
-27 | .check-label input { width: auto; flex-shrink: 0; margin-top: 8px; }
-28 | .draft-section { border-top: 1px solid #d7e0e4; padding-top: 20px; }
-29 | .section-heading { margin-bottom: 20px; }
-30 | .section-heading h2 { margin: 0; }
 31 | .section-heading span, .metadata, .lesson-card footer { color: #52666e; font-size: 0.9rem; }
 32 | .lesson-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 33 | .discipline { display: inline-block; background: #e4f1ed; color: #17584f; border-radius: 5px; padding: 3px 9px; margin-bottom: 14px; font-size: 0.8rem; font-weight: 700; }
@@ -444,13 +463,18 @@ Current implementation; connections and behavior are explained alongside every s
 48 |   .section-heading { align-items: flex-start; gap: 12px; }
 49 |   .form-panel, .lesson-card { padding: 20px; }
 50 | }
+51 |
+52 | details { margin: 18px 0; padding: 12px; border: 1px solid #d7e0e4; border-radius: 8px; }
+53 | summary { cursor: pointer; font-weight: 650; }
+54 | h4 { margin: 16px 0 8px; }
+55 | .coaching-block ul { padding-left: 22px; margin-top: 8px; }
+56 | .coaching-block li { margin-bottom: 6px; overflow-wrap: anywhere; }
+57 | .activity-editor { border: 1px solid #d7e0e4; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+58 | .activity-editor .actions { margin-bottom: 16px; }
+59 | .demonstration img, .demonstration iframe { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border: 0; margin: 12px 0; }
+60 | a { color: #176257; text-underline-offset: 3px; }
 ```
 
-- **Line 26:** Uses flex layout for checkbox/text labels, a twelve-pixel gap and top alignment.
-- **Line 27:** Overrides full-width input styling for checkboxes: automatic width, no shrinking, and eight pixels of top spacing.
-- **Line 28:** Separates timed draft sections with a one-pixel pale divider and twenty pixels of padding above content.
-- **Line 29:** Adds bottom spacing to the lesson section heading row.
-- **Line 30:** Removes margins from its h2.
 - **Line 31:** The heading count, metadata and card footer use muted color and smaller text.
 - **Line 32:** The lesson grid has two equal columns, each allowed to shrink to zero with minmax, separated by 20px.
 - **Line 33:** The discipline badge is inline-block with pale green fill, dark green text, rounded corners, vertical/horizontal padding, bottom spacing, small text and bold weight.
@@ -471,20 +495,20 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 48:** Aligns section-heading children to their starts and reduces their gap.
 - **Line 49:** Reduces form-panel and card padding to 20px.
 - **Line 50:** Closes the media-query block.
+- **Line 51:** Blank line separating related statements; it has no runtime effect.
+- **Line 52:** Styles elements matching `details`. `margin: 18px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal). `padding: 12px` sets inside spacing. `border: 1px solid #d7e0e4` sets outline width, style and color. `border-radius: 8px` sets corner roundness.
+- **Line 53:** Styles elements matching `summary`. `cursor: pointer` sets mouse cursor appearance. `font-weight: 650` sets text thickness.
+- **Line 54:** Styles elements matching `h4`. `margin: 16px 0 8px` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
+- **Line 55:** Styles elements matching `.coaching-block ul`. `padding-left: 22px` sets left inside indentation. `margin-top: 8px` sets top outside spacing.
+- **Line 56:** Styles elements matching `.coaching-block li`. `margin-bottom: 6px` sets bottom outside spacing. `overflow-wrap: anywhere` sets where long words may wrap.
+- **Line 57:** Styles elements matching `.activity-editor`. `border: 1px solid #d7e0e4` sets outline width, style and color. `border-radius: 8px` sets corner roundness. `padding: 16px` sets inside spacing. `margin-bottom: 20px` sets bottom outside spacing.
+- **Line 58:** Styles elements matching `.activity-editor .actions`. `margin-bottom: 16px` sets bottom outside spacing.
+- **Line 59:** Styles elements matching `.demonstration img, .demonstration iframe`. `display: block` sets layout box type. `width: 100%` sets width relative to the container. `aspect-ratio: 16 / 9` sets preferred width-to-height ratio. `object-fit: contain` sets how an image fits its box without cropping. `border: 0` sets outline width, style and color. `margin: 12px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
+- **Line 60:** Styles elements matching `a`. `color: #176257` sets foreground text color. `text-underline-offset: 3px` sets distance between link text and underline.
 
-### Lines 51–75
+### Lines 61–90
 
 ```text
-51 |
-52 | details { margin: 18px 0; padding: 12px; border: 1px solid #d7e0e4; border-radius: 8px; }
-53 | summary { cursor: pointer; font-weight: 650; }
-54 | h4 { margin: 16px 0 8px; }
-55 | .coaching-block ul { padding-left: 22px; margin-top: 8px; }
-56 | .coaching-block li { margin-bottom: 6px; overflow-wrap: anywhere; }
-57 | .activity-editor { border: 1px solid #d7e0e4; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
-58 | .activity-editor .actions { margin-bottom: 16px; }
-59 | .demonstration img, .demonstration iframe { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border: 0; margin: 12px 0; }
-60 | a { color: #176257; text-underline-offset: 3px; }
 61 | button.danger { color: #852b1d; }
 62 |
 63 | .media-editor { margin: 4px 0 16px; padding: 12px; background: #f7fafa; border: 1px dashed #b8c9cc; border-radius: 8px; }
@@ -500,37 +524,6 @@ Current implementation; connections and behavior are explained alongside every s
 73 | .media-play img { width: 100%; height: 100%; object-fit: cover; opacity: 0.85; }
 74 | .media-play span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2.5rem; color: white; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
 75 | .media-item figcaption { padding: 10px 12px; overflow-wrap: anywhere; }
-```
-
-- **Line 51:** Blank line separating related statements; it has no runtime effect.
-- **Line 52:** Styles elements matching `details`. `margin: 18px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal). `padding: 12px` sets inside spacing. `border: 1px solid #d7e0e4` sets outline width, style and color. `border-radius: 8px` sets corner roundness.
-- **Line 53:** Styles elements matching `summary`. `cursor: pointer` sets mouse cursor appearance. `font-weight: 650` sets text thickness.
-- **Line 54:** Styles elements matching `h4`. `margin: 16px 0 8px` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
-- **Line 55:** Styles elements matching `.coaching-block ul`. `padding-left: 22px` sets left inside indentation. `margin-top: 8px` sets top outside spacing.
-- **Line 56:** Styles elements matching `.coaching-block li`. `margin-bottom: 6px` sets bottom outside spacing. `overflow-wrap: anywhere` sets where long words may wrap.
-- **Line 57:** Styles elements matching `.activity-editor`. `border: 1px solid #d7e0e4` sets outline width, style and color. `border-radius: 8px` sets corner roundness. `padding: 16px` sets inside spacing. `margin-bottom: 20px` sets bottom outside spacing.
-- **Line 58:** Styles elements matching `.activity-editor .actions`. `margin-bottom: 16px` sets bottom outside spacing.
-- **Line 59:** Styles elements matching `.demonstration img, .demonstration iframe`. `display: block` sets layout box type. `width: 100%` sets width relative to the container. `aspect-ratio: 16 / 9` sets preferred width-to-height ratio. `object-fit: contain` sets how an image fits its box without cropping. `border: 0` sets outline width, style and color. `margin: 12px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
-- **Line 60:** Styles elements matching `a`. `color: #176257` sets foreground text color. `text-underline-offset: 3px` sets distance between link text and underline.
-- **Line 61:** Styles elements matching `button.danger`. `color: #852b1d` sets foreground text color.
-- **Line 62:** Blank line separating related statements; it has no runtime effect.
-- **Line 63:** Styles the group of pictures and videos under an activity: a light dashed box with small outer margins and rounded corners so it reads as an optional add-on area.
-- **Line 64:** Removes the top margin of the group’s heading so it sits at the top of the box.
-- **Line 65:** Lays attachments out as a grid without bullet points: as many columns as fit, each at least 260 pixels wide (or the full width if the screen is narrower, using min()), with a 16-pixel gap.
-- **Line 66:** Lets each attachment shrink below its content width, which stops wide pictures from stretching the page sideways.
-- **Line 67:** Draws one attachment as a white card with a thin border and rounded corners; overflow hidden clips media to those corners.
-- **Line 68:** Makes pictures, videos and the YouTube frame fill the card width, never exceed it, and sit on a dark background.
-- **Line 69:** Limits pictures and videos to 420 pixels tall and fits them inside without cropping (object-fit: contain).
-- **Line 70:** Forces the YouTube frame to a 16:9 shape.
-- **Line 71:** Makes the iframe fill its 16:9 frame with no border.
-- **Line 72:** Styles the preview button that stands in for the YouTube player: full width, no padding or border, dark background, 16:9, positioned so the play symbol can be placed on top.
-- **Line 73:** Stretches the thumbnail to fill the button and slightly dims it.
-- **Line 74:** Places the play triangle across the whole button, centered with CSS grid, large and white with a shadow so it is visible on any thumbnail.
-- **Line 75:** Adds padding to the caption area and allows long words or addresses to wrap.
-
-### Lines 76–100
-
-```text
 76 | .media-item figcaption small { margin-top: 2px; }
 77 | .media-fallback { margin: 0; padding: 16px; background: #fff7e6; color: #5c3b00; overflow-wrap: anywhere; }
 78 | .media-attachment .actions, .media-edit .actions, .media-panel .actions { margin-top: 10px; }
@@ -546,18 +539,23 @@ Current implementation; connections and behavior are explained alongside every s
 88 |   .media-panel .actions button, .media-edit .actions button, .media-found > button, .add-media, .media-attachment .actions button { flex: 1 1 100%; }
 89 |   .activity-editor { padding: 12px; }
 90 |   .activity-editor .actions button { flex: 1 1 calc(50% - 6px); }
-91 | }
-92 | .coaching-block ul.media-list { padding-left: 0; }
-93 | .media-list li { margin-bottom: 0; }
-94 | .notice-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 20px; padding: 12px 16px; border-radius: 8px; box-shadow: 0 2px 8px rgba(23, 45, 58, 0.18); overflow-wrap: anywhere; }
-95 | .notice-bar.success { background: #e4f1ed; color: #17584f; border: 1px solid #9cc9bd; }
-96 | .notice-bar.warning { background: #fff7e6; color: #5c3b00; border: 1px solid #e6c98c; }
-97 | .notice-bar button { flex-shrink: 0; padding: 6px 12px; }
-98 | .media-added { margin: 8px 0; padding: 8px 12px; }
-99 | .account-line { margin: 8px 0 0; font-size: 0.9rem; color: #52666e; overflow-wrap: anywhere; }
-100 | button.link { background: none; border: 0; padding: 0; min-height: 0; color: #176257; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 ```
 
+- **Line 61:** Styles elements matching `button.danger`. `color: #852b1d` sets foreground text color.
+- **Line 62:** Blank line separating related statements; it has no runtime effect.
+- **Line 63:** Styles the group of pictures and videos under an activity: a light dashed box with small outer margins and rounded corners so it reads as an optional add-on area.
+- **Line 64:** Removes the top margin of the group’s heading so it sits at the top of the box.
+- **Line 65:** Lays attachments out as a grid without bullet points: as many columns as fit, each at least 260 pixels wide (or the full width if the screen is narrower, using min()), with a 16-pixel gap.
+- **Line 66:** Lets each attachment shrink below its content width, which stops wide pictures from stretching the page sideways.
+- **Line 67:** Draws one attachment as a white card with a thin border and rounded corners; overflow hidden clips media to those corners.
+- **Line 68:** Makes pictures, videos and the YouTube frame fill the card width, never exceed it, and sit on a dark background.
+- **Line 69:** Limits pictures and videos to 420 pixels tall and fits them inside without cropping (object-fit: contain).
+- **Line 70:** Forces the YouTube frame to a 16:9 shape.
+- **Line 71:** Makes the iframe fill its 16:9 frame with no border.
+- **Line 72:** Styles the preview button that stands in for the YouTube player: full width, no padding or border, dark background, 16:9, positioned so the play symbol can be placed on top.
+- **Line 73:** Stretches the thumbnail to fill the button and slightly dims it.
+- **Line 74:** Places the play triangle across the whole button, centered with CSS grid, large and white with a shadow so it is visible on any thumbnail.
+- **Line 75:** Adds padding to the caption area and allows long words or addresses to wrap.
 - **Line 76:** Adds a little space between caption lines.
 - **Line 77:** Styles the “could not be loaded” message with a warm yellow background and brown text.
 - **Line 78:** Adds space above the Edit/Remove and panel button rows.
@@ -573,20 +571,20 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 88:** Makes the media buttons full width on phones (flex: 1 1 100% lets each fill its row), so they are easy to tap.
 - **Line 89:** Reduces padding of the activity editor on phones to give media more room.
 - **Line 90:** Makes the Move up, Move down and Remove buttons share rows, about two per row.
-- **Line 91:** Closes the media-query block.
-- **Line 92:** Removes the left padding that lesson text lists add, so attachment lists inside an activity line up with the card edge.
-- **Line 93:** Removes the extra bottom margin that text list items have.
-- **Line 94:** Styles the save message bar: it sticks to the top of the window while scrolling (position: sticky), sits above other content (z-index), lays out its text and Dismiss button in a row with a gap, and has a soft shadow so it is easy to notice.
-- **Line 95:** Green colours for a success message.
-- **Line 96:** Yellow-brown colours for a warning message.
-- **Line 97:** Keeps the Dismiss button from shrinking and makes it a little smaller.
-- **Line 98:** Gives the “Added …” confirmation inside an activity a compact size and small margins.
-- **Line 99:** Styles the “Signed in as …” line in the page header: small, grey, and allowed to wrap long email addresses.
-- **Line 100:** Makes a button look like a text link (no background or border, underlined, green). It is used for Log out, Forgot password and Create an account.
 
-### Lines 101–117
+### Lines 91–120
 
 ```text
+91 | }
+92 | .coaching-block ul.media-list { padding-left: 0; }
+93 | .media-list li { margin-bottom: 0; }
+94 | .notice-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 20px; padding: 12px 16px; border-radius: 8px; box-shadow: 0 2px 8px rgba(23, 45, 58, 0.18); overflow-wrap: anywhere; }
+95 | .notice-bar.success { background: #e4f1ed; color: #17584f; border: 1px solid #9cc9bd; }
+96 | .notice-bar.warning { background: #fff7e6; color: #5c3b00; border: 1px solid #e6c98c; }
+97 | .notice-bar button { flex-shrink: 0; padding: 6px 12px; }
+98 | .media-added { margin: 8px 0; padding: 8px 12px; }
+99 | .account-line { margin: 8px 0 0; font-size: 0.9rem; color: #52666e; overflow-wrap: anywhere; }
+100 | button.link { background: none; border: 0; padding: 0; min-height: 0; color: #176257; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 101 | button.link:hover:not(:disabled) { background: none; color: #104b42; }
 102 | .auth-screen { max-width: 480px; padding-top: 32px; }
 103 | .auth-card { background: white; border: 1px solid #d7e0e4; border-top: 4px solid #176257; border-radius: 12px; padding: 28px; }
@@ -604,8 +602,21 @@ Current implementation; connections and behavior are explained alongside every s
 115 |   .auth-card { padding: 20px; }
 116 |   .notice-bar { flex-direction: column; align-items: stretch; }
 117 | }
+118 |
+119 | .discipline-nav { display: flex; gap: 8px; overflow-x: auto; padding: 4px 4px 16px; margin-bottom: 20px; }
+120 | .discipline-nav button { flex: 0 0 auto; min-height: 44px; background: white; color: #17584f; border-color: #b8c9cc; }
 ```
 
+- **Line 91:** Closes the media-query block.
+- **Line 92:** Removes the left padding that lesson text lists add, so attachment lists inside an activity line up with the card edge.
+- **Line 93:** Removes the extra bottom margin that text list items have.
+- **Line 94:** Styles the save message bar: it sticks to the top of the window while scrolling (position: sticky), sits above other content (z-index), lays out its text and Dismiss button in a row with a gap, and has a soft shadow so it is easy to notice.
+- **Line 95:** Green colours for a success message.
+- **Line 96:** Yellow-brown colours for a warning message.
+- **Line 97:** Keeps the Dismiss button from shrinking and makes it a little smaller.
+- **Line 98:** Gives the “Added …” confirmation inside an activity a compact size and small margins.
+- **Line 99:** Styles the “Signed in as …” line in the page header: small, grey, and allowed to wrap long email addresses.
+- **Line 100:** Makes a button look like a text link (no background or border, underlined, green). It is used for Log out, Forgot password and Create an account.
 - **Line 101:** Keeps link-style buttons from getting the normal button hover background.
 - **Line 102:** Narrows the login page to a comfortable 480 pixels and moves it down a little.
 - **Line 103:** Draws the login card: white, bordered, rounded, with a green top edge like the other panels.
@@ -623,6 +634,59 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 115:** Gives the login card slightly smaller padding.
 - **Line 116:** Stacks the save message bar’s text above its Dismiss button on phones.
 - **Line 117:** Closes the media-query block.
+- **Line 118:** Blank line separating related statements; it has no runtime effect.
+- **Line 119:** Uses flexbox and an 8px gap for navigation; horizontal overflow scrolls on narrow screens, with padding for focus outlines and space below.
+- **Line 120:** Prevents navigation buttons from shrinking, gives them a 44px touch target, and uses a white background, green text and visible border.
+
+### Lines 121–142
+
+```text
+121 | .discipline-nav button[aria-pressed="true"], .discipline-nav button:hover { background: #17584f; color: white; }
+122 | .lesson-badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+123 | .lesson-badges .discipline { margin-bottom: 0; }
+124 | .audience-badge { background: #eef0fb; color: #363b70; border-radius: 5px; padding: 3px 9px; font-size: 0.8rem; font-weight: 700; }
+125 | .lesson-grid { align-items: start; }
+126 | .lesson-card { min-width: 0; }
+127 | .lesson-timeline { list-style: none; padding: 0; margin: 16px 0; }
+128 | .lesson-timeline > li { border-left: 3px solid #b8d8ce; padding: 0 0 20px 16px; margin-bottom: 16px; }
+129 | .timeline-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+130 | .timeline-heading h5 { font-size: 1rem; margin: 0; overflow-wrap: anywhere; }
+131 | .timeline-heading > span { flex-shrink: 0; color: #17584f; font-size: 0.85rem; font-weight: 700; }
+132 | .safety-guidance { white-space: pre-line; background: #fff7e6; border-left: 4px solid #b36a12; padding: 16px; }
+133 | .form-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+134 | .media-item img, .media-item video { aspect-ratio: 16 / 9; object-fit: contain; }
+135 | .demonstration { border: 1px solid #d7e0e4; border-radius: 8px; padding: 12px; margin-top: 12px; }
+136 | @media (max-width: 700px) {
+137 |   .hero .actions, .lesson-card > .actions { width: 100%; }
+138 |   .hero .actions button, .lesson-card > .actions button { flex: 1 1 auto; }
+139 |   .timeline-heading { flex-wrap: wrap; gap: 4px 12px; }
+140 |   .lesson-timeline > li { padding-left: 12px; }
+141 |   .lesson-card, .form-panel { padding: 16px; }
+142 | }
+```
+
+- **Line 121:** Styles the selected or hovered navigation button with a dark green background and white text.
+- **Line 122:** Wraps badges into additional lines as needed, with consistent gaps, vertical alignment and bottom spacing.
+- **Line 123:** Removes the old discipline badge bottom margin inside the new badge row.
+- **Line 124:** Gives audience badges a light violet background, dark text, rounded corners, compact padding and bold small text.
+- **Line 125:** Aligns lesson cards to the top of their grid cells rather than stretching short cards to match long ones.
+- **Line 126:** Allows cards to shrink within their grid columns so long content does not force page overflow.
+- **Line 127:** Removes default ordered-list markers and indentation, while keeping semantic ordering and vertical space.
+- **Line 128:** Adds a pale green left timeline line, space between sections and room between the line and content. The > selector limits this to direct activity items.
+- **Line 129:** Places section title and time side by side with a gap, aligning their text baselines.
+- **Line 130:** Makes activity titles readable at 1rem, removes default heading margins and wraps unusually long words.
+- **Line 131:** Keeps the time badge from shrinking and uses compact bold green text.
+- **Line 132:** Preserves safety-rule newlines and highlights the reminder with a warm background, left border and comfortable padding.
+- **Line 133:** Automatically fits form columns with an approximately 200px minimum, never exceeding the available width; extra space is shared equally.
+- **Line 134:** Gives uploaded images and videos a consistent 16:9 frame; contain preserves the entire image without cropping.
+- **Line 135:** Frames catalog demonstrations like other media, with a subtle border, rounded corners and matching spacing.
+- **Line 136:** Starts a media query applying the enclosed overrides when the viewport is at most 700 CSS pixels wide.
+- **Line 137:** Makes header and lesson action groups fill the available width on phones.
+- **Line 138:** Lets the main action buttons share the phone-width row and wrap when needed.
+- **Line 139:** Allows timeline titles and times to wrap with small vertical and horizontal gaps on narrow screens.
+- **Line 140:** Reduces timeline indentation on phones to leave more room for coaching cues.
+- **Line 141:** Uses consistent 16px card and form padding on phones.
+- **Line 142:** Closes the media-query block.
 
 ## client/vite.config.js
 
@@ -2576,113 +2640,119 @@ Audience support: this file connects the optional class-group field to validatio
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
 
-Browser display for one saved record. It formats existing text, shows each activity’s attached pictures and videos beneath it, exposes edit and confirmed delete actions, and delegates catalog demonstrations to LessonMedia.
+Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import React, { useState } from 'react';
 2 | import LessonMedia from './LessonMedia.jsx';
 3 | import MediaItem from './MediaItem.jsx';
 4 | import { activityBlocks, activityMinutes } from './activities.js';
-5 | import { groupMedia, mediaKey } from './media.js';
-6 |
-7 | export function CoachingText({ text, after }) {
-8 |   if (!text) return <p>Not added</p>;
-9 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-10 |     const lines = block.split('\n').filter(Boolean);
-11 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-12 |     return <section className="coaching-block" key={index}>
-13 |       {heading && <h4>{lines[0]}</h4>}
-14 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-15 |       {after?.(index)}
-16 |     </section>;
-17 |   })}</>;
-18 | }
-19 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media = [] }) {
-20 |   const [confirming, setConfirming] = useState(false);
-21 |   const [busy, setBusy] = useState(false);
-22 |   const [error, setError] = useState('');
-23 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
-24 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
-25 |   async function remove() {
+5 | import { timelineEntries } from './lesson-view.js';
+6 | import { groupMedia, mediaKey } from './media.js';
+7 |
+8 | export function CoachingText({ text, after }) {
+9 |   if (!text) return <p>Not added</p>;
+10 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+11 |     const lines = block.split('\n').filter(Boolean);
+12 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+13 |     return <section className="coaching-block" key={index}>
+14 |       {heading && <h4>{lines[0]}</h4>}
+15 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+16 |       {after?.(index)}
+17 |     </section>;
+18 |   })}</>;
+19 | }
+20 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media = [] }) {
+21 |   const [confirming, setConfirming] = useState(false);
+22 |   const [busy, setBusy] = useState(false);
+23 |   const [error, setError] = useState('');
+24 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+25 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+26 |   async function remove() {
+27 |     if (busy) return;
+28 |     setBusy(true); setError('');
+29 |     try {
+30 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
 ```
 
 - **Line 1:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 2:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
 - **Line 3:** Imports the component that shows one picture or video.
 - **Line 4:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
-- **Line 5:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
-- **Line 6:** Blank line separates related sections for readability; it performs no operation.
-- **Line 7:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
-- **Line 8:** Renders a short placeholder when a text field is empty.
-- **Line 9:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 10:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 11:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 12:** Starts one formatted block, using its position as the React key.
-- **Line 13:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 14:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 15:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
-- **Line 16:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 17:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 18:** Closes the LessonCard function.
-- **Line 19:** The card receives its own attachments as media (empty list by default).
-- **Line 20:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 21:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
-- **Line 22:** Stores a safe user-facing failure message, initially empty.
-- **Line 23:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
-- **Line 24:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
-- **Line 25:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 6:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
+- **Line 9:** Renders a short placeholder when a text field is empty.
+- **Line 10:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 11:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 12:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 13:** Starts one formatted block, using its position as the React key.
+- **Line 14:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 15:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 16:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
+- **Line 17:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 18:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 19:** Closes the LessonCard function.
+- **Line 20:** The card receives its own attachments as media (empty list by default).
+- **Line 21:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 22:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
+- **Line 23:** Stores a safe user-facing failure message, initially empty.
+- **Line 24:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 25:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 26:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 27:** Ignores another action while a deletion request is in progress.
+- **Line 28:** Disables repeat actions and clears the previous error before making the request.
+- **Line 29:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 30:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
 
-### Lines 26–47
+### Lines 31–50
 
 ```text
-26 |     if (busy) return;
-27 |     setBusy(true); setError('');
-28 |     try {
-29 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
-30 |       if (response.status !== 204 && response.status !== 404) throw new Error();
-31 |       onDeleted();
-32 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-33 |     finally { setBusy(false); }
-34 |   }
-35 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
-36 |     <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
-37 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
-38 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-39 |     <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} after={index => gallery(byBlock.get(index))} />{rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
-40 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
-41 |     <LessonMedia lesson={lesson} />
-42 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-43 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-44 |     {error && <p className="error" role="alert">{error}</p>}
-45 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-46 |   </article>;
-47 | }
+31 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+32 |       onDeleted();
+33 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+34 |     finally { setBusy(false); }
+35 |   }
+36 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
+37 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
+38 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+39 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+40 |     <h4>Lesson timeline</h4>
+41 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
+42 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+43 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+44 |     <LessonMedia lesson={lesson} />
+45 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+46 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+47 |     {error && <p className="error" role="alert">{error}</p>}
+48 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+49 |   </article>;
+50 | }
 ```
 
-- **Line 26:** Ignores another action while a deletion request is in progress.
-- **Line 27:** Disables repeat actions and clears the previous error before making the request.
-- **Line 28:** Starts a guarded block whose failures are handled by the following catch or finally clause.
-- **Line 29:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
-- **Line 30:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
-- **Line 31:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
-- **Line 32:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 33:** Always releases the busy state after success or failure.
-- **Line 34:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 35:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
-- **Line 36:** Displays the discipline badge and lesson title using escaped React expressions.
-- **Line 37:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
-- **Line 38:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 39:** Draws the activities with each activity’s attachments directly beneath it, followed by a “whole lesson” group for attachments that are not tied to an activity.
-- **Line 40:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
-- **Line 41:** Passes the record to the reviewed-media lookup component.
-- **Line 42:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 43:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 44:** Displays the stored error as an accessible alert only when it is nonempty.
-- **Line 45:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 46:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 47:** Closes the LessonCard function.
+- **Line 31:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 32:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 33:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 34:** Always releases the busy state after success or failure.
+- **Line 35:** Closes the LessonCard function.
+- **Line 36:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
+- **Line 37:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
+- **Line 38:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 39:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 40:** Adds the visible heading for the activity timeline.
+- **Line 41:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
+- **Line 42:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
+- **Line 43:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
+- **Line 44:** Passes the record to the reviewed-media lookup component.
+- **Line 45:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 46:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 47:** Displays the stored error as an accessible alert only when it is nonempty.
+- **Line 48:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 49:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 50:** Closes the LessonCard function.
 
 ## client/src/lesson-draft.js
 
@@ -5256,143 +5326,185 @@ Audience support: this file connects the optional class-group field to validatio
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-ui.test.js`
 
-Fast Node tests for browser data helpers, minimal AI request validation and media selection. These are not real-browser interaction tests.
+Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
 
-### Lines 1–25
-
-```text
-1 | import test from 'node:test';
-2 | import assert from 'node:assert/strict';
-3 | import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
-4 | import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
-5 | import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
-6 | import { readFileSync } from 'node:fs';
-7 | import { groupMedia, headingOf } from '../client/src/media.js';
-8 |
-9 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
-10 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
-11 |   const items = activityBlocks(original);
-12 |   assert.equal(items.join('\n\n'), original);
-13 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
-14 |   assert.deepEqual(moveActivity(items, 0, -1), items);
-15 |   assert.deepEqual(items, activityBlocks(original));
-16 |   assert.deepEqual(activityBlocks(''), []);
-17 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
-18 | });
-19 |
-20 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
-21 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
-22 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
-23 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
-24 |   assert.equal(activityMinutes(''), 0);
-25 | });
-```
-
-- **Line 1:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 2:** Imports assert from 'node:assert/strict'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports the two new helpers beside the existing ones so the tests can exercise them.
-- **Line 4:** Imports { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 5:** Imports { disciplines, validateRequest } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 6:** Imports readFileSync so the test can read source files.
-- **Line 7:** Imports groupMedia and headingOf, the helpers that decide which attachment appears under which activity.
-- **Line 8:** Blank line separating related statements; it has no runtime effect.
-- **Line 9:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 10:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
-- **Line 11:** Parses that synthetic text into activity blocks for testing.
-- **Line 12:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 18:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 19:** Blank line separating related statements; it has no runtime effect.
-- **Line 20:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
-- **Line 21:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
-- **Line 22:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
-- **Line 23:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
-- **Line 24:** Checks that empty text adds up to zero.
-- **Line 25:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-
-### Lines 26–50
+### Lines 1–30
 
 ```text
-26 |
-27 | test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
-28 |   const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
-29 |   assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
-30 |   const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
-31 |   const { byBlock, rest } = groupMedia(media, blocks);
-32 |   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
-33 |   assert.deepEqual(rest.map(item => item.id), [3, 4]);
-34 | });
-35 |
-36 | test('media fields are detached from the lesson form so Enter can never save the lesson without a pending attachment', () => {
-37 |   const source = readFileSync(new URL('../client/src/MediaEditor.jsx', import.meta.url), 'utf8');
-38 |   const fields = source.match(/<(input|select)\b[^>]*>/g) || [];
-39 |   assert.ok(fields.length >= 5);
-40 |   for (const field of fields) assert.ok(field.includes('form={detached}'), field.slice(0, 60));
-41 |   assert.match(source, /const detached = 'coachlab-media-fields'/);
-42 |   const forms = readFileSync(new URL('../client/src/LessonForm.jsx', import.meta.url), 'utf8') + readFileSync(new URL('../client/src/AiLessonForm.jsx', import.meta.url), 'utf8');
-43 |   assert.ok(!forms.includes('id="coachlab-media-fields"'));
-44 |   assert.ok(forms.includes('registry.count()'));
-45 | });
-46 |
-47 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
-48 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
-49 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
-50 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
+1 | import { disciplineNavigation, filterLessons, timelineEntries } from '../client/src/lesson-view.js';
+2 | import test from 'node:test';
+3 | import assert from 'node:assert/strict';
+4 | import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
+5 | import { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js';
+6 | import { disciplines, validateRequest } from '../client/src/lesson-draft.js';
+7 | import { readFileSync } from 'node:fs';
+8 | import { groupMedia, headingOf } from '../client/src/media.js';
+9 |
+10 | test('activity editing preserves cues and supports removal, insertion and bounded reordering', () => {
+11 |   const original = 'Warm-up — 5 minutes\nWalk slowly.\nKeep balance.\n\nDrill — 10 minutes\nPractice.';
+12 |   const items = activityBlocks(original);
+13 |   assert.equal(items.join('\n\n'), original);
+14 |   assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);
+15 |   assert.deepEqual(moveActivity(items, 0, -1), items);
+16 |   assert.deepEqual(items, activityBlocks(original));
+17 |   assert.deepEqual(activityBlocks(''), []);
+18 |   assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);
+19 | });
+20 |
+21 | test('card text keeps blank lines out of a card and activity minutes are summed from headings', () => {
+22 |   assert.equal(joinActivities(['Warm-up — 5 minutes\n\n\nWalk', '', 'Drill — 10 min\nGo']), 'Warm-up — 5 minutes\nWalk\n\n\n\nDrill — 10 min\nGo');
+23 |   assert.deepEqual(activityBlocks(joinActivities(['a\n\nb', 'c'])), ['a\nb', 'c']);
+24 |   assert.equal(activityMinutes('Warm-up — 5 minutes\nWalk 20 minutes\n\nDrill — 10 min\nGo\n\nNo time here\n\nRest: 1 minute'), 16);
+25 |   assert.equal(activityMinutes(''), 0);
+26 | });
+27 |
+28 | test('lesson cards place each attachment under the first activity with its heading and collect the rest', () => {
+29 |   const blocks = activityBlocks('Warm-up — 5 minutes\nJog\n\nDrill — 10 minutes\nSnap\n\nDrill — 10 minutes\nAgain');
+30 |   assert.equal(headingOf(blocks[1]), 'Drill — 10 minutes');
 ```
 
-- **Line 26:** Blank line separating related statements; it has no runtime effect.
-- **Line 27:** Registers a test of the grouping rule: each attachment goes under the first activity with a matching heading, and the rest are collected separately.
-- **Line 28:** Builds three activity blocks from text; the second and third share the heading “Drill — 10 minutes”.
-- **Line 29:** Checks that headingOf reads the first line of a block.
-- **Line 30:** Defines five sample attachments: two for the duplicated drill heading, one for the warm-up, one for the whole lesson (empty activity) and one for an activity that no longer exists.
-- **Line 31:** Runs the grouping function.
-- **Line 32:** Checks that attachments 1 and 5 both appear under block index 1 (the first “Drill” block, never the duplicate) and attachment 2 under block 0.
-- **Line 33:** Checks that the whole-lesson and orphaned attachments (3 and 4) are returned as the rest, so no attachment is lost.
-- **Line 34:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 35:** Blank line separating related statements; it has no runtime effect.
-- **Line 36:** Registers a regression test for the root cause of the reported bug: media fields must never be able to submit the lesson form.
-- **Line 37:** Reads the media editor’s source text.
-- **Line 38:** Finds every input and select element in it with a regular expression (\b marks a word boundary).
-- **Line 39:** There must be at least five such fields, so the test cannot pass by finding none.
-- **Line 40:** Each of them must carry the form={detached} attribute.
-- **Line 41:** The detached form name must be defined as expected.
-- **Line 42:** Reads the two lesson forms’ source text.
-- **Line 43:** Neither form may define an element with the detached form’s id (that would re-attach the fields).
-- **Line 44:** Both forms must consult the pending registry before saving.
-- **Line 45:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 46:** Blank line separating related statements; it has no runtime effect.
-- **Line 47:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 48:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
-- **Line 49:** Checks every supported discipline accepts the minimal request without a validation error.
-- **Line 50:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports test from 'node:test'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 3:** Imports assert from 'node:assert/strict'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 4:** Imports the two new helpers beside the existing ones so the tests can exercise them.
+- **Line 5:** Imports { lessonMedia, mediaCatalog } from '../client/src/lesson-media.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 6:** Imports { disciplines, validateRequest } from '../client/src/lesson-draft.js'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 7:** Imports readFileSync so the test can read source files.
+- **Line 8:** Imports groupMedia and headingOf, the helpers that decide which attachment appears under which activity.
+- **Line 9:** Blank line separating related statements; it has no runtime effect.
+- **Line 10:** Registers this named test with Node: activity editing preserves cues and supports removal, insertion and bounded reordering. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 11:** Defines synthetic instruction text with single-newline cues and a blank-line activity boundary for round-trip tests.
+- **Line 12:** Parses that synthetic text into activity blocks for testing.
+- **Line 13:** Checks the stated expectation using Node strict assertions: `assert.equal(items.join('\n\n'), original);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 14:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, 1), [items[1], items[0]]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 15:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(moveActivity(items, 0, -1), items);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 16:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(items, activityBlocks(original));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 17:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks(''), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 18:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(activityBlocks([...items.slice(1), 'Cooldown'].join('\n\n')), [items[1], 'Cooldown']);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 19:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 20:** Blank line separating related statements; it has no runtime effect.
+- **Line 21:** Registers a test named after the new behavior: blank lines never stay inside a card, and minutes are summed from headings.
+- **Line 22:** Checks joinActivities on three cards (one with blank lines, one empty): inner blank lines become a single line break and cards are separated by blank lines.
+- **Line 23:** Checks that after joining, blocks split back into the same cards, proving a card never splits in two.
+- **Line 24:** Checks that only heading minutes count: 5 + 10 + 1 equals 16, while minutes written on a later line and a heading without minutes are ignored.
+- **Line 25:** Checks that empty text adds up to zero.
+- **Line 26:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 27:** Blank line separating related statements; it has no runtime effect.
+- **Line 28:** Registers a test of the grouping rule: each attachment goes under the first activity with a matching heading, and the rest are collected separately.
+- **Line 29:** Builds three activity blocks from text; the second and third share the heading “Drill — 10 minutes”.
+- **Line 30:** Checks that headingOf reads the first line of a block.
 
-### Lines 51–59
+### Lines 31–60
 
 ```text
-51 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
-52 | });
-53 |
-54 | test('media matches both discipline and technique with an empty safe fallback', () => {
-55 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
-56 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
-57 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
-58 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
-59 | });
+31 |   const media = [{ id: 1, activity: 'Drill — 10 minutes' }, { id: 2, activity: 'Warm-up — 5 minutes' }, { id: 3, activity: '' }, { id: 4, activity: 'Removed activity' }, { id: 5, activity: 'Drill — 10 minutes' }];
+32 |   const { byBlock, rest } = groupMedia(media, blocks);
+33 |   assert.deepEqual([...byBlock].map(([index, items]) => [index, items.map(item => item.id)]), [[1, [1, 5]], [0, [2]]]);
+34 |   assert.deepEqual(rest.map(item => item.id), [3, 4]);
+35 | });
+36 |
+37 | test('media fields are detached from the lesson form so Enter can never save the lesson without a pending attachment', () => {
+38 |   const source = readFileSync(new URL('../client/src/MediaEditor.jsx', import.meta.url), 'utf8');
+39 |   const fields = source.match(/<(input|select)\b[^>]*>/g) || [];
+40 |   assert.ok(fields.length >= 5);
+41 |   for (const field of fields) assert.ok(field.includes('form={detached}'), field.slice(0, 60));
+42 |   assert.match(source, /const detached = 'coachlab-media-fields'/);
+43 |   const forms = readFileSync(new URL('../client/src/LessonForm.jsx', import.meta.url), 'utf8') + readFileSync(new URL('../client/src/AiLessonForm.jsx', import.meta.url), 'utf8');
+44 |   assert.ok(!forms.includes('id="coachlab-media-fields"'));
+45 |   assert.ok(forms.includes('registry.count()'));
+46 | });
+47 |
+48 | test('minimal AI requests work for every discipline; optional details remain bounded', () => {
+49 |   const request = { skill_level: 'Beginner', duration_minutes: 60, students: 2, privacy_confirmed: true };
+50 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
+51 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));
+52 |   assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));
+53 | });
+54 |
+55 | test('media matches both discipline and technique with an empty safe fallback', () => {
+56 |   for (const [discipline, title] of [['Boxing', 'Jab'], ['Muay Thai', 'Jab'], ['MMA', 'Double leg'], ['Wrestling', 'Double-leg'], ['Brazilian Jiu-Jitsu', 'Kimura'], ['Personal Training', 'Squat']]) assert.equal(lessonMedia({ discipline, title }).length, 1);
+57 |   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
+58 |   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
+59 |   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+60 | });
 ```
 
-- **Line 51:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 52:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 53:** Blank line separating related statements; it has no runtime effect.
-- **Line 54:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
-- **Line 55:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
-- **Line 56:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
-- **Line 58:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
-- **Line 59:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 31:** Defines five sample attachments: two for the duplicated drill heading, one for the warm-up, one for the whole lesson (empty activity) and one for an activity that no longer exists.
+- **Line 32:** Runs the grouping function.
+- **Line 33:** Checks that attachments 1 and 5 both appear under block index 1 (the first “Drill” block, never the duplicate) and attachment 2 under block 0.
+- **Line 34:** Checks that the whole-lesson and orphaned attachments (3 and 4) are returned as the rest, so no attachment is lost.
+- **Line 35:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 36:** Blank line separating related statements; it has no runtime effect.
+- **Line 37:** Registers a regression test for the root cause of the reported bug: media fields must never be able to submit the lesson form.
+- **Line 38:** Reads the media editor’s source text.
+- **Line 39:** Finds every input and select element in it with a regular expression (\b marks a word boundary).
+- **Line 40:** There must be at least five such fields, so the test cannot pass by finding none.
+- **Line 41:** Each of them must carry the form={detached} attribute.
+- **Line 42:** The detached form name must be defined as expected.
+- **Line 43:** Reads the two lesson forms’ source text.
+- **Line 44:** Neither form may define an element with the detached form’s id (that would re-attach the fields).
+- **Line 45:** Both forms must consult the pending registry before saving.
+- **Line 46:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 47:** Blank line separating related statements; it has no runtime effect.
+- **Line 48:** Registers this named test with Node: minimal AI requests work for every discipline; optional details remain bounded. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 49:** Defines a minimal generic class request with defaults and privacy confirmation; optional preferences are intentionally absent.
+- **Line 50:** Checks every supported discipline accepts the minimal request without a validation error.
+- **Line 51:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', equipment: 42 }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 52:** Checks the stated expectation using Node strict assertions: `assert.ok(validateRequest({ ...request, discipline: 'Boxing', objective: 'x'.repeat(501) }));`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 53:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 54:** Blank line separating related statements; it has no runtime effect.
+- **Line 55:** Registers this named test with Node: media matches both discipline and technique with an empty safe fallback. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
+- **Line 56:** Checks one known technique per discipline matches exactly one reviewed reference; destructuring reads each pair.
+- **Line 57:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 58:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 59:** Checks every configured source, picture and video destination uses HTTPS, selecting videoPage for non-embedded references.
+- **Line 60:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+
+### Lines 61–80
+
+```text
+61 |
+62 | test('dashboard filters combine discipline and audience without hiding legacy unspecified lessons', () => {
+63 |   const lessons = [{ id: 1, discipline: 'Boxing', audience: 'Kids' }, { id: 2, discipline: 'Boxing', audience: 'Adults' }, { id: 3, discipline: 'MMA' }];
+64 |   assert.deepEqual(filterLessons(lessons, 'Kids', 'Boxing').map(row => row.id), [1]);
+65 |   assert.deepEqual(filterLessons(lessons, 'Unspecified', 'All').map(row => row.id), [3]);
+66 |   assert.deepEqual(filterLessons(lessons, 'All', 'All'), lessons);
+67 |   assert.deepEqual(filterLessons(lessons, 'Adults', 'MMA'), []);
+68 |   assert.deepEqual([...disciplineNavigation].sort(), [...disciplines].sort());
+69 | });
+70 |
+71 | test('timeline separates minutes from cues and preserves media block indices and untimed text', () => {
+72 |   const blocks = ['Techniques: Footwork', 'Warm-up — 5 minutes\n1. Walk.\n2. Pause.', 'Drill: 10 min\nStay balanced.', 'Cooldown — 3 minutes\nRelax.'];
+73 |   const timeline = timelineEntries(blocks);
+74 |   assert.deepEqual(timeline.map(row => row.index), [0, 1, 2, 3]);
+75 |   assert.equal(timeline[0].cues, blocks[0]);
+76 |   assert.equal(timeline[0].minutes, null);
+77 |   assert.deepEqual(timeline[1], { index: 1, title: 'Warm-up', minutes: 5, cues: '1. Walk.\n2. Pause.' });
+78 |   assert.equal(timeline[2].minutes, 10);
+79 |   assert.equal(timeline[3].title, 'Cooldown');
+80 | });
+```
+
+- **Line 61:** Blank line separating related statements; it has no runtime effect.
+- **Line 62:** Registers a unit test that combines both filters and checks compatibility with lessons missing audience.
+- **Line 63:** Creates three generic lessons spanning Kids, Adults and legacy unspecified audiences; no real lesson data is accessed.
+- **Line 64:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 65:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 66:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 67:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 68:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 69:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 70:** Blank line separating related statements; it has no runtime effect.
+- **Line 71:** Registers a timeline parser test for time extraction, cue preservation and stable media indices.
+- **Line 72:** Builds sample timed and untimed activity blocks with different supported heading separators.
+- **Line 73:** Parses the fixture blocks into display entries for the following assertions.
+- **Line 74:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 75:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 76:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 77:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 78:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 79:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 80:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/postgres-api.test.js
 
@@ -11177,3 +11289,37 @@ Audience support: this file connects the optional class-group field to validatio
 ```
 
 - **Line 1:** Adds the same optional audience column and allowed-value check to SQLite; its migration runner supplies the transaction.
+
+## client/src/lesson-view.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\lesson-view.js`
+
+Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
+
+### Lines 1–11
+
+```text
+1 | export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Personal Training'];
+2 | export function filterLessons(lessons, audience, discipline) {
+3 |   return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline));
+4 | }
+5 | export function timelineEntries(blocks) {
+6 |   return blocks.map((block, index) => {
+7 |     const [heading, ...cues] = block.split('\n');
+8 |     const timed = heading.match(/^(.*?)\s*(?:—|–|-|:)\s*(\d{1,3})\s*(?:minutes?|mins?)\s*$/i);
+9 |     return { index, title: timed ? timed[1].trim() : 'Coaching cues', minutes: timed ? Number(timed[2]) : null, cues: timed ? cues.join('\n') : block };
+10 |   });
+11 | }
+```
+
+- **Line 1:** Exports the six discipline values in the requested navigation order. BJJ uses its full stored name.
+- **Line 2:** Exports a pure filtering function receiving lessons and both selections.
+- **Line 3:** Keeps a lesson only when both filters match. All bypasses a filter; ?? normalizes missing audience without mutating the record.
+- **Line 4:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 5:** Exports a display-only timeline parser for existing activity text.
+- **Line 6:** Maps each original block to one display entry and preserves its index for attachment matching.
+- **Line 7:** Splits the first line into heading and the remaining lines into cues using array destructuring and the rest operator.
+- **Line 8:** Matches a heading ending with a separator, one to three digits and a minute label. Capture groups retain the title and number; the i flag ignores case.
+- **Line 9:** Returns the original index, extracted title/minutes and remaining cues for a timed section. Untimed content is retained intact with a null time rather than inventing a duration.
+- **Line 10:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 11:** Closes this function, conditional block or object; execution continues after the block.

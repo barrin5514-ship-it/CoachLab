@@ -1,3 +1,4 @@
+import { disciplineNavigation, filterLessons, timelineEntries } from '../client/src/lesson-view.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activityBlocks, activityMinutes, joinActivities, moveActivity } from '../client/src/activities.js';
@@ -56,4 +57,24 @@ test('media matches both discipline and technique with an empty safe fallback', 
   assert.deepEqual(lessonMedia({ discipline: 'Boxing', title: 'Kimura' }), []);
   assert.deepEqual(lessonMedia({ discipline: 'MMA', title: 'Uncatalogued technique' }), []);
   for (const item of mediaCatalog) for (const field of ['source', 'image', item.video ? 'video' : 'videoPage']) assert.equal(new URL(item[field]).protocol, 'https:');
+});
+
+test('dashboard filters combine discipline and audience without hiding legacy unspecified lessons', () => {
+  const lessons = [{ id: 1, discipline: 'Boxing', audience: 'Kids' }, { id: 2, discipline: 'Boxing', audience: 'Adults' }, { id: 3, discipline: 'MMA' }];
+  assert.deepEqual(filterLessons(lessons, 'Kids', 'Boxing').map(row => row.id), [1]);
+  assert.deepEqual(filterLessons(lessons, 'Unspecified', 'All').map(row => row.id), [3]);
+  assert.deepEqual(filterLessons(lessons, 'All', 'All'), lessons);
+  assert.deepEqual(filterLessons(lessons, 'Adults', 'MMA'), []);
+  assert.deepEqual([...disciplineNavigation].sort(), [...disciplines].sort());
+});
+
+test('timeline separates minutes from cues and preserves media block indices and untimed text', () => {
+  const blocks = ['Techniques: Footwork', 'Warm-up — 5 minutes\n1. Walk.\n2. Pause.', 'Drill: 10 min\nStay balanced.', 'Cooldown — 3 minutes\nRelax.'];
+  const timeline = timelineEntries(blocks);
+  assert.deepEqual(timeline.map(row => row.index), [0, 1, 2, 3]);
+  assert.equal(timeline[0].cues, blocks[0]);
+  assert.equal(timeline[0].minutes, null);
+  assert.deepEqual(timeline[1], { index: 1, title: 'Warm-up', minutes: 5, cues: '1. Walk.\n2. Pause.' });
+  assert.equal(timeline[2].minutes, 10);
+  assert.equal(timeline[3].title, 'Cooldown');
 });

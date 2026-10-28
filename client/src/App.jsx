@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import LessonForm from './LessonForm.jsx';
 import LessonCard from './LessonCard.jsx';
 import AiLessonForm from './AiLessonForm.jsx';
+import { disciplineNavigation, filterLessons } from './lesson-view.js';
 import { fetchMedia } from './media.js';
 
 export default function App({ user, onLogOut }) {
   const [lessons, setLessons] = useState([]);
   const [audience, setAudience] = useState('All');
-  const visibleLessons = lessons.filter(lesson => audience === 'All' || (lesson.audience ?? 'Unspecified') === audience);
+  const [discipline, setDiscipline] = useState('All');
+  const visibleLessons = filterLessons(lessons, audience, discipline);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
@@ -74,6 +76,7 @@ export default function App({ user, onLogOut }) {
   async function handleSaved(lesson, sent) {
     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
     setAudience('All');
+    setDiscipline('All');
     setFormOpen(false);
     setEditing(null);
     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
@@ -102,13 +105,14 @@ export default function App({ user, onLogOut }) {
         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
+      <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
-        <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
+        <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-        {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match this audience.</p>}
+        {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
         {loading && <p role="status">Loading lesson plans…</p>}
         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}

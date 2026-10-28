@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import LessonMedia from './LessonMedia.jsx';
 import MediaItem from './MediaItem.jsx';
 import { activityBlocks, activityMinutes } from './activities.js';
+import { timelineEntries } from './lesson-view.js';
 import { groupMedia, mediaKey } from './media.js';
 
 export function CoachingText({ text, after }) {
@@ -33,10 +34,12 @@ export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media 
     finally { setBusy(false); }
   }
   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
-    <span className="discipline">{lesson.discipline}</span><h3>{lesson.title}</h3>
+    <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-    <h4>Activities and demonstrations</h4><CoachingText text={lesson.drills} after={index => gallery(byBlock.get(index))} />{rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+    <h4>Lesson timeline</h4>
+    {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
+    {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
     <LessonMedia lesson={lesson} />
     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
