@@ -2,9 +2,9 @@ import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
 import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
-import { disciplines, levels, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
+import { disciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 
-const initial = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
+const initial = { audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
 export default function AiLessonForm({ onSaved, onCancel }) {
   const [request, setRequest] = useState(initial);
   const [draft, setDraft] = useState(null);
@@ -82,6 +82,7 @@ export default function AiLessonForm({ onSaved, onCancel }) {
     <section className="form-panel" aria-labelledby="ai-heading">
       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
+      <p className="safety-guidance">{safetyGuidance(request)}</p>
       <form onSubmit={submit}>
         <fieldset disabled={busy}>
           <legend className="sr-only">AI lesson details</legend>
@@ -89,6 +90,7 @@ export default function AiLessonForm({ onSaved, onCancel }) {
             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
             <div className="form-row">
               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
+              <label>Audience<select value={request.audience} onChange={event => setRequest({ ...request, audience: event.target.value })}>{audiences.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
             </div>
@@ -96,13 +98,14 @@ export default function AiLessonForm({ onSaved, onCancel }) {
             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
           </> : <>
-            <p>{request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
+            <p>{request.audience} · {request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
               <h3>{section.name}</h3>
               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
-              <ActivityEditor label={section.name + ' instructions'} limit={1500} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+              <ActivityEditor label={section.name + ' instructions'} limit={1000} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+              {sectionGuidance.map(([key, label]) => <label key={key}>{section.name}: {label}<textarea required maxLength={200} value={section[key]} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, [key]: event.target.value } : item))} /></label>)}
               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
             </div>)}
             <div className="draft-section">
