@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -38,7 +38,7 @@ test('versioned migration, constraints, and persistence across processes', () =>
     const migrationCode = "import './server/migrate.js';";
     assert.equal(run(migrationCode, filename).status, 0);
     database = new Database(filename);
-    assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id']);
+    assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id', 'audience']);
     const title = "Coach's jab; DROP TABLE lessons; --";
     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
     insert.run(title, 'Boxing', 45);
@@ -56,7 +56,7 @@ test('versioned migration, constraints, and persistence across processes', () =>
     assert.equal(reader.status, 0);
     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
     database = new Database(filename);
-    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
+    assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   } finally {
     if (database?.open) database.close();
@@ -75,4 +75,25 @@ test('migration failure rolls back the schema and version together', () => {
   } finally {
     database.close();
   }
+});
+
+test('additive audience migration preserves existing lesson fields and is safe to rerun', () => {
+  const database = new Database(':memory:');
+  try {
+    database.exec(readFileSync(new URL('./migrations/001_create_lessons.sql', import.meta.url), 'utf8'));
+    database.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)');
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (1)').run();
+    database.prepare('INSERT INTO lessons (id, title, discipline, created_at) VALUES (?, ?, ?, ?)').run(42, 'Existing generic class', 'Boxing', '2026-01-01T00:00:00.000Z');
+    const before = database.prepare('SELECT * FROM lessons').get();
+    migrate(database);
+    migrate(database);
+    const { audience, owner_id, ...after } = database.prepare('SELECT * FROM lessons').get();
+    assert.equal(audience, 'Unspecified');
+    assert.equal(owner_id, null);
+    assert.deepEqual(after, before);
+    assert.throws(() => database.prepare('UPDATE lessons SET audience = ?').run('Other'));
+    const sql = readFileSync(new URL('../prisma/migrations/20261028000100_add_lesson_audience/migration.sql', import.meta.url), 'utf8');
+    assert.match(sql, /ADD COLUMN "audience" TEXT DEFAULT 'Unspecified'/);
+    assert.doesNotMatch(sql, /DROP|DELETE|TRUNCATE|NOT NULL/i);
+  } finally { database.close(); }
 });

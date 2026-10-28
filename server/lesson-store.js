@@ -1,6 +1,6 @@
 export class MediaReferenceError extends Error {}
 
-const lessonColumns = 'id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at';
+const lessonColumns = "id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at, COALESCE(audience, 'Unspecified') AS audience";
 const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
 const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
 const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
@@ -10,8 +10,8 @@ export function sqliteLessons(database) {
   const list = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE owner_id = ? ORDER BY created_at DESC, id DESC`);
   const find = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE id = ?`);
   const insert = database.prepare(`INSERT INTO lessons
-    (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id)
-    VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId)`);
+    (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id, audience)
+    VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId, @audience)`);
   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
   const findMedia = database.prepare('SELECT id, lesson_id, owner_id FROM lesson_media WHERE id = ?');
   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
@@ -39,7 +39,7 @@ export function sqliteLessons(database) {
     return find.get(result.lastInsertRowid);
   });
   const update = database.transaction((ownerId, id, lesson, media) => {
-    const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
+    const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes, audience=@audience WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
     if (!result.changes) return null;
     if (media) attach(ownerId, id, media);
     return find.get(id);
@@ -63,7 +63,7 @@ export function sqliteLessons(database) {
 }
 
 export function prismaLessons(client) {
-  const serialize = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
+  const serialize = ({ owner_id, ...row }) => ({ ...row, audience: row.audience ?? 'Unspecified', created_at: row.created_at.toISOString() });
   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
   async function attach(tx, ownerId, lessonId, items) {
     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);

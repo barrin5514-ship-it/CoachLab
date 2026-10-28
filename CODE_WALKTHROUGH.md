@@ -88,9 +88,9 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Browser application state and dashboard. It loads lessons and their attachments from Express, always re-reads the newest attachments before a lesson is opened for editing and after it is saved, confirms how many attachments were stored in a sticky message bar, and coordinates create, AI draft, edit and delete callbacks.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import React, { useEffect, useState } from 'react';
@@ -101,23 +101,28 @@ Browser application state and dashboard. It loads lessons and their attachments 
 6 |
 7 | export default function App({ user, onLogOut }) {
 8 |   const [lessons, setLessons] = useState([]);
-9 |   const [loading, setLoading] = useState(true);
-10 |   const [error, setError] = useState('');
-11 |   const [notice, setNotice] = useState(null);
-12 |   const [opening, setOpening] = useState(false);
-13 |   const [formOpen, setFormOpen] = useState(false);
-14 |   const [reload, setReload] = useState(0);
-15 |   const [editing, setEditing] = useState(null);
-16 |   const [media, setMedia] = useState([]);
-17 |   const [mediaError, setMediaError] = useState('');
-18 |   const [mediaReload, setMediaReload] = useState(0);
-19 |
-20 |   useEffect(() => {
-21 |     const controller = new AbortController();
-22 |     async function loadLessons() {
-23 |       setLoading(true);
-24 |       setError('');
-25 |       try {
+9 |   const [audience, setAudience] = useState('All');
+10 |   const visibleLessons = lessons.filter(lesson => audience === 'All' || (lesson.audience ?? 'Unspecified') === audience);
+11 |   const [loading, setLoading] = useState(true);
+12 |   const [error, setError] = useState('');
+13 |   const [notice, setNotice] = useState(null);
+14 |   const [opening, setOpening] = useState(false);
+15 |   const [formOpen, setFormOpen] = useState(false);
+16 |   const [reload, setReload] = useState(0);
+17 |   const [editing, setEditing] = useState(null);
+18 |   const [media, setMedia] = useState([]);
+19 |   const [mediaError, setMediaError] = useState('');
+20 |   const [mediaReload, setMediaReload] = useState(0);
+21 |
+22 |   useEffect(() => {
+23 |     const controller = new AbortController();
+24 |     async function loadLessons() {
+25 |       setLoading(true);
+26 |       setError('');
+27 |       try {
+28 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+29 |         if (!response.ok) throw new Error('Unable to load lessons.');
+30 |         const data = await response.json();
 ```
 
 - **Line 1:** Imports React for JSX plus effect and state hooks from the installed React package.
@@ -128,227 +133,226 @@ Browser application state and dashboard. It loads lessons and their attachments 
 - **Line 6:** Blank line separates related sections; it performs no operation.
 - **Line 7:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
 - **Line 8:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 9:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 10:** Stores the list error message; empty text means no error.
-- **Line 11:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
-- **Line 12:** True while a lesson is being opened for editing and its attachments are being fetched.
-- **Line 13:** Stores whether the form is mounted; false initially hides it.
-- **Line 14:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 15:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 16:** State for every saved attachment returned by the server.
-- **Line 17:** State for an error message when attachments could not be loaded.
-- **Line 18:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 19:** Blank line separates related sections; it performs no operation.
-- **Line 20:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 21:** Creates a request cancellation controller scoped to this effect run.
-- **Line 22:** Declares an async helper, allowing await inside its braces.
-- **Line 23:** Marks the list request as running.
-- **Line 24:** Clears the previous list error before retrying.
-- **Line 25:** Starts a try block for request and JSON errors.
+- **Line 9:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
+- **Line 10:** Keeps lessons matching the selected audience; All bypasses filtering and ?? treats an absent or null audience as Unspecified.
+- **Line 11:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 12:** Stores the list error message; empty text means no error.
+- **Line 13:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 14:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 15:** Stores whether the form is mounted; false initially hides it.
+- **Line 16:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 17:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 18:** State for every saved attachment returned by the server.
+- **Line 19:** State for an error message when attachments could not be loaded.
+- **Line 20:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 21:** Blank line separates related sections; it performs no operation.
+- **Line 22:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 23:** Creates a request cancellation controller scoped to this effect run.
+- **Line 24:** Declares an async helper, allowing await inside its braces.
+- **Line 25:** Marks the list request as running.
+- **Line 26:** Clears the previous list error before retrying.
+- **Line 27:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 28:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 29:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 30:** Awaits parsing the JSON body into a JavaScript value.
 
-### Lines 26–50
-
-```text
-26 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-27 |         if (!response.ok) throw new Error('Unable to load lessons.');
-28 |         const data = await response.json();
-29 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-30 |         setLessons(data);
-31 |       } catch (failure) {
-32 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-33 |       } finally {
-34 |         if (!controller.signal.aborted) setLoading(false);
-35 |       }
-36 |     }
-37 |     loadLessons();
-38 |     return () => controller.abort();
-39 |   }, [reload]);
-40 |
-41 |   useEffect(() => {
-42 |     const controller = new AbortController();
-43 |     async function loadMedia() {
-44 |       try {
-45 |         const data = await fetchMedia(controller.signal);
-46 |         setMedia(data);
-47 |         setMediaError('');
-48 |       } catch (failure) {
-49 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-50 |       }
-```
-
-- **Line 26:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 27:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 28:** Awaits parsing the JSON body into a JavaScript value.
-- **Line 29:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 30:** Stores the backend records, triggering a render.
-- **Line 31:** Closes try and catches failures under the name failure.
-- **Line 32:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 33:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 34:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 35:** Closes finally.
-- **Line 36:** Closes the async helper.
-- **Line 37:** Starts the helper; its own try/catch handles its failures.
-- **Line 38:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 39:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 40:** Blank line separates related sections; it performs no operation.
-- **Line 41:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 42:** Creates a request cancellation controller scoped to this effect run.
-- **Line 43:** Declares the loader for attachments inside the effect.
-- **Line 44:** Starts a try block for request and JSON errors.
-- **Line 45:** The attachment loader now uses fetchMedia, with the abort signal.
-- **Line 46:** Stores the attachments.
-- **Line 47:** Clears any earlier error.
-- **Line 48:** Closes try and catches failures under the name failure.
-- **Line 49:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 50:** Closes finally.
-
-### Lines 51–75
+### Lines 31–60
 
 ```text
-51 |     }
-52 |     loadMedia();
-53 |     return () => controller.abort();
-54 |   }, [reload, mediaReload]);
-55 |
-56 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+31 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+32 |         setLessons(data);
+33 |       } catch (failure) {
+34 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+35 |       } finally {
+36 |         if (!controller.signal.aborted) setLoading(false);
+37 |       }
+38 |     }
+39 |     loadLessons();
+40 |     return () => controller.abort();
+41 |   }, [reload]);
+42 |
+43 |   useEffect(() => {
+44 |     const controller = new AbortController();
+45 |     async function loadMedia() {
+46 |       try {
+47 |         const data = await fetchMedia(controller.signal);
+48 |         setMedia(data);
+49 |         setMediaError('');
+50 |       } catch (failure) {
+51 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+52 |       }
+53 |     }
+54 |     loadMedia();
+55 |     return () => controller.abort();
+56 |   }, [reload, mediaReload]);
 57 |
-58 |   async function handleEdit(lesson) {
-59 |     setNotice(null);
-60 |     setOpening(true);
-61 |     try {
-62 |       setMedia(await fetchMedia());
-63 |       setMediaError('');
-64 |       setEditing(lesson);
-65 |       setFormOpen('manual');
-66 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-67 |     } catch {
-68 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-69 |     } finally { setOpening(false); }
-70 |   }
-71 |
-72 |   async function handleSaved(lesson, sent) {
-73 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-74 |     setFormOpen(false);
-75 |     setEditing(null);
+58 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+59 |
+60 |   async function handleEdit(lesson) {
 ```
 
-- **Line 51:** Closes the async helper.
-- **Line 52:** Starts the load.
-- **Line 53:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 54:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 55:** Blank line separates related sections; it performs no operation.
-- **Line 56:** Helper that returns only the attachments of one lesson.
+- **Line 31:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 32:** Stores the backend records, triggering a render.
+- **Line 33:** Closes try and catches failures under the name failure.
+- **Line 34:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 35:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 36:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 37:** Closes the App function.
+- **Line 38:** Closes the App function.
+- **Line 39:** Starts the helper; its own try/catch handles its failures.
+- **Line 40:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 41:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 42:** Blank line separates related sections; it performs no operation.
+- **Line 43:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 44:** Creates a request cancellation controller scoped to this effect run.
+- **Line 45:** Declares the loader for attachments inside the effect.
+- **Line 46:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 47:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 48:** Stores the attachments.
+- **Line 49:** Clears any earlier media error.
+- **Line 50:** Closes try and catches failures under the name failure.
+- **Line 51:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 52:** Closes the App function.
+- **Line 53:** Closes the App function.
+- **Line 54:** Starts the load.
+- **Line 55:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 56:** Ends the effect; it re-runs when either reload counter changes.
 - **Line 57:** Blank line separates related sections; it performs no operation.
-- **Line 58:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
-- **Line 59:** Clears any old message.
-- **Line 60:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 61:** Starts the guarded step.
-- **Line 62:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
-- **Line 63:** Clears any earlier media error.
-- **Line 64:** Remembers which lesson is being edited.
-- **Line 65:** Opens the manual form.
-- **Line 66:** Scrolls to the top where the form appears, as before.
-- **Line 67:** If the attachments could not be loaded…
-- **Line 68:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 69:** Always ends the opening state.
-- **Line 70:** Closes handleSaved.
-- **Line 71:** Blank line separates related sections; it performs no operation.
-- **Line 72:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 73:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 74:** Closes the form; unmounting it discards its input state after success.
-- **Line 75:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 58:** Helper that returns only the attachments of one lesson.
+- **Line 59:** Blank line separates related sections; it performs no operation.
+- **Line 60:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
 
-### Lines 76–100
+### Lines 61–90
 
 ```text
-76 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-77 |     let text = `Saved “${lesson.title}”.`;
-78 |     let tone = 'success';
-79 |     try {
-80 |       const fresh = await fetchMedia();
-81 |       setMedia(fresh);
-82 |       setMediaError('');
-83 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-84 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-85 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-86 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-87 |     } catch {
-88 |       tone = 'warning';
-89 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-90 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-91 |     }
-92 |     setNotice({ tone, text });
-93 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-94 |   }
-95 |
-96 |   return (
-97 |     <main>
-98 |       <header className="hero">
-99 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-100 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+61 |     setNotice(null);
+62 |     setOpening(true);
+63 |     try {
+64 |       setMedia(await fetchMedia());
+65 |       setMediaError('');
+66 |       setEditing(lesson);
+67 |       setFormOpen('manual');
+68 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+69 |     } catch {
+70 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+71 |     } finally { setOpening(false); }
+72 |   }
+73 |
+74 |   async function handleSaved(lesson, sent) {
+75 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+76 |     setAudience('All');
+77 |     setFormOpen(false);
+78 |     setEditing(null);
+79 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+80 |     let text = `Saved “${lesson.title}”.`;
+81 |     let tone = 'success';
+82 |     try {
+83 |       const fresh = await fetchMedia();
+84 |       setMedia(fresh);
+85 |       setMediaError('');
+86 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+87 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+88 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+89 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+90 |     } catch {
 ```
 
-- **Line 76:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 77:** Starts the final message text.
-- **Line 78:** Starts as a success tone.
-- **Line 79:** Starts the guarded step.
-- **Line 80:** Asks the server what attachments are really stored now.
-- **Line 81:** Replaces the page’s attachment list with that fresh copy.
-- **Line 82:** Clears any earlier media error.
-- **Line 83:** Counts the stored attachments of this lesson.
-- **Line 84:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 85:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 86:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 87:** If the attachments could not be loaded…
-- **Line 88:** …uses a warning tone,
-- **Line 89:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 90:** …and shows the retry banner.
-- **Line 91:** Closes the async helper.
-- **Line 92:** Shows the final message.
-- **Line 93:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 94:** Closes handleSaved.
-- **Line 95:** Blank line separates related sections; it performs no operation.
-- **Line 96:** Begins returning a parenthesized JSX tree.
-- **Line 97:** Opens the semantic main content element.
-- **Line 98:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 99:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
-- **Line 100:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 61:** Clears any old message.
+- **Line 62:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 63:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 64:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
+- **Line 65:** Clears any earlier media error.
+- **Line 66:** Remembers which lesson is being edited.
+- **Line 67:** Opens the manual form.
+- **Line 68:** Scrolls to the top where the form appears, as before.
+- **Line 69:** Catches failure without including private exception details in public hosting logs.
+- **Line 70:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 71:** Always ends the opening state.
+- **Line 72:** Closes the App function.
+- **Line 73:** Blank line separates related sections; it performs no operation.
+- **Line 74:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 75:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 76:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 77:** Closes the form; unmounting it discards its input state after success.
+- **Line 78:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 79:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 80:** Starts the final message text.
+- **Line 81:** Starts as a success tone.
+- **Line 82:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 83:** Asks the server what attachments are really stored now.
+- **Line 84:** Replaces the page’s attachment list with that fresh copy.
+- **Line 85:** Clears any earlier media error.
+- **Line 86:** Counts the stored attachments of this lesson.
+- **Line 87:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 88:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 89:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 90:** Catches failure without including private exception details in public hosting logs.
 
-### Lines 101–115
+### Lines 91–120
 
 ```text
-101 |       </header>
-102 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-103 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-104 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-105 |       <section aria-labelledby="lessons-heading">
-106 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
-107 |         {loading && <p role="status">Loading lesson plans…</p>}
-108 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-109 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-110 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-111 |         <div className="lesson-grid">{lessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-112 |       </section>
-113 |     </main>
-114 |   );
-115 | }
+91 |       tone = 'warning';
+92 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+93 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+94 |     }
+95 |     setNotice({ tone, text });
+96 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+97 |   }
+98 |
+99 |   return (
+100 |     <main>
+101 |       <header className="hero">
+102 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+103 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+104 |       </header>
+105 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+106 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+107 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+108 |       <section aria-labelledby="lessons-heading">
+109 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{lessons.length} saved</span></div>
+110 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+111 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match this audience.</p>}
+112 |         {loading && <p role="status">Loading lesson plans…</p>}
+113 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+114 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+115 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+116 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+117 |       </section>
+118 |     </main>
+119 |   );
+120 | }
 ```
 
-- **Line 101:** Closes the header.
-- **Line 102:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 103:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
-- **Line 104:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 105:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 106:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
-- **Line 107:** Conditionally shows loading text as a live status paragraph.
-- **Line 108:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 109:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 110:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 111:** Lesson cards are disabled while a form is open or a lesson is being opened; Edit calls handleEdit; after a delete the lesson’s attachments are also removed from the page’s list and a success message is shown.
-- **Line 112:** Closes the lesson section.
-- **Line 113:** Closes main.
-- **Line 114:** Closes the parenthesized return statement with a semicolon.
-- **Line 115:** Closes the App function.
+- **Line 91:** …uses a warning tone,
+- **Line 92:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 93:** …and shows the retry banner.
+- **Line 94:** Closes the App function.
+- **Line 95:** Shows the final message.
+- **Line 96:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 97:** Closes the App function.
+- **Line 98:** Blank line separates related sections; it performs no operation.
+- **Line 99:** Begins returning a parenthesized JSX tree.
+- **Line 100:** Opens the semantic main content element.
+- **Line 101:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 102:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 103:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 104:** Closes the header.
+- **Line 105:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 106:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
+- **Line 107:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 108:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 109:** Groups the heading and current list length in a flex row; braces insert the numeric array length into the span.
+- **Line 110:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 111:** Shows an accessible status message only after loading succeeds, saved lessons exist, and the selected filter has no matches.
+- **Line 112:** Conditionally shows loading text as a live status paragraph.
+- **Line 113:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 114:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 115:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 116:** Maps the filtered lessons into cards. Stable IDs preserve React identity; editing and deletion callbacks still update lessons, media and notices without changing account access.
+- **Line 117:** Closes the lesson section.
+- **Line 118:** Closes main.
+- **Line 119:** Closes the parenthesized return statement with a semicolon.
+- **Line 120:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -1178,7 +1182,7 @@ Version 1 of the schema. migrations.js reads this fixed local SQL file and execu
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations.js`
 
-Tracks applied versions in schema_migrations. Each schema change and its version record are committed together, so a failure cannot falsely mark a version as applied. It receives an open connection; it does not choose the database path.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
 ### Lines 1–18
 
@@ -1190,7 +1194,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 5 |     version INTEGER PRIMARY KEY,
 6 |     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 7 |   ) STRICT`);
-8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }, { version: 3, file: '003_add_ownership.sql' }];
+8 |   const migrations = [{ version: 1, file: '001_create_lessons.sql' }, { version: 2, file: '002_create_lesson_media.sql' }, { version: 3, file: '003_add_ownership.sql' }, { version: 4, file: '004_add_lesson_audience.sql' }];
 9 |   for (const migration of migrations) {
 10 |     database.transaction(() => {
 11 |       const applied = database.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(migration.version);
@@ -1210,7 +1214,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 - **Line 5:** Defines the tracking version as a unique integer primary key. The comma separates the timestamp column.
 - **Line 6:** Defines a required applied_at UTC timestamp with a default evaluated at insertion, using the same strftime format as lesson timestamps.
 - **Line 7:** Closes the tracking table columns, enables STRICT typing, closes the template string and exec call, and ends the JavaScript statement. Creating this bookkeeping table occurs before each version transaction.
-- **Line 8:** Registers the third SQLite migration (ownership columns) after the first two.
+- **Line 8:** Adds SQLite migration version four to the ordered list. The version table prevents rerunning its ALTER TABLE statement.
 - **Line 9:** Iterates the descriptors with for...of. const migration holds the current descriptor; braces open the loop.
 - **Line 10:** Creates a transaction wrapper around the arrow callback. The callback's queries will run as one atomic unit when the wrapper is called below.
 - **Line 11:** Prepares a SELECT query with a ? placeholder and binds the current version through get. This keeps data separate from SQL syntax; get returns one row or undefined.
@@ -1219,7 +1223,7 @@ Tracks applied versions in schema_migrations. Each schema change and its version
 - **Line 14:** Executes the trusted migration SQL, creating the lessons table for version 1. A database failure throws rather than pretending to succeed.
 - **Line 15:** Records the version using a parameterized INSERT and run. The applied_at default supplies the timestamp. This insert shares the schema-change transaction.
 - **Line 16:** Closes the callback and transaction factory call, then immediately calls the returned wrapper with (). Success commits; an exception rolls back the changes and propagates.
-- **Line 17:** Closes the for loop.
+- **Line 17:** Closes migrate.
 - **Line 18:** Closes migrate.
 
 ## server/migrate.js
@@ -1258,14 +1262,14 @@ The executable entry point behind npm run db:migrate. It opens the external data
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\database.test.js`
 
-Automated checks using Node's built-in test runner. Tests create an isolated temporary database and fresh Node processes, then remove only their own verified temporary directory. They never insert sample rows into the normal CoachLab database. The rollback test deliberately simulates a database failure inside an isolated test, not a production bug.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import test from 'node:test';
 2 | import assert from 'node:assert/strict';
-3 | import { mkdtempSync, rmSync } from 'node:fs';
+3 | import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 4 | import { tmpdir, homedir } from 'node:os';
 5 | import path from 'node:path';
 6 | import { spawnSync } from 'node:child_process';
@@ -1288,11 +1292,16 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 23 |   assert.equal(defaultResult.stdout.trim(), path.join(homedir(), 'AppData', 'Local', 'CoachLab', 'coachlab.sqlite'));
 24 |   const custom = path.join(tmpdir(), 'coachlab-custom.sqlite');
 25 |   assert.equal(run(code, custom).stdout.trim(), custom);
+26 |   for (const invalid of ['relative.sqlite', path.join(homedir(), 'OneDrive', 'bad.sqlite'), path.join(homedir(), 'OneDrive - Company', 'bad.sqlite')]) {
+27 |     assert.notEqual(run(code, invalid).status, 0);
+28 |   }
+29 | });
+30 |
 ```
 
 - **Line 1:** Imports Node's built-in test function for defining named test cases.
 - **Line 2:** Imports strict assertions; these throw when actual behavior differs from the expected value.
-- **Line 3:** Imports synchronous temporary-directory creation and removal helpers.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 4:** Imports functions for the system temporary folder and user home directory.
 - **Line 5:** Imports path helpers to construct and verify filesystem paths.
 - **Line 6:** Imports spawnSync to run a child Node process and wait for it to finish.
@@ -1303,10 +1312,10 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 11:** Starts the current Node executable with module mode and -e to execute the supplied test code. The final object contains process options.
 - **Line 12:** Sets the child working directory to the project root using a URL relative to this test module; this makes its relative imports reliable.
 - **Line 13:** Copies the existing environment with spread syntax, overrides DATABASE_PATH for isolation, and requests UTF-8 output strings. These environment values are not printed.
-- **Line 14:** Closes the options object and spawnSync call.
+- **Line 14:** Closes the configuration test callback and test registration.
 - **Line 15:** Checks that the child process could be spawned. Normal program failures are checked through status by the caller.
-- **Line 16:** Returns the result object containing exit status and captured output.
-- **Line 17:** Closes the helper function.
+- **Line 16:** Returns the observed middleware outcome for assertions.
+- **Line 17:** Closes the invalid-path loop.
 - **Line 18:** Blank line separates related sections for readability; it performs no operation.
 - **Line 19:** Defines the configuration test and opens its arrow-function callback.
 - **Line 20:** Stores a short child program that imports and prints the selected database path, allowing assertions without opening a database.
@@ -1315,15 +1324,15 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 23:** Asserts the selected default is the user's AppData/Local/CoachLab/coachlab.sqlite path.
 - **Line 24:** Builds a harmless custom filename under the temporary directory; this configuration test does not create it.
 - **Line 25:** Asserts the custom path is returned unchanged by configuration.
+- **Line 26:** Loops over a relative path and two typical OneDrive folder paths, including a business OneDrive name. These are test inputs, not files to create.
+- **Line 27:** Asserts each rejected path causes a nonzero exit. notEqual means the two values must differ.
+- **Line 28:** Closes the invalid-path loop.
+- **Line 29:** Closes the configuration test callback and test registration.
+- **Line 30:** Blank line separates related sections for readability; it performs no operation.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |   for (const invalid of ['relative.sqlite', path.join(homedir(), 'OneDrive', 'bad.sqlite'), path.join(homedir(), 'OneDrive - Company', 'bad.sqlite')]) {
-27 |     assert.notEqual(run(code, invalid).status, 0);
-28 |   }
-29 | });
-30 |
 31 | test('versioned migration, constraints, and persistence across processes', () => {
 32 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-test-'));
 33 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
@@ -1334,7 +1343,7 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 38 |     const migrationCode = "import './server/migrate.js';";
 39 |     assert.equal(run(migrationCode, filename).status, 0);
 40 |     database = new Database(filename);
-41 |     assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id']);
+41 |     assert.deepEqual(database.prepare('PRAGMA table_info(lessons)').all().map(column => column.name), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'owner_id', 'audience']);
 42 |     const title = "Coach's jab; DROP TABLE lessons; --";
 43 |     const insert = database.prepare('INSERT INTO lessons (title, discipline, duration_minutes) VALUES (?, ?, ?)');
 44 |     insert.run(title, 'Boxing', 45);
@@ -1344,37 +1353,6 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 48 |     assert.throws(() => database.prepare('INSERT INTO lessons (title, discipline, skill_level) VALUES (?, ?, ?)').run('Test', 'Boxing', 'Expert'));
 49 |     const saved = database.prepare('SELECT * FROM lessons').get();
 50 |     assert.equal(saved.skill_level, 'Beginner');
-```
-
-- **Line 26:** Loops over a relative path and two typical OneDrive folder paths, including a business OneDrive name. These are test inputs, not files to create.
-- **Line 27:** Asserts each rejected path causes a nonzero exit. notEqual means the two values must differ.
-- **Line 28:** Closes the invalid-path loop.
-- **Line 29:** Closes the configuration test callback and test registration.
-- **Line 30:** Blank line separates related sections for readability; it performs no operation.
-- **Line 31:** Defines the disk migration/persistence test and opens its callback.
-- **Line 32:** Creates a unique test directory using the system temporary directory and a coachlab-test- prefix.
-- **Line 33:** Verifies that the resolved directory's parent is exactly the intended temporary directory before any recursive cleanup can happen.
-- **Line 34:** Verifies the generated directory name has the expected test prefix, further bounding cleanup to this test's own directory.
-- **Line 35:** Builds a database filename inside a missing nested directory so the test also checks automatic parent-directory creation.
-- **Line 36:** Declares a mutable connection variable; let allows it to be reassigned when the test reopens the database.
-- **Line 37:** Starts a try block whose finally will clean up resources even if an assertion fails.
-- **Line 38:** Stores child code importing the real migration command module, which runs the migration.
-- **Line 39:** Runs the migration in a fresh Node process against the test file and asserts success.
-- **Line 40:** Opens that file for direct inspection through SQLite.
-- **Line 41:** The lessons table now has a tenth column, owner_id, added by the ownership migration; the other nine are unchanged.
-- **Line 42:** Creates a title containing an apostrophe and SQL-looking text to verify it is safely stored as data.
-- **Line 43:** Prepares a parameterized INSERT with three ? placeholders for title, discipline, and duration.
-- **Line 44:** Binds the title, Boxing, and 45 to those placeholders and inserts one lesson.
-- **Line 45:** Iterates invalid value arrays: blank title, unknown discipline, negative duration, and fractional duration.
-- **Line 46:** Uses spread syntax to pass each array as query arguments and asserts that the database rejects it with an exception.
-- **Line 47:** Closes the invalid-data loop.
-- **Line 48:** Asserts that inserting Expert as a skill level throws, using a separate parameterized query.
-- **Line 49:** Reads the single valid lesson, including generated/default fields, into saved.
-- **Line 50:** Checks the omitted skill level defaulted to Beginner.
-
-### Lines 51–75
-
-```text
 51 |     assert.equal(saved.goal, '');
 52 |     assert.ok(Number.isFinite(Date.parse(saved.created_at)));
 53 |     database.close();
@@ -1383,8 +1361,44 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 56 |     assert.equal(reader.status, 0);
 57 |     assert.deepEqual(JSON.parse(reader.stdout), [saved]);
 58 |     database = new Database(filename);
-59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
+59 |     assert.deepEqual(database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
 60 |     assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+```
+
+- **Line 31:** Defines the disk migration/persistence test and opens its callback.
+- **Line 32:** Creates a unique test directory using the system temporary directory and a coachlab-test- prefix.
+- **Line 33:** Verifies that the resolved directory's parent is exactly the intended temporary directory before any recursive cleanup can happen.
+- **Line 34:** Verifies the generated directory name has the expected test prefix, further bounding cleanup to this test's own directory.
+- **Line 35:** Builds a database filename inside a missing nested directory so the test also checks automatic parent-directory creation.
+- **Line 36:** Declares storage for the decoded database name, which stays internal.
+- **Line 37:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 38:** Stores child code importing the real migration command module, which runs the migration.
+- **Line 39:** Runs the migration in a fresh Node process against the test file and asserts success.
+- **Line 40:** Opens that file for direct inspection through SQLite.
+- **Line 41:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 42:** Creates a title containing an apostrophe and SQL-looking text to verify it is safely stored as data.
+- **Line 43:** Prepares a parameterized INSERT with three ? placeholders for title, discipline, and duration.
+- **Line 44:** Binds the title, Boxing, and 45 to those placeholders and inserts one lesson.
+- **Line 45:** Iterates invalid value arrays: blank title, unknown discipline, negative duration, and fractional duration.
+- **Line 46:** Uses spread syntax to pass each array as query arguments and asserts that the database rejects it with an exception.
+- **Line 47:** Closes the invalid-path loop.
+- **Line 48:** Asserts that inserting Expert as a skill level throws, using a separate parameterized query.
+- **Line 49:** Reads the single valid lesson, including generated/default fields, into saved.
+- **Line 50:** Checks the omitted skill level defaulted to Beginner.
+- **Line 51:** Checks the omitted goal defaulted to empty text.
+- **Line 52:** Parses created_at and checks the result is a finite timestamp, so it is a usable date string.
+- **Line 53:** Closes the first connection before restarting the migration process.
+- **Line 54:** Runs the migration in a fresh Node process against the test file and asserts success.
+- **Line 55:** Runs a separate reader process that opens the same file, selects all rows, prints JSON, and closes it. No connection or in-memory JavaScript object is shared with that process.
+- **Line 56:** Asserts the reader process exited successfully.
+- **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
+- **Line 58:** Opens that file for direct inspection through SQLite.
+- **Line 59:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 60:** Runs SQLite's integrity check and requires the result ok.
+
+### Lines 61–90
+
+```text
 61 |   } finally {
 62 |     if (database?.open) database.close();
 63 |     rmSync(directory, { recursive: true, force: true });
@@ -1400,18 +1414,23 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 73 |     assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name = 'lessons'").get(), undefined);
 74 |     assert.equal(database.prepare('SELECT count(*) AS count FROM schema_migrations').get().count, 0);
 75 |   } finally {
+76 |     database.close();
+77 |   }
+78 | });
+79 |
+80 | test('additive audience migration preserves existing lesson fields and is safe to rerun', () => {
+81 |   const database = new Database(':memory:');
+82 |   try {
+83 |     database.exec(readFileSync(new URL('./migrations/001_create_lessons.sql', import.meta.url), 'utf8'));
+84 |     database.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)');
+85 |     database.prepare('INSERT INTO schema_migrations (version) VALUES (1)').run();
+86 |     database.prepare('INSERT INTO lessons (id, title, discipline, created_at) VALUES (?, ?, ?, ?)').run(42, 'Existing generic class', 'Boxing', '2026-01-01T00:00:00.000Z');
+87 |     const before = database.prepare('SELECT * FROM lessons').get();
+88 |     migrate(database);
+89 |     migrate(database);
+90 |     const { audience, owner_id, ...after } = database.prepare('SELECT * FROM lessons').get();
 ```
 
-- **Line 51:** Checks the omitted goal defaulted to empty text.
-- **Line 52:** Parses created_at and checks the result is a finite timestamp, so it is a usable date string.
-- **Line 53:** Closes the first connection before restarting the migration process.
-- **Line 54:** Runs the migration in a fresh Node process against the test file and asserts success.
-- **Line 55:** Runs a separate reader process that opens the same file, selects all rows, prints JSON, and closes it. No connection or in-memory JavaScript object is shared with that process.
-- **Line 56:** Asserts the reader process exited successfully.
-- **Line 57:** Parses its JSON and compares every field to the saved lesson, proving file persistence and that the repeated migration preserved data.
-- **Line 58:** Opens that file for direct inspection through SQLite.
-- **Line 59:** The migration history after a restart includes version 3.
-- **Line 60:** Runs SQLite's integrity check and requires the result ok.
 - **Line 61:** Closes try and begins cleanup with finally, which runs even when assertions fail.
 - **Line 62:** Uses optional chaining to check whether a connection exists and is still open, then closes it if needed.
 - **Line 63:** Removes only the test directory whose parent and prefix were verified above. recursive removes its nested files; force tolerates an already-missing directory.
@@ -1420,39 +1439,66 @@ Automated checks using Node's built-in test runner. Tests create an isolated tem
 - **Line 66:** Blank line separates related sections for readability; it performs no operation.
 - **Line 67:** Defines the atomic rollback test and opens its callback.
 - **Line 68:** Creates an isolated in-memory SQLite database; :memory: does not create a disk file.
-- **Line 69:** Starts a try block whose finally will clean up resources even if an assertion fails.
+- **Line 69:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
 - **Line 70:** Creates a minimal existing migration ledger for fault injection in this test only.
 - **Line 71:** Creates a test-only trigger that runs before a version INSERT and raises an ABORT error. BEGIN/END enclose the trigger's SQL action, and the semicolons delimit its statements.
 - **Line 72:** Expects migrate to throw an error matching the /test failure/ regular expression when it tries to record the version.
 - **Line 73:** Queries SQLite's schema catalog and asserts the lessons table does not exist: its creation was rolled back with the failed version insert.
 - **Line 74:** Counts ledger rows using an SQL alias count and requires zero, confirming no version was falsely marked applied.
 - **Line 75:** Closes try and begins cleanup with finally, which runs even when assertions fail.
-
-### Lines 76–78
-
-```text
-76 |     database.close();
-77 |   }
-78 | });
-```
-
 - **Line 76:** Closes the first connection before restarting the migration process.
 - **Line 77:** Closes the invalid-path loop.
 - **Line 78:** Closes the configuration test callback and test registration.
+- **Line 79:** Blank line separates related sections for readability; it performs no operation.
+- **Line 80:** Registers a migration test with a preexisting record, proving that all original fields survive the additive change and a second migration pass.
+- **Line 81:** Creates an isolated in-memory SQLite database; :memory: does not create a disk file.
+- **Line 82:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 83:** Creates the original lesson schema in a disposable in-memory SQLite database using the version-one SQL file.
+- **Line 84:** Creates a minimal existing migration ledger for fault injection in this test only.
+- **Line 85:** Marks migration one as already applied, simulating a database from an older application version.
+- **Line 86:** Inserts a generic fixture with an explicit ID and timestamp through placeholders, so migration preservation can be checked exactly.
+- **Line 87:** Reads the original row before migration; this becomes the expected unchanged record.
+- **Line 88:** Applies pending versioned migrations; running the same function again must leave already applied versions unchanged.
+- **Line 89:** Applies pending versioned migrations; running the same function again must leave already applied versions unchanged.
+- **Line 90:** Separates the new audience and ownership columns from the original row using object destructuring and the rest operator.
+
+### Lines 91–99
+
+```text
+91 |     assert.equal(audience, 'Unspecified');
+92 |     assert.equal(owner_id, null);
+93 |     assert.deepEqual(after, before);
+94 |     assert.throws(() => database.prepare('UPDATE lessons SET audience = ?').run('Other'));
+95 |     const sql = readFileSync(new URL('../prisma/migrations/20261028000100_add_lesson_audience/migration.sql', import.meta.url), 'utf8');
+96 |     assert.match(sql, /ADD COLUMN "audience" TEXT DEFAULT 'Unspecified'/);
+97 |     assert.doesNotMatch(sql, /DROP|DELETE|TRUNCATE|NOT NULL/i);
+98 |   } finally { database.close(); }
+99 | });
+```
+
+- **Line 91:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 92:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 93:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 94:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 95:** Reads the new PostgreSQL migration as text for additive-only SQL assertions; it does not connect to Neon.
+- **Line 96:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 97:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 98:** Closes the disposable database even when an assertion throws.
+- **Line 99:** Closes the configuration test callback and test registration.
 
 ## server/validate-lesson.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\validate-lesson.js`
 
-Validates and normalizes the POST body before any write. It returns either an error message or a safe lesson object containing only allowed fields; it never talks to SQLite.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
 2 | const levels = ['Beginner', 'Intermediate', 'Advanced'];
 3 | const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
-4 | const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes'];
+4 | const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience'];
 5 |
 6 | export function validateLesson(body) {
 7 |   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -1472,53 +1518,57 @@ Validates and normalizes the POST body before any write. It returns either an er
 21 |   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
 22 |   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
 23 |   lesson.discipline = body.discipline;
-24 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
-25 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
+24 |   lesson.audience = body.audience === undefined ? 'Unspecified' : body.audience;
+25 |   if (!['Kids', 'Adults', 'Unspecified'].includes(lesson.audience)) return { error: 'Choose Kids, Adults, or Unspecified.' };
+26 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
+27 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
+28 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
+29 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
+30 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
 ```
 
 - **Line 1:** Defines the array of six supported discipline strings; const prevents reassignment of the array variable.
 - **Line 2:** Defines the three accepted skill-level strings.
 - **Line 3:** Maps each free-text field to its maximum JavaScript string length, measured in UTF-16 code units.
-- **Line 4:** Builds the allowed-field array by spreading the text field names and adding the three other supported fields. Object.keys returns the object's own keys.
+- **Line 4:** Adds audience to the API field allowlist; unknown input properties remain rejected.
 - **Line 5:** Blank line separates related sections for readability; it performs no operation.
 - **Line 6:** Exports the validation function taking the parsed request body; braces open its body.
 - **Line 7:** Rejects absent/null bodies, non-object values, or arrays. ! means not; || combines alternatives; Array.isArray distinguishes arrays from ordinary objects.
 - **Line 8:** Returns an object with an error property, ending validation before any field access or write.
-- **Line 9:** Closes the body-shape conditional.
+- **Line 9:** Closes the validateLesson function.
 - **Line 10:** Uses some and includes to detect any submitted key not present in the allowed-field array. The arrow callback tests each key.
 - **Line 11:** Returns a safe unsupported-fields error rather than accepting client-supplied IDs or timestamps.
-- **Line 12:** Closes the body-shape conditional.
+- **Line 12:** Closes the validateLesson function.
 - **Line 13:** Creates an empty normalized lesson object; const prevents replacing the binding but allows assigning its properties.
 - **Line 14:** Iterates field/limit pairs from Object.entries. Array destructuring assigns each pair to field and limit.
 - **Line 15:** Defaults omitted optional text to empty text, but leaves missing title undefined so it is rejected. === checks strict equality; && means both conditions; the ternary selects one of two values.
 - **Line 16:** Rejects non-string input or text longer than its configured limit, before trimming. This prevents whitespace padding from bypassing limits.
 - **Line 17:** Returns a template-string error that inserts the field name and length limit using dollar-sign/braces interpolation; both come from trusted configuration.
-- **Line 18:** Closes the invalid-text conditional.
+- **Line 18:** Closes the validateLesson function.
 - **Line 19:** Stores the trimmed string under the current field name using bracket property access. trim removes surrounding JavaScript whitespace.
-- **Line 20:** Closes the body-shape conditional.
+- **Line 20:** Closes the validateLesson function.
 - **Line 21:** Rejects a title that is empty after trimming; returning stops the function.
 - **Line 22:** Requires discipline to exactly match one supported string. Missing, null, or unsupported values fail.
 - **Line 23:** Copies the validated discipline into the normalized object.
-- **Line 24:** Defaults only an omitted skill_level to Beginner. Explicit null is preserved temporarily so the next check rejects it.
-- **Line 25:** Rejects skill levels not present in the allowed array, returning a useful message.
+- **Line 24:** Uses Unspecified only when the caller omits audience. Otherwise retains the supplied value for explicit validation.
+- **Line 25:** Checks exact membership in the three supported audience strings; invalid values return a safe validation error.
+- **Line 26:** Defaults only an omitted skill_level to Beginner. Explicit null is preserved temporarily so the next check rejects it.
+- **Line 27:** Rejects skill levels not present in the allowed array, returning a useful message.
+- **Line 28:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
+- **Line 29:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
+- **Line 30:** Returns a safe duration error message when the condition fails.
 
-### Lines 26–31
+### Lines 31–33
 
 ```text
-26 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
-27 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
-28 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
-29 |   }
-30 |   return { lesson };
-31 | }
+31 |   }
+32 |   return { lesson };
+33 | }
 ```
 
-- **Line 26:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
-- **Line 27:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
-- **Line 28:** Returns a safe duration error message when the condition fails.
-- **Line 29:** Closes the body-shape conditional.
-- **Line 30:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
 - **Line 31:** Closes the validateLesson function.
+- **Line 32:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
+- **Line 33:** Closes the validateLesson function.
 
 ## server/app.js
 
@@ -1968,9 +2018,9 @@ Production preparation: this file connects deployment configuration to the exist
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\api.test.js`
 
-Current implementation; connections and behavior are explained alongside every source line below.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import test from 'node:test';
@@ -1998,6 +2048,11 @@ Current implementation; connections and behavior are explained alongside every s
 23 |     rmSync(directory, { recursive: true, force: true });
 24 |   });
 25 |   state.start = async () => {
+26 |     state.database = new Database(state.filename);
+27 |     migrate(state.database);
+28 |     state.server = createApp(state.database, testOptions).listen(0, '127.0.0.1');
+29 |     await once(state.server, 'listening');
+30 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
 ```
 
 - **Line 1:** Imports Node's built-in test function.
@@ -2021,19 +2076,19 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 19:** Closes the database only if a connection exists and remains open.
 - **Line 20:** Closes the start function assignment.
 - **Line 21:** Registers asynchronous cleanup with t.after, so resources are cleaned even when a test assertion fails.
-- **Line 22:** Waits for the shared stop helper to close the HTTP server and database.
+- **Line 22:** Closes the server and its SQLite connection.
 - **Line 23:** Removes only the previously verified temporary directory and its files. recursive handles contents; force tolerates an already-absent directory.
-- **Line 24:** Closes the cleanup callback and registration.
+- **Line 24:** Closes the final test callback and registration.
 - **Line 25:** Assigns an asynchronous start function that can also reopen the same test file later.
+- **Line 26:** Opens the test database file and stores the connection in state.
+- **Line 27:** Applies the same migration system used by the normal server before app creation.
+- **Line 28:** Creates the test app with the fake sign-in options, so every existing lesson API test now runs as a signed-in coach.
+- **Line 29:** Waits until the server has actually started listening.
+- **Line 30:** Builds the request URL from the assigned port, using template-string interpolation; no fixed development port is occupied.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |     state.database = new Database(state.filename);
-27 |     migrate(state.database);
-28 |     state.server = createApp(state.database, testOptions).listen(0, '127.0.0.1');
-29 |     await once(state.server, 'listening');
-30 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
 31 |   };
 32 |   await state.start();
 33 |   return state;
@@ -2054,21 +2109,26 @@ Current implementation; connections and behavior are explained alongside every s
 48 | });
 49 |
 50 | test('POST saves actual SQLite data, GET orders it, and reopening preserves it', async t => {
+51 |   const state = await fixture(t);
+52 |   const input = { title: "  Coach's jab; DROP TABLE lessons; --  ", discipline: 'Boxing', skill_level: 'Intermediate', duration_minutes: 45, goal: 'Accuracy', drills: 'Practice jabs', coaching_notes: 'Keep guard up' };
+53 |   const response = await post(state, input);
+54 |   assert.equal(response.status, 201);
+55 |   const saved = await response.json();
+56 |   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
+57 |   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
+58 |   assert.deepEqual(saved, { ...input, audience: 'Unspecified', title: input.title.trim(), id: saved.id, created_at: saved.created_at });
+59 |   const { owner_id: owner, ...stored } = state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id);
+60 |   assert.equal(owner, 'user-a');
 ```
 
-- **Line 26:** Opens the test database file and stores the connection in state.
-- **Line 27:** Applies the same migration system used by the normal server before app creation.
-- **Line 28:** Creates the test app with the fake sign-in options, so every existing lesson API test now runs as a signed-in coach.
-- **Line 29:** Waits until the server has actually started listening.
-- **Line 30:** Builds the request URL from the assigned port, using template-string interpolation; no fixed development port is occupied.
 - **Line 31:** Closes the start function assignment.
 - **Line 32:** Reopens the same file and starts a new server/app using the fixture's start helper.
 - **Line 33:** Returns the fixture state to the test.
-- **Line 34:** Closes the POST helper.
+- **Line 34:** Closes the response loop.
 - **Line 35:** Blank line separates related sections for readability; it performs no operation.
 - **Line 36:** Declares a helper for making JSON POST requests to a fixture's API.
 - **Line 37:** Calls fetch with POST, a JSON Content-Type header, and a body serialized by JSON.stringify. Template-string interpolation uses the fixture URL; the returned Promise is awaited by callers.
-- **Line 38:** Closes the POST helper.
+- **Line 38:** Closes the response loop.
 - **Line 39:** Blank line separates related sections for readability; it performs no operation.
 - **Line 40:** Defines the empty-list and health test with an asynchronous callback receiving its context.
 - **Line 41:** Creates a fixture, which migrates its new empty file before app creation.
@@ -2081,20 +2141,20 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 48:** Closes the final test callback and registration.
 - **Line 49:** Blank line separates related sections for readability; it performs no operation.
 - **Line 50:** Defines the creation, ordering, and reopen-persistence test.
+- **Line 51:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 52:** Defines fake lesson data with every writable field. Its title includes spaces, an apostrophe, and SQL-looking text to check trimming and parameter binding rather than executing input as SQL.
+- **Line 53:** Sends that lesson to POST and waits for its response.
+- **Line 54:** Requires HTTP 201 for successful creation.
+- **Line 55:** Parses the saved lesson from the response body.
+- **Line 56:** Requires a positive integer database-generated ID.
+- **Line 57:** Requires a creation date that parses to a finite timestamp.
+- **Line 58:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 59:** The raw database row now also has an owner_id column that the API deliberately hides, so the test separates it from the other fields.
+- **Line 60:** Checks that the lesson was stored with the signed-in coach as its owner.
 
-### Lines 51–75
+### Lines 61–90
 
 ```text
-51 |   const state = await fixture(t);
-52 |   const input = { title: "  Coach's jab; DROP TABLE lessons; --  ", discipline: 'Boxing', skill_level: 'Intermediate', duration_minutes: 45, goal: 'Accuracy', drills: 'Practice jabs', coaching_notes: 'Keep guard up' };
-53 |   const response = await post(state, input);
-54 |   assert.equal(response.status, 201);
-55 |   const saved = await response.json();
-56 |   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
-57 |   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
-58 |   assert.deepEqual(saved, { ...input, title: input.title.trim(), id: saved.id, created_at: saved.created_at });
-59 |   const { owner_id: owner, ...stored } = state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id);
-60 |   assert.equal(owner, 'user-a');
 61 |   assert.deepEqual(stored, saved);
 62 |   const secondResponse = await post(state, { title: 'Second lesson', discipline: 'MMA' });
 63 |   assert.equal(secondResponse.status, 201);
@@ -2110,37 +2170,6 @@ Current implementation; connections and behavior are explained alongside every s
 73 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 2);
 74 | });
 75 |
-```
-
-- **Line 51:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 52:** Defines fake lesson data with every writable field. Its title includes spaces, an apostrophe, and SQL-looking text to check trimming and parameter binding rather than executing input as SQL.
-- **Line 53:** Sends that lesson to POST and waits for its response.
-- **Line 54:** Requires HTTP 201 for successful creation.
-- **Line 55:** Parses the saved lesson from the response body.
-- **Line 56:** Requires a positive integer database-generated ID.
-- **Line 57:** Requires a creation date that parses to a finite timestamp.
-- **Line 58:** Compares all returned fields to the input with a trimmed title plus generated metadata. Spread syntax copies the input, then later properties replace or add fields.
-- **Line 59:** The raw database row now also has an owner_id column that the API deliberately hides, so the test separates it from the other fields.
-- **Line 60:** Checks that the lesson was stored with the signed-in coach as its owner.
-- **Line 61:** The remaining nine fields must still equal what the API returned, proving the API shape did not change.
-- **Line 62:** Posts a second minimal fake lesson to test defaults and ordering.
-- **Line 63:** Requires HTTP 201 for that creation too.
-- **Line 64:** Parses the second saved lesson.
-- **Line 65:** Checks its omitted skill level defaulted to Beginner.
-- **Line 66:** Checks its omitted duration defaulted to null.
-- **Line 67:** Checks its omitted goal defaulted to empty text.
-- **Line 68:** Creates the expected newest-first array of the two saved rows.
-- **Line 69:** Checks that GET still returns exactly the saved ordered records after reopening.
-- **Line 70:** Closes the server and its SQLite connection.
-- **Line 71:** Reopens the same file and starts a new server/app using the fixture's start helper.
-- **Line 72:** Checks that GET still returns exactly the saved ordered records after reopening.
-- **Line 73:** Counts actual database rows and requires exactly two; no duplicates were created during migration rerun or restart.
-- **Line 74:** Closes the final test callback and registration.
-- **Line 75:** Blank line separates related sections for readability; it performs no operation.
-
-### Lines 76–100
-
-```text
 76 | test('invalid lesson inputs return 400 without saving records', async t => {
 77 |   const state = await fixture(t);
 78 |   const invalid = [{}, { title: '' }, { title: ' \t\n' }, { title: 42 }, { discipline: 'Unknown' }, { discipline: null }, { skill_level: 'Expert' }, { skill_level: null }, { duration_minutes: -1 }, { duration_minutes: 0 }, { duration_minutes: 1.5 }, { duration_minutes: '45' }, { duration_minutes: 1441 }, { goal: null }, { drills: [] }, { coaching_notes: {} }, { id: 123 }];
@@ -2156,6 +2185,42 @@ Current implementation; connections and behavior are explained alongside every s
 88 |     const response = await post(state, { title: 'Valid', discipline: 'Boxing', [field]: 'x'.repeat(limit + 1) });
 89 |     assert.equal(response.status, 400);
 90 |     await response.json();
+```
+
+- **Line 61:** The remaining nine fields must still equal what the API returned, proving the API shape did not change.
+- **Line 62:** Posts a second minimal fake lesson to test defaults and ordering.
+- **Line 63:** Requires HTTP 201 for that creation too.
+- **Line 64:** Parses the second saved lesson.
+- **Line 65:** Checks its omitted skill level defaulted to Beginner.
+- **Line 66:** Checks its omitted duration defaulted to null.
+- **Line 67:** Checks its omitted goal defaulted to empty text.
+- **Line 68:** Creates the expected newest-first array of the two saved rows.
+- **Line 69:** Checks that GET still returns exactly the saved ordered records after reopening.
+- **Line 70:** Closes the server and its SQLite connection.
+- **Line 71:** Reopens the same file and starts a new server/app using the fixture's start helper.
+- **Line 72:** Checks that GET still returns exactly the saved ordered records after reopening.
+- **Line 73:** Counts actual database rows and requires exactly two; no duplicates were created during migration rerun or restart.
+- **Line 74:** Closes the final test callback and registration.
+- **Line 75:** Blank line separates related sections for readability; it performs no operation.
+- **Line 76:** Defines a parent test for rejected lesson inputs and zero saved rows.
+- **Line 77:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 78:** Defines invalid patches covering missing/empty/whitespace/numeric title, unsupported/null discipline, invalid/null skill, negative/zero/fractional/string/too-large duration, null or wrong-type optional text, and a forbidden ID field.
+- **Line 79:** Iterates each invalid patch with its array index using destructuring of entries().
+- **Line 80:** Creates and awaits a named subtest for the current invalid case, with a human-readable one-based number.
+- **Line 81:** Uses an empty base for the missing-fields case; other cases start from a valid title and discipline so each patch isolates an invalid field.
+- **Line 82:** Merges base and invalid patch with spread syntax and sends the resulting JSON body.
+- **Line 83:** Requires HTTP 400 for the excessive field length.
+- **Line 84:** Requires the returned error property to be a string without requiring unstable exact wording.
+- **Line 85:** Closes the final test callback and registration.
+- **Line 86:** Closes the response loop.
+- **Line 87:** Iterates every configured text-field limit to exercise an over-limit value independently.
+- **Line 88:** Sends a valid base lesson overridden with a string one unit longer than the field's limit. The computed [field] property chooses which field to replace; repeat generates the string.
+- **Line 89:** Requires HTTP 400 for the excessive field length.
+- **Line 90:** Consumes the JSON response body before the next request.
+
+### Lines 91–120
+
+```text
 91 |   }
 92 |   assert.equal(state.database.prepare('SELECT count(*) AS count FROM lessons').get().count, 0);
 93 | });
@@ -2166,37 +2231,6 @@ Current implementation; connections and behavior are explained alongside every s
 98 |     const response = await fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': contentType }, body });
 99 |     assert.equal(response.status, status);
 100 |     const data = await response.json();
-```
-
-- **Line 76:** Defines a parent test for rejected lesson inputs and zero saved rows.
-- **Line 77:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 78:** Defines invalid patches covering missing/empty/whitespace/numeric title, unsupported/null discipline, invalid/null skill, negative/zero/fractional/string/too-large duration, null or wrong-type optional text, and a forbidden ID field.
-- **Line 79:** Iterates each invalid patch with its array index using destructuring of entries().
-- **Line 80:** Creates and awaits a named subtest for the current invalid case, with a human-readable one-based number.
-- **Line 81:** Uses an empty base for the missing-fields case; other cases start from a valid title and discipline so each patch isolates an invalid field.
-- **Line 82:** Merges base and invalid patch with spread syntax and sends the resulting JSON body.
-- **Line 83:** Requires HTTP 400.
-- **Line 84:** Requires the returned error property to be a string without requiring unstable exact wording.
-- **Line 85:** Closes the subtest callback and call.
-- **Line 86:** Closes the response loop.
-- **Line 87:** Iterates every configured text-field limit to exercise an over-limit value independently.
-- **Line 88:** Sends a valid base lesson overridden with a string one unit longer than the field's limit. The computed [field] property chooses which field to replace; repeat generates the string.
-- **Line 89:** Requires HTTP 400 for the excessive field length.
-- **Line 90:** Consumes the JSON response body before the next request.
-- **Line 91:** Closes the response loop.
-- **Line 92:** Confirms no rejected request inserted a database record.
-- **Line 93:** Closes the final test callback and registration.
-- **Line 94:** Blank line separates related sections for readability; it performs no operation.
-- **Line 95:** Defines HTTP parser and body-limit checks with safe public errors.
-- **Line 96:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 97:** Iterates raw body/media-type/expected-status triples: broken JSON, null, array, scalar, wrong media type, and a JSON body above 32 KB. The oversized body is valid JSON so it tests size handling.
-- **Line 98:** Sends each raw body with its specified Content-Type, bypassing the JSON POST helper to allow malformed inputs.
-- **Line 99:** Checks the expected 400 or 413 status.
-- **Line 100:** Parses the safe JSON response.
-
-### Lines 101–125
-
-```text
 101 |     assert.deepEqual(Object.keys(data), ['error']);
 102 |     assert.ok(!/SyntaxError|stack|node_modules|SQLITE/.test(data.error));
 103 |   }
@@ -2214,16 +2248,21 @@ Current implementation; connections and behavior are explained alongside every s
 115 |
 116 | test('fresh database is migrated before app creation without changing the schema', async t => {
 117 |   const state = await fixture(t);
-118 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
+118 |   assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
 119 |   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
 120 |   const unknown = await fetch(`${state.url}/missing`);
-121 |   assert.equal(unknown.status, 404);
-122 |   assert.deepEqual(await unknown.json(), { error: 'Route not found.' });
-123 | });
-124 |
-125 | test('update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely', async t => {
 ```
 
+- **Line 91:** Closes the response loop.
+- **Line 92:** Confirms no rejected request inserted a database record.
+- **Line 93:** Closes the final test callback and registration.
+- **Line 94:** Blank line separates related sections for readability; it performs no operation.
+- **Line 95:** Defines HTTP parser and body-limit checks with safe public errors.
+- **Line 96:** Creates a fixture, which migrates its new empty file before app creation.
+- **Line 97:** Iterates raw body/media-type/expected-status triples: broken JSON, null, array, scalar, wrong media type, and a JSON body above 32 KB. The oversized body is valid JSON so it tests size handling.
+- **Line 98:** Sends each raw body with its specified Content-Type, bypassing the JSON POST helper to allow malformed inputs.
+- **Line 99:** Checks the expected 400 or 413 status.
+- **Line 100:** Parses the safe JSON response.
 - **Line 101:** Requires that the only returned key is error, so no stack or internal detail properties are present.
 - **Line 102:** Rejects common internal error/stack/SQL markers in the public message using a regular expression.
 - **Line 103:** Closes the response loop.
@@ -2241,18 +2280,18 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 115:** Blank line separates related sections for readability; it performs no operation.
 - **Line 116:** Defines a fresh-file migration and unknown-route test.
 - **Line 117:** Creates a fixture, which migrates its new empty file before app creation.
-- **Line 118:** The migration history now lists version 3 (ownership) as well.
+- **Line 118:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 119:** Requires SQLite's integrity check to return ok.
 - **Line 120:** Requests an unknown route.
-- **Line 121:** Requires HTTP 404.
-- **Line 122:** Requires the existing safe route-not-found JSON message.
-- **Line 123:** Closes the final test callback and registration.
-- **Line 124:** Blank line separates related sections for readability; it performs no operation.
-- **Line 125:** Registers this named test with Node: update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
 
-### Lines 126–147
+### Lines 121–150
 
 ```text
+121 |   assert.equal(unknown.status, 404);
+122 |   assert.deepEqual(await unknown.json(), { error: 'Route not found.' });
+123 | });
+124 |
+125 | test('update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely', async t => {
 126 |   const state = await fixture(t);
 127 |   const original = await (await post(state, { title: 'Original', discipline: 'Boxing' })).json();
 128 |   const other = await (await post(state, { title: 'Keep this', discipline: 'MMA' })).json();
@@ -2260,7 +2299,7 @@ Current implementation; connections and behavior are explained alongside every s
 130 |   const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
 131 |   const response = await put(original.id, edited);
 132 |   assert.equal(response.status, 200);
-133 |   assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });
+133 |   assert.deepEqual(await response.json(), { ...edited, audience: 'Unspecified', id: original.id, created_at: original.created_at });
 134 |   assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);
 135 |   for (const id of ['0', '-1', '1.5', '2147483648', 'abc']) {
 136 |     assert.equal((await put(id, edited)).status, 400);
@@ -2275,8 +2314,16 @@ Current implementation; connections and behavior are explained alongside every s
 145 |   await state.stop(); await state.start();
 146 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);
 147 | });
+148 |
+149 | test('audience defaults for old clients, validates values and survives update and restart', async t => {
+150 |   const state = await fixture(t);
 ```
 
+- **Line 121:** Requires HTTP 404.
+- **Line 122:** Requires the existing safe route-not-found JSON message.
+- **Line 123:** Closes the final test callback and registration.
+- **Line 124:** Blank line separates related sections for readability; it performs no operation.
+- **Line 125:** Registers this named test with Node: update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely. The callback contains the actual checks; asynchronous tests await their operations. Any skip/timeout option shown controls whether it runs and its maximum duration.
 - **Line 126:** Creates a fixture, which migrates its new empty file before app creation.
 - **Line 127:** Creates the synthetic original row and records its ID/timestamp before update tests.
 - **Line 128:** Creates a second synthetic row that must remain untouched when the original is deleted.
@@ -2284,7 +2331,7 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 130:** Defines replacement values for every editable field, including reordered activity text, without changing identity metadata.
 - **Line 131:** Sends the update for the original synthetic row and captures its response.
 - **Line 132:** Asserts the response status is 200.
-- **Line 133:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
+- **Line 133:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 134:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 - **Line 135:** Tries invalid zero, negative, fractional, out-of-range and nonnumeric IDs to prove validation rejects them before writes.
 - **Line 136:** Checks the stated expectation using Node strict assertions: `assert.equal((await put(id, edited)).status, 400);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
@@ -2299,14 +2346,59 @@ Current implementation; connections and behavior are explained alongside every s
 - **Line 145:** Closes and reopens the disposable SQLite database and API, proving data is stored beyond the connection lifetime.
 - **Line 146:** Checks the stated expectation using Node strict assertions: `assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
 - **Line 147:** Closes the final test callback and registration.
+- **Line 148:** Blank line separates related sections for readability; it performs no operation.
+- **Line 149:** Registers an asynchronous API integration test for defaults, audience validation, editing and restart persistence using a disposable database.
+- **Line 150:** Creates a fixture, which migrates its new empty file before app creation.
+
+### Lines 151–168
+
+```text
+151 |   const legacy = await (await post(state, { title: 'Generic class', discipline: 'Boxing' })).json();
+152 |   assert.equal(legacy.audience, 'Unspecified');
+153 |   for (const audience of ['Kids', 'Adults', 'Unspecified']) {
+154 |     const input = { title: 'Generic class', discipline: 'Boxing', audience };
+155 |     const response = await post(state, input);
+156 |     assert.equal(response.status, 201);
+157 |     const created = await response.json();
+158 |     assert.equal(created.audience, audience);
+159 |     const updated = await fetch(`${state.url}/api/lessons/${created.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...input, audience: 'Adults' }) });
+160 |     assert.equal(updated.status, 200);
+161 |     assert.equal((await updated.json()).audience, 'Adults');
+162 |   }
+163 |   for (const audience of ['Teen', '', null, 7, {}]) assert.equal((await post(state, { title: 'Generic', discipline: 'Boxing', audience })).status, 400);
+164 |   const before = await (await fetch(`${state.url}/api/lessons`)).json();
+165 |   await state.stop();
+166 |   await state.start();
+167 |   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), before);
+168 | });
+```
+
+- **Line 151:** Creates a generic lesson without the new field to test older-client compatibility, then parses its response.
+- **Line 152:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 153:** Loops over all three allowed audiences so each is tested through the real API.
+- **Line 154:** Constructs a generic test lesson with the loop audience. No child or athlete personal information is used.
+- **Line 155:** Sends that lesson to POST and waits for its response.
+- **Line 156:** Requires HTTP 201 for successful creation.
+- **Line 157:** Parses the created lesson response to inspect its stored audience.
+- **Line 158:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 159:** Sends an authenticated PUT to the created lesson, changing its audience to Adults while retaining the other input fields.
+- **Line 160:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 161:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 162:** Closes the response loop.
+- **Line 163:** Tries unsupported strings and non-string values; each POST must return HTTP 400 without creating a lesson.
+- **Line 164:** Fetches the complete test lesson list before the server/database are stopped, for comparison after reopening.
+- **Line 165:** Closes the server and its SQLite connection.
+- **Line 166:** Reopens the same file and starts a new server/app using the fixture's start helper.
+- **Line 167:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 168:** Closes the final test callback and registration.
 
 ## client/src/LessonForm.jsx
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonForm.jsx`
 
-Browser create/update form. It receives an optional saved lesson from App; PUT updates that ID, while POST creates a new record. ActivityEditor edits drills.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import React, { useRef, useState } from 'react';
@@ -2316,11 +2408,11 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 5 | import { discardUpload, mediaPayload, newKey } from './media.js';
 6 |
 7 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-8 | const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+8 | const initial = { audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
 9 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 10 |
 11 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-12 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
+12 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
 13 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
 14 |   const [saving, setSaving] = useState(false);
 15 |   const [error, setError] = useState('');
@@ -2334,6 +2426,11 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 23 |
 24 |   async function submit(event) {
 25 |     event.preventDefault();
+26 |     if (submitting.current) return;
+27 |     setError('');
+28 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+29 |     if (registry.count()) {
+30 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
 ```
 
 - **Line 1:** Imports React plus useRef for a persistent immediate lock and useState for renderable values.
@@ -2343,11 +2440,11 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 - **Line 5:** Imports discardUpload (cleans up unsaved uploads), mediaPayload (turns attachments into the shape the API accepts) and newKey (makes temporary keys) from the new media helper file.
 - **Line 6:** Blank line separates related sections for readability; it performs no operation.
 - **Line 7:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
-- **Line 8:** Defines initial controlled field values; optional text starts empty, skill starts Beginner, and duration starts as an empty input string.
+- **Line 8:** Defines initial form values, including Unspecified for a new lesson audience; the other existing fields keep their defaults.
 - **Line 9:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
 - **Line 10:** Blank line separates related sections for readability; it performs no operation.
 - **Line 11:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
-- **Line 12:** Initializes state once from only editable fields. Nullish values become empty strings; new lessons use the initial defaults. IDs and timestamps are deliberately excluded from the editable payload.
+- **Line 12:** Initializes controlled form state from the existing lesson or defaults. Object.fromEntries rebuilds only known fields; ?? supplies the default for missing or null values.
 - **Line 13:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
 - **Line 14:** Initializes the saving flag to false.
 - **Line 15:** Initializes the form error message to empty text.
@@ -2357,19 +2454,19 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 - **Line 19:** Begins the shared input-change handler with the browser/React event parameter.
 - **Line 20:** Destructures the changed control's name and string value from event.target.
 - **Line 21:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
-- **Line 22:** Closes submit.
+- **Line 22:** Closes the component function.
 - **Line 23:** Blank line separates related sections for readability; it performs no operation.
 - **Line 24:** Declares the async form-submit handler.
 - **Line 25:** Prevents ordinary browser form navigation so React can perform the request.
+- **Line 26:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 27:** Clears any earlier error for this save attempt.
+- **Line 28:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 29:** Before saving, checks whether any media panel still holds unfinished work.
+- **Line 30:** If so, shows a plain message explaining what to do: press Add (or Done) to keep it, or Cancel to discard it.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |     if (submitting.current) return;
-27 |     setError('');
-28 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
-29 |     if (registry.count()) {
-30 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
 31 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
 32 |       return;
 33 |     }
@@ -2390,19 +2487,24 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 48 |       setSaving(false);
 49 |     }
 50 |   }
+51 |
+52 |   return (
+53 |     <PendingMedia.Provider value={registry}>
+54 |     <section className="form-panel" aria-labelledby="new-heading">
+55 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+56 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+57 |       <form onSubmit={submit}>
+58 |         <fieldset disabled={saving}>
+59 |           <legend className="sr-only">Lesson details</legend>
+60 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
 ```
 
-- **Line 26:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
-- **Line 27:** Clears any earlier error for this save attempt.
-- **Line 28:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
-- **Line 29:** Before saving, checks whether any media panel still holds unfinished work.
-- **Line 30:** If so, shows a plain message explaining what to do: press Add (or Done) to keep it, or Cancel to discard it.
 - **Line 31:** Scrolls to the first unfinished panel so the coach can see it.
 - **Line 32:** Stops the save. Nothing is sent to the server, so a lesson is never saved while an attachment is half-added.
-- **Line 33:** Closes finally.
+- **Line 33:** Closes the component function.
 - **Line 34:** Locks submission synchronously.
 - **Line 35:** Sets saving state so controls disable and progress feedback renders.
-- **Line 36:** Starts a try block around request/parsing/confirmation.
+- **Line 36:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
 - **Line 37:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
 - **Line 38:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
 - **Line 39:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
@@ -2415,39 +2517,8 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 - **Line 46:** Begins finally, which always executes after the attempt.
 - **Line 47:** Releases the immediate lock.
 - **Line 48:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
-- **Line 49:** Closes finally.
-- **Line 50:** Closes submit.
-
-### Lines 51–75
-
-```text
-51 |
-52 |   return (
-53 |     <PendingMedia.Provider value={registry}>
-54 |     <section className="form-panel" aria-labelledby="new-heading">
-55 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
-56 |       <p>Title and discipline are required. Add the details that help you coach.</p>
-57 |       <form onSubmit={submit}>
-58 |         <fieldset disabled={saving}>
-59 |           <legend className="sr-only">Lesson details</legend>
-60 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
-61 |           <div className="form-row">
-62 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
-63 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
-64 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
-65 |           </div>
-66 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
-67 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
-68 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
-69 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
-70 |         </fieldset>
-71 |         {saving && <p role="status">Saving your lesson…</p>}
-72 |         {error && <p className="error" role="alert">{error}</p>}
-73 |       </form>
-74 |     </section>
-75 |     </PendingMedia.Provider>
-```
-
+- **Line 49:** Closes the component function.
+- **Line 50:** Closes the component function.
 - **Line 51:** Blank line separates related sections for readability; it performs no operation.
 - **Line 52:** Begins returning the JSX form tree.
 - **Line 53:** Wraps the form so every media component inside can report to the registry.
@@ -2458,31 +2529,48 @@ Browser create/update form. It receives an optional saved lesson from App; PUT u
 - **Line 58:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
 - **Line 59:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
 - **Line 60:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
-- **Line 61:** Opens the responsive row for the three compact controls.
-- **Line 62:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
-- **Line 63:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
-- **Line 64:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
-- **Line 65:** Closes the responsive row.
-- **Line 66:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
-- **Line 67:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
-- **Line 68:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
-- **Line 69:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
-- **Line 70:** Closes the fieldset.
-- **Line 71:** Conditionally displays an accessible saving status via &&.
-- **Line 72:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
-- **Line 73:** Closes the form.
-- **Line 74:** Closes the section.
-- **Line 75:** Closes the wrapper.
 
-### Lines 76–77
+### Lines 61–78
 
 ```text
-76 |   );
-77 | }
+61 |           <div className="form-row">
+62 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+63 |             <label>Audience<select name="audience" value={values.audience} onChange={change}>{['Unspecified', 'Kids', 'Adults'].map(audience => <option key={audience}>{audience}</option>)}</select><small>Class group only. Never enter children’s personal information.</small></label>
+64 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+65 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+66 |           </div>
+67 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+68 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
+69 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+70 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
+71 |         </fieldset>
+72 |         {saving && <p role="status">Saving your lesson…</p>}
+73 |         {error && <p className="error" role="alert">{error}</p>}
+74 |       </form>
+75 |     </section>
+76 |     </PendingMedia.Provider>
+77 |   );
+78 | }
 ```
 
-- **Line 76:** Closes the JSX return expression and statement.
-- **Line 77:** Closes the component function.
+- **Line 61:** Opens the responsive row for the three compact controls.
+- **Line 62:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
+- **Line 63:** Renders the audience selector with three allowed choices and a privacy reminder. name links it to the shared change handler; value tracks current form state.
+- **Line 64:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 65:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 66:** Closes the responsive row.
+- **Line 67:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 68:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
+- **Line 69:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
+- **Line 70:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
+- **Line 71:** Closes the fieldset.
+- **Line 72:** Conditionally displays an accessible saving status via &&.
+- **Line 73:** Conditionally displays the error inside an alert paragraph; React renders the message as text rather than HTML.
+- **Line 74:** Closes the form.
+- **Line 75:** Closes the section.
+- **Line 76:** Closes the wrapper.
+- **Line 77:** Closes the JSX return expression and statement.
+- **Line 78:** Closes the component function.
 
 ## client/src/LessonCard.jsx
 
@@ -3472,9 +3560,9 @@ Current implementation; connections and behavior are explained alongside every s
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\schema.prisma`
 
-PostgreSQL design only. It generates a separate client and does not change the active SQLite application.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | generator client {
@@ -3492,16 +3580,21 @@ PostgreSQL design only. It generates a separate client and does not change the a
 13 |   id               Int      @id @default(autoincrement())
 14 |   title            String   @db.Text
 15 |   discipline       String   @db.Text
-16 |   skill_level      String   @default("Beginner") @db.Text
-17 |   duration_minutes Int?
-18 |   goal             String   @default("") @db.Text
-19 |   drills           String   @default("") @db.Text
-20 |   coaching_notes   String   @default("") @db.Text
-21 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
-22 |   media            LessonMedia[]
-23 |   owner_id         String?
-24 |   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
-25 |
+16 |   audience         String?  @default("Unspecified") @db.Text
+17 |   skill_level      String   @default("Beginner") @db.Text
+18 |   duration_minutes Int?
+19 |   goal             String   @default("") @db.Text
+20 |   drills           String   @default("") @db.Text
+21 |   coaching_notes   String   @default("") @db.Text
+22 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
+23 |   media            LessonMedia[]
+24 |   owner_id         String?
+25 |   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
+26 |
+27 |   @@index([owner_id])
+28 |   @@map("lessons")
+29 | }
+30 |
 ```
 
 - **Line 1:** Opens the client-generation configuration block.
@@ -3519,238 +3612,235 @@ PostgreSQL design only. It generates a separate client and does not change the a
 - **Line 13:** Defines a required integer primary key with automatically allocated IDs. SQLite ID ranges must be checked before any future import.
 - **Line 14:** Defines required unrestricted PostgreSQL text for the title.
 - **Line 15:** Defines required text for the discipline; allowed values are enforced by reviewed migration SQL and existing API validation.
-- **Line 16:** Defines required skill-level text with Beginner as the default.
-- **Line 17:** The question mark makes integer duration nullable, preserving an omitted manual duration.
-- **Line 18:** Defines required goal text with an empty-string default.
-- **Line 19:** Defines required drill text with an empty-string default.
-- **Line 20:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
-- **Line 21:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
-- **Line 22:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
-- **Line 23:** Adds owner_id to Lesson: the id of the coach who owns it. It is optional (String?) because lessons created before accounts existed have no owner yet.
-- **Line 24:** Declares the relation to User through owner_id. onDelete: Restrict means an account that still owns lessons cannot be deleted by accident.
-- **Line 25:** Blank line separates related sections and performs no operation.
+- **Line 16:** Adds a nullable Prisma text field. The question mark allows older clients to omit it; the database default is Unspecified. No existing field is removed.
+- **Line 17:** Defines required skill-level text with Beginner as the default.
+- **Line 18:** The question mark makes integer duration nullable, preserving an omitted manual duration.
+- **Line 19:** Defines required goal text with an empty-string default.
+- **Line 20:** Defines required drill text with an empty-string default.
+- **Line 21:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
+- **Line 22:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
+- **Line 23:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
+- **Line 24:** Adds owner_id to Lesson: the id of the coach who owns it. It is optional (String?) because lessons created before accounts existed have no owner yet.
+- **Line 25:** Declares the relation to User through owner_id. onDelete: Restrict means an account that still owns lessons cannot be deleted by accident.
+- **Line 26:** Blank line separates related sections and performs no operation.
+- **Line 27:** Adds an index on owner_id for attachments.
+- **Line 28:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 29:** Closes the generator block.
+- **Line 30:** Blank line separates related sections and performs no operation.
 
-### Lines 26–50
-
-```text
-26 |   @@index([owner_id])
-27 |   @@map("lessons")
-28 | }
-29 |
-30 | model LessonMedia {
-31 |   id          Int      @id @default(autoincrement())
-32 |   lesson_id   Int?
-33 |   position    Int      @default(0)
-34 |   kind        String   @db.Text
-35 |   origin      String   @db.Text
-36 |   url         String?  @db.Text
-37 |   title       String   @default("") @db.Text
-38 |   activity    String   @default("") @db.Text
-39 |   mime        String?  @db.Text
-40 |   size_bytes  Int?
-41 |   data        Bytes?
-42 |   credit      String   @default("") @db.Text
-43 |   source_page String?  @db.Text
-44 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
-45 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
-46 |   owner_id    String?
-47 |   owner       User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
-48 |
-49 |   @@index([lesson_id])
-50 |   @@index([owner_id])
-```
-
-- **Line 26:** Adds an index on owner_id so listing one coach’s lessons is fast.
-- **Line 27:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
-- **Line 28:** Closes the generator block.
-- **Line 29:** Blank line separates related sections and performs no operation.
-- **Line 30:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
-- **Line 31:** Auto-incrementing whole-number primary key.
-- **Line 32:** Optional (?) lesson id: empty for uploads not saved yet.
-- **Line 33:** Order within the lesson, defaulting to 0.
-- **Line 34:** Text column for the kind of attachment.
-- **Line 35:** Text column for where the attachment came from.
-- **Line 36:** Optional web address for linked media.
-- **Line 37:** Caption text, empty by default.
-- **Line 38:** Activity heading the attachment belongs to.
-- **Line 39:** Optional MIME type of an upload.
-- **Line 40:** Optional size in bytes.
-- **Line 41:** Optional binary file contents (Bytes maps to BYTEA).
-- **Line 42:** Credit text, empty by default.
-- **Line 43:** Optional link to the source page.
-- **Line 44:** Creation time with timezone, set automatically.
-- **Line 45:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
-- **Line 46:** Adds owner_id to LessonMedia so every attachment, even an unsaved upload, belongs to a coach.
-- **Line 47:** Relation from an attachment to its owner, with the same Restrict rule.
-- **Line 48:** Blank line separates related sections and performs no operation.
-- **Line 49:** Asks Prisma for an index on lesson_id.
-- **Line 50:** Adds an index on owner_id for attachments.
-
-### Lines 51–75
+### Lines 31–60
 
 ```text
-51 |   @@map("lesson_media")
-52 | }
-53 |
-54 | model User {
-55 |   id            String         @id
-56 |   name          String
-57 |   email         String         @unique
-58 |   emailVerified Boolean        @default(false) @map("email_verified")
-59 |   image         String?
-60 |   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-61 |   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-62 |   sessions      Session[]
-63 |   accounts      Account[]
-64 |   lessons       Lesson[]
-65 |   media         LessonMedia[]
-66 |
-67 |   @@map("auth_users")
-68 | }
-69 |
-70 | model Session {
-71 |   id        String   @id
-72 |   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
-73 |   token     String   @unique
-74 |   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-75 |   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+31 | model LessonMedia {
+32 |   id          Int      @id @default(autoincrement())
+33 |   lesson_id   Int?
+34 |   position    Int      @default(0)
+35 |   kind        String   @db.Text
+36 |   origin      String   @db.Text
+37 |   url         String?  @db.Text
+38 |   title       String   @default("") @db.Text
+39 |   activity    String   @default("") @db.Text
+40 |   mime        String?  @db.Text
+41 |   size_bytes  Int?
+42 |   data        Bytes?
+43 |   credit      String   @default("") @db.Text
+44 |   source_page String?  @db.Text
+45 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
+46 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+47 |   owner_id    String?
+48 |   owner       User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
+49 |
+50 |   @@index([lesson_id])
+51 |   @@index([owner_id])
+52 |   @@map("lesson_media")
+53 | }
+54 |
+55 | model User {
+56 |   id            String         @id
+57 |   name          String
+58 |   email         String         @unique
+59 |   emailVerified Boolean        @default(false) @map("email_verified")
+60 |   image         String?
 ```
 
-- **Line 51:** Maps the model to the existing table name lesson_media.
-- **Line 52:** Closes the generator block.
-- **Line 53:** Blank line separates related sections and performs no operation.
-- **Line 54:** Declares the User model: one coach account. Better Auth reads and writes it.
-- **Line 55:** Text primary key; Better Auth creates random ids.
-- **Line 56:** The coach’s display name.
-- **Line 57:** The email address; @unique means no two accounts can share it. Better Auth lowercases it.
-- **Line 58:** Whether the email was verified (not enforced in this local version); stored as email_verified in the database.
-- **Line 59:** Optional profile picture address (used by Google sign-in).
-- **Line 60:** When the account was created.
-- **Line 61:** When the account was last changed; @updatedAt refreshes it automatically.
-- **Line 62:** The coach’s login sessions (reverse side of Session.user).
-- **Line 63:** The coach’s sign-in methods (password, Google).
-- **Line 64:** The lessons this coach owns.
-- **Line 65:** The attachments this coach owns.
-- **Line 66:** Blank line separates related sections and performs no operation.
-- **Line 67:** Maps the model to the auth_users table.
-- **Line 68:** Closes the generator block.
-- **Line 69:** Blank line separates related sections and performs no operation.
-- **Line 70:** Declares Session: one signed-in browser. The browser holds only a random token; everything else is here on the server.
-- **Line 71:** Text primary key.
-- **Line 72:** When the session stops working (seven days after sign-in, refreshed daily).
-- **Line 73:** The secret session token; unique so one token means one session.
-- **Line 74:** When the session started.
-- **Line 75:** When the session was last refreshed.
+- **Line 31:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
+- **Line 32:** Auto-incrementing whole-number primary key.
+- **Line 33:** Optional (?) lesson id: empty for uploads not saved yet.
+- **Line 34:** Order within the lesson, defaulting to 0.
+- **Line 35:** Text column for the kind of attachment.
+- **Line 36:** Text column for where the attachment came from.
+- **Line 37:** Optional web address for linked media.
+- **Line 38:** Caption text, empty by default.
+- **Line 39:** Activity heading the attachment belongs to.
+- **Line 40:** Optional MIME type of an upload.
+- **Line 41:** Optional size in bytes.
+- **Line 42:** Optional binary file contents (Bytes maps to BYTEA).
+- **Line 43:** Credit text, empty by default.
+- **Line 44:** Optional link to the source page.
+- **Line 45:** Creation time with timezone, set automatically.
+- **Line 46:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
+- **Line 47:** Adds owner_id to LessonMedia so every attachment, even an unsaved upload, belongs to a coach.
+- **Line 48:** Relation from an attachment to its owner, with the same Restrict rule.
+- **Line 49:** Blank line separates related sections and performs no operation.
+- **Line 50:** Asks Prisma for an index on lesson_id.
+- **Line 51:** Adds an index on owner_id for attachments.
+- **Line 52:** Maps the model to the existing table name lesson_media.
+- **Line 53:** Closes the generator block.
+- **Line 54:** Blank line separates related sections and performs no operation.
+- **Line 55:** Declares the User model: one coach account. Better Auth reads and writes it.
+- **Line 56:** Text primary key; Better Auth creates random ids.
+- **Line 57:** The coach’s display name.
+- **Line 58:** The email address; @unique means no two accounts can share it. Better Auth lowercases it.
+- **Line 59:** Whether the email was verified (not enforced in this local version); stored as email_verified in the database.
+- **Line 60:** Optional profile picture address (used by Google sign-in).
 
-### Lines 76–100
+### Lines 61–90
 
 ```text
-76 |   ipAddress String?  @map("ip_address")
-77 |   userAgent String?  @map("user_agent")
-78 |   userId    String   @map("user_id")
-79 |   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-80 |
-81 |   @@index([userId])
-82 |   @@map("auth_sessions")
-83 | }
-84 |
-85 | model Account {
-86 |   id                    String    @id
-87 |   accountId             String    @map("account_id")
-88 |   providerId            String    @map("provider_id")
-89 |   userId                String    @map("user_id")
-90 |   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-91 |   accessToken           String?   @map("access_token")
-92 |   refreshToken          String?   @map("refresh_token")
-93 |   idToken               String?   @map("id_token")
-94 |   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
-95 |   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
-96 |   scope                 String?
-97 |   password              String?
-98 |   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-99 |   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-100 |
+61 |   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+62 |   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+63 |   sessions      Session[]
+64 |   accounts      Account[]
+65 |   lessons       Lesson[]
+66 |   media         LessonMedia[]
+67 |
+68 |   @@map("auth_users")
+69 | }
+70 |
+71 | model Session {
+72 |   id        String   @id
+73 |   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+74 |   token     String   @unique
+75 |   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+76 |   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+77 |   ipAddress String?  @map("ip_address")
+78 |   userAgent String?  @map("user_agent")
+79 |   userId    String   @map("user_id")
+80 |   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+81 |
+82 |   @@index([userId])
+83 |   @@map("auth_sessions")
+84 | }
+85 |
+86 | model Account {
+87 |   id                    String    @id
+88 |   accountId             String    @map("account_id")
+89 |   providerId            String    @map("provider_id")
+90 |   userId                String    @map("user_id")
 ```
 
-- **Line 76:** The network address the session was created from (for the coach’s own audit).
-- **Line 77:** The browser description the session was created with.
-- **Line 78:** The coach this session belongs to.
-- **Line 79:** Relation to User. onDelete: Cascade removes sessions when an account is removed.
-- **Line 80:** Blank line separates related sections and performs no operation.
-- **Line 81:** Index for finding all sessions of one coach.
-- **Line 82:** Maps the model to the auth_sessions table.
-- **Line 83:** Closes the generator block.
-- **Line 84:** Blank line separates related sections and performs no operation.
-- **Line 85:** Declares Account: one way a coach can sign in (the password credential, or Google).
-- **Line 86:** Text primary key.
-- **Line 87:** The id of the account at the provider (for passwords it is the coach’s own id).
-- **Line 88:** Which provider: credential for email and password, or google.
-- **Line 89:** The coach this sign-in method belongs to.
-- **Line 90:** Relation to User with Cascade deletion.
-- **Line 91:** Google access token, if Google sign-in is used.
-- **Line 92:** Google refresh token, if used.
-- **Line 93:** Google identity token, if used.
-- **Line 94:** When the Google access token expires.
-- **Line 95:** When the Google refresh token expires.
-- **Line 96:** Permissions granted by Google.
-- **Line 97:** The password HASH (salted scrypt, never the password itself) for the credential provider.
-- **Line 98:** When this sign-in method was added.
-- **Line 99:** When it was last changed.
-- **Line 100:** Blank line separates related sections and performs no operation.
+- **Line 61:** When the account was created.
+- **Line 62:** When the account was last changed; @updatedAt refreshes it automatically.
+- **Line 63:** The coach’s login sessions (reverse side of Session.user).
+- **Line 64:** The coach’s sign-in methods (password, Google).
+- **Line 65:** The lessons this coach owns.
+- **Line 66:** The attachments this coach owns.
+- **Line 67:** Blank line separates related sections and performs no operation.
+- **Line 68:** Maps the model to the auth_users table.
+- **Line 69:** Closes the generator block.
+- **Line 70:** Blank line separates related sections and performs no operation.
+- **Line 71:** Declares Session: one signed-in browser. The browser holds only a random token; everything else is here on the server.
+- **Line 72:** Text primary key.
+- **Line 73:** When the session stops working (seven days after sign-in, refreshed daily).
+- **Line 74:** The secret session token; unique so one token means one session.
+- **Line 75:** When the session started.
+- **Line 76:** When the session was last refreshed.
+- **Line 77:** The network address the session was created from (for the coach’s own audit).
+- **Line 78:** The browser description the session was created with.
+- **Line 79:** The coach this session belongs to.
+- **Line 80:** Relation to User. onDelete: Cascade removes sessions when an account is removed.
+- **Line 81:** Blank line separates related sections and performs no operation.
+- **Line 82:** Index for finding a coach’s sign-in methods.
+- **Line 83:** Maps the model to the auth_sessions table.
+- **Line 84:** Closes the generator block.
+- **Line 85:** Blank line separates related sections and performs no operation.
+- **Line 86:** Declares Account: one way a coach can sign in (the password credential, or Google).
+- **Line 87:** Text primary key.
+- **Line 88:** The id of the account at the provider (for passwords it is the coach’s own id).
+- **Line 89:** Which provider: credential for email and password, or google.
+- **Line 90:** The coach this sign-in method belongs to.
 
-### Lines 101–124
+### Lines 91–120
 
 ```text
-101 |   @@index([userId])
-102 |   @@map("auth_accounts")
-103 | }
-104 |
-105 | model Verification {
-106 |   id         String   @id
-107 |   identifier String
-108 |   value      String
-109 |   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
-110 |   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-111 |   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-112 |
-113 |   @@index([identifier])
-114 |   @@map("auth_verifications")
-115 | }
-116 |
-117 | model RateLimit {
-118 |   id          String @id
-119 |   key         String @unique
-120 |   count       Int
-121 |   lastRequest BigInt @map("last_request")
-122 |
-123 |   @@map("auth_rate_limits")
-124 | }
+91 |   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+92 |   accessToken           String?   @map("access_token")
+93 |   refreshToken          String?   @map("refresh_token")
+94 |   idToken               String?   @map("id_token")
+95 |   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+96 |   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+97 |   scope                 String?
+98 |   password              String?
+99 |   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+100 |   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+101 |
+102 |   @@index([userId])
+103 |   @@map("auth_accounts")
+104 | }
+105 |
+106 | model Verification {
+107 |   id         String   @id
+108 |   identifier String
+109 |   value      String
+110 |   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+111 |   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+112 |   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+113 |
+114 |   @@index([identifier])
+115 |   @@map("auth_verifications")
+116 | }
+117 |
+118 | model RateLimit {
+119 |   id          String @id
+120 |   key         String @unique
 ```
 
-- **Line 101:** Index for finding a coach’s sign-in methods.
-- **Line 102:** Maps the model to the auth_accounts table.
-- **Line 103:** Closes the generator block.
-- **Line 104:** Blank line separates related sections and performs no operation.
-- **Line 105:** Declares Verification: short-lived one-time tokens, such as the password reset token.
-- **Line 106:** Text primary key.
-- **Line 107:** What the token is for, for example a reset request for one coach.
-- **Line 108:** The token value or data stored with it.
-- **Line 109:** When the token expires (one hour for reset links).
-- **Line 110:** When it was created.
-- **Line 111:** When it was last changed.
-- **Line 112:** Blank line separates related sections and performs no operation.
-- **Line 113:** Index for looking tokens up by what they are for.
-- **Line 114:** Maps the model to the auth_verifications table.
-- **Line 115:** Closes the generator block.
-- **Line 116:** Blank line separates related sections and performs no operation.
-- **Line 117:** Declares RateLimit: counters that slow down repeated requests (for example guessing passwords). Keeping them in the database means a restart does not reset them.
-- **Line 118:** Text primary key.
-- **Line 119:** A key made from the request path and the client address; unique so each has one counter.
-- **Line 120:** How many requests were made in the current window.
-- **Line 121:** When the last request happened, in milliseconds (BigInt because it is a large number).
-- **Line 122:** Blank line separates related sections and performs no operation.
-- **Line 123:** Maps the model to the auth_rate_limits table.
-- **Line 124:** Closes the generator block.
+- **Line 91:** Relation to User with Cascade deletion.
+- **Line 92:** Google access token, if Google sign-in is used.
+- **Line 93:** Google refresh token, if used.
+- **Line 94:** Google identity token, if used.
+- **Line 95:** When the Google access token expires.
+- **Line 96:** When the Google refresh token expires.
+- **Line 97:** Permissions granted by Google.
+- **Line 98:** The password HASH (salted scrypt, never the password itself) for the credential provider.
+- **Line 99:** When this sign-in method was added.
+- **Line 100:** When it was last changed.
+- **Line 101:** Blank line separates related sections and performs no operation.
+- **Line 102:** Index for finding a coach’s sign-in methods.
+- **Line 103:** Maps the model to the auth_accounts table.
+- **Line 104:** Closes the generator block.
+- **Line 105:** Blank line separates related sections and performs no operation.
+- **Line 106:** Declares Verification: short-lived one-time tokens, such as the password reset token.
+- **Line 107:** Text primary key.
+- **Line 108:** What the token is for, for example a reset request for one coach.
+- **Line 109:** The token value or data stored with it.
+- **Line 110:** When the token expires (one hour for reset links).
+- **Line 111:** When it was created.
+- **Line 112:** When it was last changed.
+- **Line 113:** Blank line separates related sections and performs no operation.
+- **Line 114:** Index for looking tokens up by what they are for.
+- **Line 115:** Maps the model to the auth_verifications table.
+- **Line 116:** Closes the generator block.
+- **Line 117:** Blank line separates related sections and performs no operation.
+- **Line 118:** Declares RateLimit: counters that slow down repeated requests (for example guessing passwords). Keeping them in the database means a restart does not reset them.
+- **Line 119:** Text primary key.
+- **Line 120:** A key made from the request path and the client address; unique so each has one counter.
+
+### Lines 121–125
+
+```text
+121 |   count       Int
+122 |   lastRequest BigInt @map("last_request")
+123 |
+124 |   @@map("auth_rate_limits")
+125 | }
+```
+
+- **Line 121:** How many requests were made in the current window.
+- **Line 122:** When the last request happened, in milliseconds (BigInt because it is a large number).
+- **Line 123:** Blank line separates related sections and performs no operation.
+- **Line 124:** Maps the model to the auth_rate_limits table.
+- **Line 125:** Closes the generator block.
 
 ## prisma.config.js
 
@@ -4800,14 +4890,14 @@ Fixed public reference catalog and local relevance filter. No AI-generated URL i
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-store.js`
 
-Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and transactions; Prisma uses asynchronous bound queries. Both preserve the existing nine-field lesson API and add a media group that stores uploaded files and links in the lesson_media table, attached to lessons inside the same transaction.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | export class MediaReferenceError extends Error {}
 2 |
-3 | const lessonColumns = 'id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at';
+3 | const lessonColumns = "id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at, COALESCE(audience, 'Unspecified') AS audience";
 4 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
 5 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
 6 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
@@ -4817,8 +4907,8 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 10 |   const list = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE owner_id = ? ORDER BY created_at DESC, id DESC`);
 11 |   const find = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE id = ?`);
 12 |   const insert = database.prepare(`INSERT INTO lessons
-13 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id)
-14 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId)`);
+13 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id, audience)
+14 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId, @audience)`);
 15 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
 16 |   const findMedia = database.prepare('SELECT id, lesson_id, owner_id FROM lesson_media WHERE id = ?');
 17 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
@@ -4830,11 +4920,16 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 23 |     const keep = new Set();
 24 |     items.forEach((item, position) => {
 25 |       if (item.id) {
+26 |         const row = findMedia.get(item.id);
+27 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+28 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
+29 |         keep.add(item.id);
+30 |       } else {
 ```
 
 - **Line 1:** Defines MediaReferenceError, thrown when a lesson refers to an attachment that does not exist or belongs to another lesson; the API turns it into a 400 message.
 - **Line 2:** Blank line separating related statements; it has no runtime effect.
-- **Line 3:** The nine lesson columns the API returns. Listing them explicitly (instead of SELECT *) keeps the new owner_id column out of every response.
+- **Line 3:** Lists public lesson columns. SQL COALESCE returns Unspecified for a null audience; AS names the resulting API field audience.
 - **Line 4:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
 - **Line 5:** The same list in Prisma’s select format.
 - **Line 6:** Creates the standard error for a missing attachment.
@@ -4844,8 +4939,8 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 - **Line 10:** Listing now needs an owner: only that coach’s lessons are returned.
 - **Line 11:** Finding a lesson by id returns only the nine public columns.
 - **Line 12:** Begins a multiline template string defining the parameterized INSERT command.
-- **Line 13:** The insert statement now also stores owner_id.
-- **Line 14:** The matching named value @ownerId (filled in safely by the driver).
+- **Line 13:** Lists the INSERT columns, now including audience alongside the existing fields and owner ID.
+- **Line 14:** Binds each INSERT value by name, including audience, so user input is never concatenated into SQL.
 - **Line 15:** Prepared query: the ids already attached to a lesson.
 - **Line 16:** When looking up an attachment, also reads who owns it.
 - **Line 17:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
@@ -4857,15 +4952,15 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 - **Line 23:** Will hold the ids that stay.
 - **Line 24:** Goes through the new list with each item’s position.
 - **Line 25:** An item with an id is an existing attachment.
+- **Line 26:** Looks it up.
+- **Line 27:** Same ownership rule as the SQLite store.
+- **Line 28:** Attaches it and updates its caption, activity and position.
+- **Line 29:** Remembers to keep it.
+- **Line 30:** Otherwise it is a new link.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |         const row = findMedia.get(item.id);
-27 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-28 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
-29 |         keep.add(item.id);
-30 |       } else {
 31 |         keep.add(Number(addLink.run({ lessonId, ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
 32 |       }
 33 |     });
@@ -4877,7 +4972,7 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 39 |     return find.get(result.lastInsertRowid);
 40 |   });
 41 |   const update = database.transaction((ownerId, id, lesson, media) => {
-42 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
+42 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes, audience=@audience WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
 43 |     if (!result.changes) return null;
 44 |     if (media) attach(ownerId, id, media);
 45 |     return find.get(id);
@@ -4886,37 +4981,6 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 48 |     if (!database.prepare('SELECT 1 FROM lessons WHERE id=? AND owner_id=?').get(id, ownerId)) return false;
 49 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
 50 |     return database.prepare('DELETE FROM lessons WHERE id=? AND owner_id=?').run(id, ownerId).changes > 0;
-```
-
-- **Line 26:** Looks it up.
-- **Line 27:** An attachment may be attached only if it exists, belongs to the same owner, and is unattached or already attached to this lesson. This stops one coach attaching another coach’s upload by guessing its id.
-- **Line 28:** Attaches it and updates its caption, activity and position.
-- **Line 29:** Remembers to keep it.
-- **Line 30:** Otherwise it is a new link.
-- **Line 31:** New link attachments are stored with the owner.
-- **Line 32:** Closes the preceding block (function, object, or statement body).
-- **Line 33:** Closes the callback body and the function call that received it.
-- **Line 34:** Deletes attachments that were attached before but are not in the new list.
-- **Line 35:** Closes the preceding block (function, object, or statement body).
-- **Line 36:** Create now takes the owner as its first argument.
-- **Line 37:** Inserts the lesson with its owner.
-- **Line 38:** Attaches media for the same owner.
-- **Line 39:** Reads back the new row using its database-assigned ID, including the generated timestamp.
-- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 41:** Update now takes the owner first.
-- **Line 42:** The UPDATE statement now has an extra condition, owner_id = @ownerId, so a coach can only change their own lesson. If no row matches, nothing is changed.
-- **Line 43:** If no row matched, returns null (lesson not found) without touching media.
-- **Line 44:** Media is attached for the same owner.
-- **Line 45:** Returns the updated lesson.
-- **Line 46:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 47:** Delete now takes the owner first.
-- **Line 48:** First checks that the lesson exists and belongs to this owner; otherwise returns false and deletes nothing, including attachments.
-- **Line 49:** Deletes the lesson’s attachments first.
-- **Line 50:** Deletes the lesson only when it is owned by this coach.
-
-### Lines 51–75
-
-```text
 51 |   });
 52 |   const media = {
 53 |     list: ownerId => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE owner_id = ? AND lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(ownerId),
@@ -4927,23 +4991,28 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 58 |     getFile: (ownerId, id) => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND owner_id = ? AND origin = 'upload'").get(id, ownerId) || null,
 59 |     removeOrphan: (ownerId, id) => database.prepare("DELETE FROM lesson_media WHERE id = ? AND owner_id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id, ownerId).changes > 0,
 60 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
-61 |   };
-62 |   return { list: ownerId => list.all(ownerId), create, update, remove, media };
-63 | }
-64 |
-65 | export function prismaLessons(client) {
-66 |   const serialize = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
-67 |   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
-68 |   async function attach(tx, ownerId, lessonId, items) {
-69 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
-70 |     const keep = new Set();
-71 |     for (const [position, item] of items.entries()) {
-72 |       if (item.id) {
-73 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true, owner_id: true } });
-74 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-75 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
 ```
 
+- **Line 31:** New link attachments are stored with the owner.
+- **Line 32:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 33:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 34:** Deletes attachments that were attached before but are not in the new list.
+- **Line 35:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 36:** Create now takes the owner as its first argument.
+- **Line 37:** Inserts the lesson with its owner.
+- **Line 38:** Attaches media for the same owner.
+- **Line 39:** Reads back the new row using its database-assigned ID, including the generated timestamp.
+- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 41:** Update now takes the owner first.
+- **Line 42:** Updates the existing lesson and audience using bound parameters. Both ID and owner must match; it cannot edit another account’s lesson.
+- **Line 43:** If no row matched, returns null (lesson not found) without touching media.
+- **Line 44:** Media is attached for the same owner.
+- **Line 45:** Returns the updated lesson.
+- **Line 46:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 47:** Delete now takes the owner first.
+- **Line 48:** First checks that the lesson exists and belongs to this owner; otherwise returns false and deletes nothing, including attachments.
+- **Line 49:** Deletes the lesson’s attachments first.
+- **Line 50:** Deletes the lesson only when it is owned by this coach.
 - **Line 51:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 - **Line 52:** Starts the media functions exposed to the API.
 - **Line 53:** Lists attachments of saved lessons belonging to the owner only.
@@ -4954,25 +5023,25 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 - **Line 58:** Fetches an uploaded file only if the owner matches.
 - **Line 59:** Deletes an unsaved upload only if the owner matches.
 - **Line 60:** Deletes unattached uploads older than the given age and reports how many.
-- **Line 61:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 62:** The store’s list now needs an owner.
-- **Line 63:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 64:** Blank line separating related statements; it has no runtime effect.
-- **Line 65:** Builds the PostgreSQL-backed store from the guarded Prisma client.
-- **Line 66:** The PostgreSQL store removes owner_id from each lesson before returning it, so responses keep the original nine fields.
-- **Line 67:** Same for attachments.
-- **Line 68:** PostgreSQL attach also takes the owner.
-- **Line 69:** Remembers the lesson’s current attachments.
-- **Line 70:** Will hold the ids that stay.
-- **Line 71:** Goes through the new list with positions.
-- **Line 72:** An item with an id is an existing attachment.
-- **Line 73:** Reads the attachment’s lesson and owner.
-- **Line 74:** Same ownership rule as the SQLite store.
-- **Line 75:** Attaches it and updates caption, activity and position.
 
-### Lines 76–100
+### Lines 61–90
 
 ```text
+61 |   };
+62 |   return { list: ownerId => list.all(ownerId), create, update, remove, media };
+63 | }
+64 |
+65 | export function prismaLessons(client) {
+66 |   const serialize = ({ owner_id, ...row }) => ({ ...row, audience: row.audience ?? 'Unspecified', created_at: row.created_at.toISOString() });
+67 |   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
+68 |   async function attach(tx, ownerId, lessonId, items) {
+69 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
+70 |     const keep = new Set();
+71 |     for (const [position, item] of items.entries()) {
+72 |       if (item.id) {
+73 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true, owner_id: true } });
+74 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+75 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
 76 |         keep.add(item.id);
 77 |       } else {
 78 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, owner_id: ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
@@ -4988,6 +5057,42 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 88 |     create: (ownerId, lesson, media) => transaction(async tx => {
 89 |       const created = await tx.lesson.create({ data: { ...lesson, owner_id: ownerId } });
 90 |       if (media) await attach(tx, ownerId, created.id, media);
+```
+
+- **Line 61:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 62:** The store’s list now needs an owner.
+- **Line 63:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 64:** Blank line separating related statements; it has no runtime effect.
+- **Line 65:** Builds the PostgreSQL-backed store from the guarded Prisma client.
+- **Line 66:** Removes the private owner field, normalizes null audience to Unspecified, and serializes the timestamp as ISO text for React.
+- **Line 67:** Same for attachments.
+- **Line 68:** PostgreSQL attach also takes the owner.
+- **Line 69:** Remembers the lesson’s current attachments.
+- **Line 70:** Will hold the ids that stay.
+- **Line 71:** Goes through the new list with positions.
+- **Line 72:** An item with an id is an existing attachment.
+- **Line 73:** Reads the attachment’s lesson and owner.
+- **Line 74:** Same ownership rule as the SQLite store.
+- **Line 75:** Attaches it and updates caption, activity and position.
+- **Line 76:** Remembers to keep it.
+- **Line 77:** Otherwise it is a new link.
+- **Line 78:** Creates the link attachment with its owner.
+- **Line 79:** Remembers its id.
+- **Line 80:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 81:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 82:** Works out which previous attachments are no longer wanted.
+- **Line 83:** Deletes them if there are any.
+- **Line 84:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 85:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
+- **Line 86:** Starts the returned object containing the store methods; each following property supplies one operation.
+- **Line 87:** Lists only the owner’s lessons.
+- **Line 88:** Create now takes the owner first.
+- **Line 89:** Creates the lesson with its owner id.
+- **Line 90:** Attaches media for the same owner.
+
+### Lines 91–116
+
+```text
 91 |       return serialize(created);
 92 |     }),
 93 |     update: (ownerId, id, lesson, media) => transaction(async tx => {
@@ -4998,37 +5103,6 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 98 |       return serialize(updated);
 99 |     }),
 100 |     remove: (ownerId, id) => transaction(async tx => {
-```
-
-- **Line 76:** Remembers to keep it.
-- **Line 77:** Otherwise it is a new link.
-- **Line 78:** Creates the link attachment with its owner.
-- **Line 79:** Remembers its id.
-- **Line 80:** Closes the preceding block (function, object, or statement body).
-- **Line 81:** Closes the preceding block (function, object, or statement body).
-- **Line 82:** Works out which previous attachments are no longer wanted.
-- **Line 83:** Deletes them if there are any.
-- **Line 84:** Closes the preceding block (function, object, or statement body).
-- **Line 85:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
-- **Line 86:** Starts the returned object containing the store methods; each following property supplies one operation.
-- **Line 87:** Lists only the owner’s lessons.
-- **Line 88:** Create now takes the owner first.
-- **Line 89:** Creates the lesson with its owner id.
-- **Line 90:** Attaches media for the same owner.
-- **Line 91:** Returns the lesson in the API format.
-- **Line 92:** Ends the transaction callback.
-- **Line 93:** Update now takes the owner first.
-- **Line 94:** Will hold the updated lesson.
-- **Line 95:** Updates the lesson only where both the id and the owner match; Prisma reports “record not found” (turned into null) otherwise.
-- **Line 96:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
-- **Line 97:** Attaches media for the owner.
-- **Line 98:** Returns the updated lesson.
-- **Line 99:** Ends the transaction callback.
-- **Line 100:** Delete now runs in a transaction and takes the owner first.
-
-### Lines 101–116
-
-```text
 101 |       if (!await tx.lesson.findFirst({ where: { id, owner_id: ownerId }, select: { id: true } })) return false;
 102 |       await tx.lessonMedia.deleteMany({ where: { lesson_id: id } });
 103 |       return (await tx.lesson.deleteMany({ where: { id, owner_id: ownerId } })).count > 0;
@@ -5047,6 +5121,16 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 116 | }
 ```
 
+- **Line 91:** Returns the lesson in the API format.
+- **Line 92:** Ends the transaction callback.
+- **Line 93:** Update now takes the owner first.
+- **Line 94:** Will hold the updated lesson.
+- **Line 95:** Updates the lesson only where both the id and the owner match; Prisma reports “record not found” (turned into null) otherwise.
+- **Line 96:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
+- **Line 97:** Attaches media for the owner.
+- **Line 98:** Returns the updated lesson.
+- **Line 99:** Ends the transaction callback.
+- **Line 100:** Delete now runs in a transaction and takes the owner first.
 - **Line 101:** Returns false without changing anything when the lesson is not this owner’s.
 - **Line 102:** Deletes the lesson’s attachments.
 - **Line 103:** Deletes the lesson where the id and owner match.
@@ -5057,7 +5141,7 @@ Database-specific CRUD adapters used by Express. SQLite uses prepared SQL and tr
 - **Line 108:** Fetches a file for the owner.
 - **Line 109:** Finds the file only if the owner matches.
 - **Line 110:** Returns them with the bytes as a Buffer, or null when it does not exist.
-- **Line 111:** Closes the object or block and continues the surrounding list.
+- **Line 111:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 - **Line 112:** Deletes an unsaved upload only if the owner matches.
 - **Line 113:** Deletes unattached uploads older than a given age.
 - **Line 114:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
@@ -7168,9 +7252,9 @@ Fast Node tests for the media rules that need no database and no internet: file 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-api.test.js`
 
-End-to-end tests of the media API against a real, temporary SQLite database and a real local HTTP server. Link verification and media searching are replaced by fakes so no internet is needed. They prove uploads, attaching, editing, deleting, persistence after a server restart, safe failures and rate limits.
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import test from 'node:test';
@@ -7198,6 +7282,11 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 23 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
 24 |   const state = { filename: path.join(directory, 'test.sqlite') };
 25 |   state.stop = async () => {
+26 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+27 |     if (state.database?.open) state.database.close();
+28 |   };
+29 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
+30 |   state.start = async () => {
 ```
 
 - **Line 1:** Imports Node’s test function.
@@ -7225,15 +7314,15 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 23:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
 - **Line 24:** The state object starts with the database file path.
 - **Line 25:** stop closes the server and database.
+- **Line 26:** Closes the HTTP server if it is listening.
+- **Line 27:** Closes the database if it is open.
+- **Line 28:** Closes the preceding block and ends the statement.
+- **Line 29:** Registers cleanup after the test: stop everything and delete the temporary folder.
+- **Line 30:** start opens the database and server; tests call stop and start to simulate a restart.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
-27 |     if (state.database?.open) state.database.close();
-28 |   };
-29 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
-30 |   state.start = async () => {
 31 |     state.database = new Database(state.filename);
 32 |     migrate(state.database);
 33 |     state.server = createApp(state.database, { verifyLink, ...testOptions, ...extra }).listen(0, '127.0.0.1');
@@ -7254,13 +7343,18 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 48 |   const saved = await response.json();
 49 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
 50 |   assert.ok(!('data' in saved));
+51 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
+52 |   assert.equal(file.status, 200);
+53 |   assert.equal(file.headers.get('content-type'), 'image/png');
+54 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+55 |   assert.equal(file.headers.get('cache-control'), 'private, no-cache');
+56 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
+57 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+58 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
+59 |   assert.equal(partial.status, 206);
+60 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
 ```
 
-- **Line 26:** Closes the HTTP server if it is listening.
-- **Line 27:** Closes the database if it is open.
-- **Line 28:** Closes the preceding block and ends the statement.
-- **Line 29:** Registers cleanup after the test: stop everything and delete the temporary folder.
-- **Line 30:** start opens the database and server; tests call stop and start to simulate a restart.
 - **Line 31:** Opens (or reopens) the SQLite file.
 - **Line 32:** Applies migrations (a no-op the second time).
 - **Line 33:** Creates the test app with the fake sign-in options (and lets a test override them).
@@ -7281,20 +7375,20 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 48:** Reads the reply.
 - **Line 49:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
 - **Line 50:** The reply must not contain the file bytes.
+- **Line 51:** Downloads the file.
+- **Line 52:** Expects 200.
+- **Line 53:** Expects the verified type.
+- **Line 54:** Expects the nosniff security header.
+- **Line 55:** New check: uploaded files are sent with Cache-Control “private, no-cache”, so browsers must ask the server (which checks the sign-in) before reusing a picture or video, and one coach’s cached files cannot be shown to another on a shared computer.
+- **Line 56:** Expects a Content-Security-Policy containing sandbox.
+- **Line 57:** The downloaded bytes equal the uploaded bytes.
+- **Line 58:** Requests only the first eight bytes.
+- **Line 59:** Expects 206 (Partial Content).
+- **Line 60:** Expects the Content-Range header to describe the slice.
 
-### Lines 51–75
+### Lines 61–90
 
 ```text
-51 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
-52 |   assert.equal(file.status, 200);
-53 |   assert.equal(file.headers.get('content-type'), 'image/png');
-54 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
-55 |   assert.equal(file.headers.get('cache-control'), 'private, no-cache');
-56 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
-57 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
-58 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
-59 |   assert.equal(partial.status, 206);
-60 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
 61 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
 62 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
 63 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
@@ -7310,18 +7404,23 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 73 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
 74 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
 75 | });
+76 |
+77 | test('lessons keep their original fields plus audience while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+78 |   const state = await fixture(t);
+79 |   const upload = await (await state.upload(png)).json();
+80 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
+81 |   const created = await state.json('/api/lessons', 'POST', body);
+82 |   assert.equal(created.status, 201);
+83 |   const lesson = await created.json();
+84 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'audience']);
+85 |   const attached = await state.media();
+86 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
+87 |   assert.equal(attached[1].url, ytLink);
+88 |   assert.equal(attached[1].credit, 'YouTube — Coach');
+89 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
+90 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
 ```
 
-- **Line 51:** Downloads the file.
-- **Line 52:** Expects 200.
-- **Line 53:** Expects the verified type.
-- **Line 54:** Expects the nosniff security header.
-- **Line 55:** New check: uploaded files are sent with Cache-Control “private, no-cache”, so browsers must ask the server (which checks the sign-in) before reusing a picture or video, and one coach’s cached files cannot be shown to another on a shared computer.
-- **Line 56:** Expects a Content-Security-Policy containing sandbox.
-- **Line 57:** The downloaded bytes equal the uploaded bytes.
-- **Line 58:** Requests only the first eight bytes.
-- **Line 59:** Expects 206 (Partial Content).
-- **Line 60:** Expects the Content-Range header to describe the slice.
 - **Line 61:** The slice bytes equal the first eight bytes.
 - **Line 62:** A range beyond the end of the file gets 416.
 - **Line 63:** Uploads a WebM video.
@@ -7337,25 +7436,25 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 73:** Deleting it again gives 404.
 - **Line 74:** Its file is gone.
 - **Line 75:** Closes the callback body and the function call that received it.
+- **Line 76:** Blank line separates related sections for readability; it performs no operation.
+- **Line 77:** Registers the existing media persistence test under a name reflecting the additional public audience field.
+- **Line 78:** Creates the fixture.
+- **Line 79:** Uploads a picture first.
+- **Line 80:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
+- **Line 81:** Creates the lesson.
+- **Line 82:** Expects 201.
+- **Line 83:** Reads the lesson.
+- **Line 84:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 85:** Loads the saved attachments.
+- **Line 86:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
+- **Line 87:** The YouTube address was replaced by the clean verified address.
+- **Line 88:** The YouTube credit came from verification.
+- **Line 89:** The suggested picture kept its supplied credit.
+- **Line 90:** Updates the lesson without a media key and expects success.
 
-### Lines 76–100
+### Lines 91–120
 
 ```text
-76 |
-77 | test('lessons keep their nine fields while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
-78 |   const state = await fixture(t);
-79 |   const upload = await (await state.upload(png)).json();
-80 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
-81 |   const created = await state.json('/api/lessons', 'POST', body);
-82 |   assert.equal(created.status, 201);
-83 |   const lesson = await created.json();
-84 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
-85 |   const attached = await state.media();
-86 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
-87 |   assert.equal(attached[1].url, ytLink);
-88 |   assert.equal(attached[1].credit, 'YouTube — Coach');
-89 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
-90 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
 91 |   assert.equal((await state.media()).length, 3);
 92 |   const [first, second, third] = attached;
 93 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
@@ -7366,37 +7465,6 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 98 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
 99 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
 100 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
-```
-
-- **Line 76:** Blank line separates related sections for readability; it performs no operation.
-- **Line 77:** Registers the main lifecycle test.
-- **Line 78:** Creates the fixture.
-- **Line 79:** Uploads a picture first.
-- **Line 80:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
-- **Line 81:** Creates the lesson.
-- **Line 82:** Expects 201.
-- **Line 83:** Reads the lesson.
-- **Line 84:** The lesson reply still has exactly the original nine fields, so existing clients are unaffected.
-- **Line 85:** Loads the saved attachments.
-- **Line 86:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
-- **Line 87:** The YouTube address was replaced by the clean verified address.
-- **Line 88:** The YouTube credit came from verification.
-- **Line 89:** The suggested picture kept its supplied credit.
-- **Line 90:** Updates the lesson without a media key and expects success.
-- **Line 91:** Leaving media out must keep all three attachments.
-- **Line 92:** Names the three attachments.
-- **Line 93:** Updates with a new list: the third attachment first, the first second, the second dropped.
-- **Line 94:** Expects success.
-- **Line 95:** Expects the new order and edited captions.
-- **Line 96:** The dropped attachment no longer exists.
-- **Line 97:** Stops and restarts the server (and database connection).
-- **Line 98:** The attachments are still there after the restart.
-- **Line 99:** The uploaded file’s bytes are still intact.
-- **Line 100:** Updating with an empty list removes every attachment.
-
-### Lines 101–125
-
-```text
 101 |   assert.deepEqual(await state.media(), []);
 102 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
 103 |   assert.equal((await state.media()).length, 1);
@@ -7417,13 +7485,18 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 118 |   const message = (await offline.json()).error;
 119 |   assert.match(message, /could not check the link/);
 120 |   assert.ok(!message.includes('private'));
-121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
-122 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
-123 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
-124 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
-125 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
 ```
 
+- **Line 91:** Leaving media out must keep all three attachments.
+- **Line 92:** Names the three attachments.
+- **Line 93:** Updates with a new list: the third attachment first, the first second, the second dropped.
+- **Line 94:** Expects success.
+- **Line 95:** Expects the new order and edited captions.
+- **Line 96:** The dropped attachment no longer exists.
+- **Line 97:** Stops and restarts the server (and database connection).
+- **Line 98:** The attachments are still there after the restart.
+- **Line 99:** The uploaded file’s bytes are still intact.
+- **Line 100:** Updating with an empty list removes every attachment.
 - **Line 101:** Unsaved uploads are not listed as lesson attachments.
 - **Line 102:** Creates a second lesson with one link.
 - **Line 103:** Exactly one attachment exists.
@@ -7444,15 +7517,15 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 - **Line 118:** Reads the message.
 - **Line 119:** It says the link could not be checked.
 - **Line 120:** It must not leak the internal failure text.
-- **Line 121:** Referring to an attachment id that does not exist gives 400.
-- **Line 122:** Attaches the unattached upload to a new lesson.
-- **Line 123:** Trying to attach the same upload to a different lesson gives 400.
-- **Line 124:** Only the first lesson owns it.
-- **Line 125:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
 
-### Lines 126–150
+### Lines 121–150
 
 ```text
+121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
+122 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
+123 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
+124 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
+125 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
 126 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
 127 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
 128 | });
@@ -7480,12 +7553,17 @@ End-to-end tests of the media API against a real, temporary SQLite database and 
 150 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
 ```
 
+- **Line 121:** Referring to an attachment id that does not exist gives 400.
+- **Line 122:** Attaches the unattached upload to a new lesson.
+- **Line 123:** Trying to attach the same upload to a different lesson gives 400.
+- **Line 124:** Only the first lesson owns it.
+- **Line 125:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
 - **Line 126:** Only the two intended lessons exist, so failed saves created nothing.
 - **Line 127:** Updating a lesson that does not exist still gives 404.
 - **Line 128:** Closes the callback body and the function call that received it.
 - **Line 129:** Blank line separates related sections for readability; it performs no operation.
 - **Line 130:** Registers the verify and suggest route test.
-- **Line 131:** Counts how often the fake finder is called.
+- **Line 131:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
 - **Line 132:** A fake finder that returns one suggested video for the first section.
 - **Line 133:** Creates the fixture with that fake finder.
 - **Line 134:** Verifies a YouTube link.
@@ -10963,3 +11041,35 @@ Orders production checks, then migrations, then application loading. Injectable 
 - **Line 18:** Wraps the stage and sanitized reason as a trusted CoachLab error; arbitrary original provider text is not copied.
 - **Line 19:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 20:** Closes this function, conditional block or object; execution continues after the block.
+
+## prisma/migrations/20261028000100_add_lesson_audience/migration.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\20261028000100_add_lesson_audience\migration.sql`
+
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
+
+### Lines 1–3
+
+```text
+1 | BEGIN;
+2 | ALTER TABLE "lessons" ADD COLUMN "audience" TEXT DEFAULT 'Unspecified' CHECK ("audience" IN ('Kids', 'Adults', 'Unspecified'));
+3 | COMMIT;
+```
+
+- **Line 1:** Begins the PostgreSQL transaction so migration changes commit together.
+- **Line 2:** Adds only one nullable text column with a constant default and allowed-value check. Existing rows receive Unspecified; other columns and records remain intact.
+- **Line 3:** Commits the successful PostgreSQL schema change.
+
+## server/migrations/004_add_lesson_audience.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\migrations\004_add_lesson_audience.sql`
+
+Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
+
+### Lines 1–1
+
+```text
+1 | ALTER TABLE lessons ADD COLUMN audience TEXT DEFAULT 'Unspecified' CHECK (audience IN ('Kids', 'Adults', 'Unspecified'));
+```
+
+- **Line 1:** Adds the same optional audience column and allowed-value check to SQLite; its migration runner supplies the transaction.

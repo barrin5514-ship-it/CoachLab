@@ -4471,3 +4471,72 @@ REPORT BACK (in one code block)
 - Commit for this work: identify by subject "fix: identify production startup failures without exposing secrets" (its own hash cannot be embedded before committing). Push/hash verification will be reported in the final response.
 - Final verification: node --check passed for all nine changed/new JavaScript files. All 366 source/test lines match the walkthrough listings and numbered explanations. An actual subprocess invocation of server/start-production.js with a deliberately invalid dummy APP_URL exited 1 before migrations and reported the security stage without echoing its sentinel value.
 - Diff whitespace verification initially caught trailing spaces in newly generated explanations; trimmed those explanations and reran git diff --check successfully. The media-file search also required rg's -g glob option on Windows; corrected without file changes. Reviewed source/tests and documentation, with no real credentials or database files included.
+
+## 2026-10-28 — Focused upgrades before Thursday demo
+
+### Exact user prompt
+
+```text
+COACHLAB — UPGRADES BEFORE THURSDAY DEMO
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site: https://coachlab-q2ck.onrender.com (Render auto-deploys on push)
+
+GOAL
+Focused upgrades in priority order. No full redesign. App must keep
+working on the live site after every push.
+
+RULES
+- Low RAM: one thing at a time, tests serially.
+- One small commit per step, clear message. Push after each step
+  ONLY if tests and build pass.
+- Database changes: additive and safe only (new optional column with
+  a default). No resets, no data loss. Production runs
+  "prisma migrate deploy" on start.
+- Never read or print .env values. Do not touch other projects.
+- Stop and report if a step risks breaking production.
+
+STEP 1 — KIDS / ADULTS
+- Add an "audience" field to lessons: Kids, Adults, or Unspecified.
+  Existing lessons = Unspecified. Never store kids' names or personal info.
+- Add a selector in the lesson form, a filter on the dashboard, and
+  server validation.
+
+STEP 2 — SAFER, MORE DETAILED AI PLANS
+- Pass audience into the AI prompt.
+- Kids rules: no hard sparring, no head contact, no submissions/chokes
+  for young kids, short drills, games, lots of breaks and praise.
+- Beginner rule (any age): no hard sparring.
+- Each of the five sections should include clear step-by-step cues,
+  common mistakes, and an easier/harder option.
+- Add tests for the new rules.
+
+STEP 3 — UI POLISH
+- Discipline tabs/navigation at the top (Boxing, Muay Thai, BJJ,
+  Wrestling, MMA, Personal Training).
+- Kids/Adults badges on lesson cards.
+- Clearer lesson timeline (section, minutes, cues).
+- Consistent spacing, buttons, and mobile layout (coach uses phone
+  at the gym).
+- Reuse existing media features; make videos/pictures look consistent.
+
+STEP 4 — DEMO PREP
+- Add DEMO_SCRIPT.md for a beginner: a 3-minute app walkthrough, plus
+  ONE tiny safe change I can ask a coding agent to make live (e.g. a
+  label or color), how to review the diff, test, commit, and explain it.
+
+REPORT BACK (in one code block)
+- Commit hash + one line per step, and push result.
+- Fresh test and build results.
+- Anything I should check on the live site after it deploys.
+```
+
+### Step 1 outcome
+
+- Read AGENTS.md and the actual lesson/API/Prisma/SQLite/frontend code. Started clean at 1b36a0d0123e2c9a0708176d9871ce130b79ca0e (previous startup diagnostics, pushed).
+- Added one nullable audience text column with Unspecified default and a three-value constraint in new PostgreSQL and SQLite migrations. Old migrations unchanged. Updated Prisma schema, API validation/storage, manual create/edit selector, dashboard filter and relevant tests. No personal-info fields added; form includes a privacy reminder.
+- Existing records/defaults and repeat migrations verified in disposable SQLite. Audience Create/Read/Update, invalid values and persistence after reopening tested through HTTP. PostgreSQL SQL inspected as an additive-only change; no direct remote connection or migration executed by this session. Render will apply the committed migration through its existing deploy workflow.
+- Tests: npm test 79 passed, 0 failed. Full npm run build passed: dependency install, Prisma 7.10.0 generation/TypeScript compilation, Vite 31 modules. Prisma schema validation passed. Offline Prisma results recorded below after completion. Live pre-push health returned HTTP 200 with the expected CoachLab JSON. The web reader could not access that endpoint; the direct Node HTTPS check succeeded with system certificate trust.
+- Initial suite failed two old exact-shape assertions that omitted the new field; corrected both expectations. A first scripted correction missed the variable named edited; the repeated test exposed it and the exact assertion was fixed. No application regression was hidden.
+- Workflow mistake: a test subprocess had not yet reported completion when the build was launched; the two briefly overlapped despite the one-at-a-time requirement. Both completed successfully; subsequent heavy commands will wait for explicit process completion. Tests themselves ran with concurrency=1.
+- Updated current line-by-line walkthrough and reviewed changes. No .env values read, no existing database or backup touched. Step commit subject: feat: add optional lesson audience and dashboard filter. Its resolved hash will be recorded with the next step.
+- Step 1 final checks: 5/5 offline Prisma tests passed; 925 source/configuration/test lines matched the walkthrough. Trimmed an extra final blank line found by diff checking.

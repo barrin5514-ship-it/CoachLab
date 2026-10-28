@@ -74,14 +74,14 @@ test('uploads are checked by content, stored in the database, served with range 
   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
 });
 
-test('lessons keep their nine fields while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+test('lessons keep their original fields plus audience while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
   const state = await fixture(t);
   const upload = await (await state.upload(png)).json();
   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
   const created = await state.json('/api/lessons', 'POST', body);
   assert.equal(created.status, 201);
   const lesson = await created.json();
-  assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at']);
+  assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'audience']);
   const attached = await state.media();
   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
   assert.equal(attached[1].url, ytLink);

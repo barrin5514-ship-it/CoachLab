@@ -5,11 +5,11 @@ import { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
 
 const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-const initial = { title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+const initial = { audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
 const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 
 export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-  const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? ''])) : initial);
+  const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +60,7 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
           <div className="form-row">
             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+            <label>Audience<select name="audience" value={values.audience} onChange={change}>{['Unspecified', 'Kids', 'Adults'].map(audience => <option key={audience}>{audience}</option>)}</select><small>Class group only. Never enter children’s personal information.</small></label>
             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
           </div>

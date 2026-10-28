@@ -1,7 +1,7 @@
 const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
 const levels = ['Beginner', 'Intermediate', 'Advanced'];
 const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
-const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes'];
+const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience'];
 
 export function validateLesson(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -21,6 +21,8 @@ export function validateLesson(body) {
   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
   lesson.discipline = body.discipline;
+  lesson.audience = body.audience === undefined ? 'Unspecified' : body.audience;
+  if (!['Kids', 'Adults', 'Unspecified'].includes(lesson.audience)) return { error: 'Choose Kids, Adults, or Unspecified.' };
   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;

@@ -55,7 +55,7 @@ test('POST saves actual SQLite data, GET orders it, and reopening preserves it',
   const saved = await response.json();
   assert.ok(Number.isInteger(saved.id) && saved.id > 0);
   assert.ok(Number.isFinite(Date.parse(saved.created_at)));
-  assert.deepEqual(saved, { ...input, title: input.title.trim(), id: saved.id, created_at: saved.created_at });
+  assert.deepEqual(saved, { ...input, audience: 'Unspecified', title: input.title.trim(), id: saved.id, created_at: saved.created_at });
   const { owner_id: owner, ...stored } = state.database.prepare('SELECT * FROM lessons WHERE id = ?').get(saved.id);
   assert.equal(owner, 'user-a');
   assert.deepEqual(stored, saved);
@@ -115,7 +115,7 @@ test('database failures return generic 500 errors for both routes', async t => {
 
 test('fresh database is migrated before app creation without changing the schema', async t => {
   const state = await fixture(t);
-  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }]);
+  assert.deepEqual(state.database.prepare('SELECT version FROM schema_migrations').all(), [{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
   assert.equal(state.database.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   const unknown = await fetch(`${state.url}/missing`);
   assert.equal(unknown.status, 404);
@@ -130,7 +130,7 @@ test('update preserves identity without duplicates; delete persists; invalid and
   const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
   const response = await put(original.id, edited);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ...edited, id: original.id, created_at: original.created_at });
+  assert.deepEqual(await response.json(), { ...edited, audience: 'Unspecified', id: original.id, created_at: original.created_at });
   assert.equal((await put(original.id, { ...edited, title: '' })).status, 400);
   for (const id of ['0', '-1', '1.5', '2147483648', 'abc']) {
     assert.equal((await put(id, edited)).status, 400);
@@ -144,4 +144,25 @@ test('update preserves identity without duplicates; delete persists; invalid and
   assert.equal((await fetch(`${state.url}/api/lessons/${original.id}`, { method: 'DELETE' })).status, 404);
   await state.stop(); await state.start();
   assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), [other]);
+});
+
+test('audience defaults for old clients, validates values and survives update and restart', async t => {
+  const state = await fixture(t);
+  const legacy = await (await post(state, { title: 'Generic class', discipline: 'Boxing' })).json();
+  assert.equal(legacy.audience, 'Unspecified');
+  for (const audience of ['Kids', 'Adults', 'Unspecified']) {
+    const input = { title: 'Generic class', discipline: 'Boxing', audience };
+    const response = await post(state, input);
+    assert.equal(response.status, 201);
+    const created = await response.json();
+    assert.equal(created.audience, audience);
+    const updated = await fetch(`${state.url}/api/lessons/${created.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...input, audience: 'Adults' }) });
+    assert.equal(updated.status, 200);
+    assert.equal((await updated.json()).audience, 'Adults');
+  }
+  for (const audience of ['Teen', '', null, 7, {}]) assert.equal((await post(state, { title: 'Generic', discipline: 'Boxing', audience })).status, 400);
+  const before = await (await fetch(`${state.url}/api/lessons`)).json();
+  await state.stop();
+  await state.start();
+  assert.deepEqual(await (await fetch(`${state.url}/api/lessons`)).json(), before);
 });
