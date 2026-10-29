@@ -4851,3 +4851,52 @@ Actual verification: targeted media suites passed 28 tests, zero failures. Compl
 Files modified: server/video-suggestions.js, server/media-finder.js, client/src/VideoSuggestions.jsx, server/media.test.js, README.md, CODE_WALKTHROUGH.md and this log. Walkthrough updated for all changed source/test lines. Reviewed executable diffs and safe log fields. Genuine prior-agent mistake: the earlier fix still used the highest-ranked generic goal phrase for title filtering; the exact title provided here exposed it, and the new regression verifies inside leg kicks is selected. Also corrected previous behavior that silently discarded failed playback checks and conflated missing configuration with zero matches. No fabricated production diagnosis or test results.
 
 Single intended commit subject: "fix: diagnose video search and retain watch-link fallbacks". Parent 9f62e155705d36e47bc27b57566d03c28414beb7. Containing hash and push outcome are reported after commit. If no request_received appears after deployment, inspect deployment version and authenticated browser network status before concluding the key is wrong.
+
+## 2026-10-29 — Loosen video relevance after live diagnostics
+
+Exact user prompt:
+```text
+COACHLAB — VIDEO MATCHING TOO STRICT (logs confirm)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is tomorrow: small and safe.
+
+LIVE LOGS (leg kicks lesson)
+key_present: true; youtube_http 200 ok;
+search_terms: "close distance inside leg kicks drill adults Muay Thai"
+match_terms: "inside leg kicks"
+youtube_results: returned 5, matched 0 -> nothing shown.
+So YouTube works; our title matching rejects everything.
+
+FIX
+1. Loosen matching:
+   - Treat singular/plural the same (kick/kicks, punch/punches).
+   - Ignore case and punctuation.
+   - Keep a video if its title OR description contains the main
+     technique words (e.g. "leg kick"), not the exact full phrase.
+   - Score by relevance and keep the best ones; only drop clearly
+     unrelated results.
+2. Put the technique first in search terms
+   (e.g. "inside leg kick Muay Thai drill adults close distance").
+3. Ask YouTube for more results per search (e.g. 15) so there's
+   more to choose from. It costs the same quota per search.
+4. Keep strict safe search, kids rules, coach approval, and limits.
+5. Add tests using realistic titles like "Inside Leg Kick Tutorial",
+   "How to Throw a Low Kick | Muay Thai", and an unrelated video
+   that should be dropped.
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass. No database changes. Never print .env values.
+
+REPORT BACK (in one code block)
+- Commit hash, push result, test/build results.
+- How matching works now, in plain English.
+```
+
+Assistant outcome summary: supplied live logs locate rejection after successful YouTube search. Normalize common plurals, case and punctuation; treat low kick as leg kick; remove optional inside/outside/lead/rear modifiers from matching requirements. Title OR description can qualify a result; title matches weigh three times description matches. For two core words both must match, one-word techniques need one, longer queries need at least half (rounded up, minimum two). This is a bounded heuristic, not semantic or age-suitability verification. Search requests 15 candidates, sorts by relevance, and retains existing top-five playback verification, Watch on YouTube fallback and explicit approval. Exact example search: inside leg kicks Muay Thai drill adults close distance. Strict safe search, embeddability, Kids non-contact context and exclusion rules, auth/ownership, and all quotas remain unchanged. No database changes, real secrets read, or live AI/YouTube calls.
+
+Actual checks today: 21 targeted media tests passed; complete serial npm test passed 104/104 with zero failures/skips (~27 seconds); root production build passed (install, Prisma 7.10.0 generation, TypeScript compile, Vite 8.3.4, 34 modules). Walkthrough listing and explanation verification covered 470 lines across all three changed source/test files; JavaScript syntax passed. Mock regressions include realistic inside/low kick titles, description-only uppercase/hyphen match, plural punches, unrelated cooking/leg workout rejection, relevance order, 15 candidates, retained search filters and exact ordered query. No claim of a live search success; owner must retry after Render deployment.
+
+Genuine agent mistakes: initial edit helper assumed Python existed; command failed before edits, and the following 19 passing tests were the old baseline, not verification of the fix. Reapplied edits using available Node and patch tools, then ran the actual 21/104 passing tests above. Previous title-only logic omitted descriptions/plural normalization; owner logs confirmed its live rejection and these regressions cover the correction.
+
+Files: server/media-finder.js, server/video-suggestions.js, server/media.test.js, CODE_WALKTHROUGH.md, README.md, PROMPT_LOG.md. Source diffs reviewed, no changes to schema, dependencies or frontend. Prior completed fix hash: f8fe14c1d8633f02e89d142385783332c60ead4e. Intended single commit: "fix: rank video suggestions by normalized technique relevance"; containing hash and push result reported after commit.

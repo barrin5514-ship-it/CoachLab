@@ -12,6 +12,17 @@ const relevant = (query, text, share) => {
   const haystack = text.toLowerCase();
   return words.filter(word => haystack.includes(word)).length >= Math.max(1, Math.ceil(words.length * share));
 };
+const videoWords = text => significant(strip(text).replace(/low[ -]+kicks?/gi, 'leg kick')).map(word => word.replace(/(ch|sh|ss|x)es$/, '$1').replace(/s$/, ''));
+const videoScore = (query, title, description) => {
+  const modifiers = new Set(['inside', 'outside', 'inner', 'outer', 'lead', 'rear', 'tutorial', 'beginner']);
+  const words = [...new Set(videoWords(query))].filter(word => !modifiers.has(word));
+  if (!words.length) return 0;
+  const hits = text => { const tokens = new Set(videoWords(text)); return words.filter(word => tokens.has(word)).length; };
+  const titleHits = hits(title), descriptionHits = hits(description);
+  const needed = Math.min(words.length, Math.max(2, Math.ceil(words.length / 2)));
+  if (Math.max(titleHits, descriptionHits) < needed) return 0;
+  return titleHits * 3 + descriptionHits;
+};
 const jsonFrom = async (fetcher, url, headers = {}) => {
   const response = await fetcher(url, { headers: { 'user-agent': 'CoachLab/1.0 (local coaching lesson planner)', accept: 'application/json', ...headers }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error('search unavailable');
@@ -48,7 +59,7 @@ export async function commonsCandidates(query, fetcher = fetch) {
 }
 
 export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=15&q=${encodeURIComponent(query.toLowerCase().includes(discipline.toLowerCase()) ? query : `${query} ${discipline}`)}`;
   reserveSearch();
   let response;
   try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
@@ -58,7 +69,8 @@ export async function youtubeCandidates(query, discipline, key, fetcher = fetch,
   const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
   diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
   if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
-  const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '') && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+  const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '')).map(item => ({ item, score: videoScore(matchQuery, item.snippet?.title || '', item.snippet?.description || '') }))
+    .filter(result => result.score > 0).sort((a, b) => b.score - a.score).map(({ item }) => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
   diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
   return candidates;
 }

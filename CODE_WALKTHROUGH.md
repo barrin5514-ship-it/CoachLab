@@ -7313,22 +7313,22 @@ Existing discovery transport with allowlisted HTTP error diagnostics and raw/mat
 12 |   const haystack = text.toLowerCase();
 13 |   return words.filter(word => haystack.includes(word)).length >= Math.max(1, Math.ceil(words.length * share));
 14 | };
-15 | const jsonFrom = async (fetcher, url, headers = {}) => {
-16 |   const response = await fetcher(url, { headers: { 'user-agent': 'CoachLab/1.0 (local coaching lesson planner)', accept: 'application/json', ...headers }, signal: AbortSignal.timeout(8000) });
-17 |   if (!response.ok) throw new Error('search unavailable');
-18 |   return response.json();
-19 | };
-20 |
-21 | export const cleanQueries = queries => (Array.isArray(queries) ? queries : []).filter(query => typeof query === 'string').map(query => query.replace(/\s+/g, ' ').trim()).filter(query => query.length >= 3 && query.length <= 80).slice(0, 2);
-22 |
-23 | export function catalogCandidates(discipline, section, queries) {
-24 |   const text = queries.length ? queries.join(' ') : '';
-25 |   return mediaCatalog.filter(item => item.disciplines.includes(discipline) && item.terms.test(text)).flatMap(item => [
-26 |     { url: item.image, title: item.title, credit: item.credit, source_page: item.source, rank: 0 },
-27 |     ...(item.video ? [{ url: `https://www.youtube.com/watch?v=${youtubeId(item.video)}`, title: item.title, credit: item.credit, source_page: item.source, rank: 0 }] : []),
-28 |   ]);
-29 | }
-30 |
+15 | const videoWords = text => significant(strip(text).replace(/low[ -]+kicks?/gi, 'leg kick')).map(word => word.replace(/(ch|sh|ss|x)es$/, '$1').replace(/s$/, ''));
+16 | const videoScore = (query, title, description) => {
+17 |   const modifiers = new Set(['inside', 'outside', 'inner', 'outer', 'lead', 'rear', 'tutorial', 'beginner']);
+18 |   const words = [...new Set(videoWords(query))].filter(word => !modifiers.has(word));
+19 |   if (!words.length) return 0;
+20 |   const hits = text => { const tokens = new Set(videoWords(text)); return words.filter(word => tokens.has(word)).length; };
+21 |   const titleHits = hits(title), descriptionHits = hits(description);
+22 |   const needed = Math.min(words.length, Math.max(2, Math.ceil(words.length / 2)));
+23 |   if (Math.max(titleHits, descriptionHits) < needed) return 0;
+24 |   return titleHits * 3 + descriptionHits;
+25 | };
+26 | const jsonFrom = async (fetcher, url, headers = {}) => {
+27 |   const response = await fetcher(url, { headers: { 'user-agent': 'CoachLab/1.0 (local coaching lesson planner)', accept: 'application/json', ...headers }, signal: AbortSignal.timeout(8000) });
+28 |   if (!response.ok) throw new Error('search unavailable');
+29 |   return response.json();
+30 | };
 ```
 
 - **Line 1:** Imports the reviewed catalog of demonstrations.
@@ -7345,170 +7345,194 @@ Existing discovery transport with allowlisted HTTP error diagnostics and raw/mat
 - **Line 12:** The lowercase text to look in.
 - **Line 13:** True when at least the required share (and at least one word) appears, for example two of three words.
 - **Line 14:** Closes the preceding block and ends the statement.
-- **Line 15:** Defines jsonFrom, which fetches a JSON answer from a fixed search service.
-- **Line 16:** Sends the request with an identifying user-agent, asking for JSON, and an 8-second time limit.
-- **Line 17:** A failed answer becomes an error that callers treat as “this source had nothing”.
-- **Line 18:** Returns the parsed JSON.
-- **Line 19:** Closes the preceding block and ends the statement.
-- **Line 20:** Blank line separates related sections for readability; it performs no operation.
-- **Line 21:** Exports cleanQueries: keeps at most two text search phrases of 3–80 characters, with white space tidied.
-- **Line 22:** Blank line separates related sections for readability; it performs no operation.
-- **Line 23:** Exports catalogCandidates: reviewed catalog items for a section.
-- **Line 24:** The catalog is matched on the technique phrases the AI named for the section, not on any passing mention inside the instructions, so a lesson that merely mentions a jab does not receive jab videos. With no phrases there is no catalog match.
-- **Line 25:** Keeps catalog items for this discipline whose technique pattern matches that text, and turns each into candidates.
-- **Line 26:** The catalog picture, with its title, credit and source page. rank 0 means “most trusted”.
-- **Line 27:** The catalog video (if any), converted to a standard YouTube watch address.
-- **Line 28:** Closes the candidate list.
-- **Line 29:** Closes the preceding block (function, object, or statement body).
-- **Line 30:** Blank line separates related sections for readability; it performs no operation.
+- **Line 15:** Normalizes low kick to leg kick, strips markup, ignores punctuation and case, then reduces common plurals such as punches and kicks to matching word forms. The arrows define small functions; replace uses regular expressions.
+- **Line 16:** Defines a score function taking the technique query, video title and description.
+- **Line 17:** Creates a Set of optional technique modifiers; inside/outside and beginner wording need not appear for a useful related technique to match.
+- **Line 18:** Normalizes and deduplicates query words, then removes optional modifiers so the main technique controls relevance.
+- **Line 19:** Returns zero when no useful technique words remain.
+- **Line 20:** Defines a helper that counts whole normalized query words in a title or description using Set membership, avoiding accidental substring matches.
+- **Line 21:** Counts title and description matches separately so either field can establish relevance.
+- **Line 22:** Requires both words for a two-word technique, one for a single-word technique, or at least half (rounded up, minimum two) for longer queries.
+- **Line 23:** Rejects the candidate if neither its title nor its description reaches the required match count.
+- **Line 24:** Weights title matches three times description matches, ranking clear technique titles ahead of weaker description-only evidence.
+- **Line 25:** Closes the preceding block and ends the statement.
+- **Line 26:** Defines jsonFrom, which fetches a JSON answer from a fixed search service.
+- **Line 27:** Sends the request with an identifying user-agent, asking for JSON, and an 8-second time limit.
+- **Line 28:** A failed answer becomes an error that callers treat as “this source had nothing”.
+- **Line 29:** Returns the parsed JSON.
+- **Line 30:** Closes the preceding block and ends the statement.
 
 ### Lines 31–60
 
 ```text
-31 | export async function commonsCandidates(query, fetcher = fetch) {
-32 |   const found = [];
-33 |   for (const [filter, mimes] of [['bitmap', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']], ['video', ['video/webm', 'video/mp4']]]) {
-34 |     const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`${query} filetype:${filter}`)}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime%7Cextmetadata&iiurlwidth=800&format=json&formatversion=2`;
-35 |     const data = await jsonFrom(fetcher, url);
-36 |     for (const page of data.query?.pages || []) {
-37 |       const info = page.imageinfo?.[0];
-38 |       if (!info || !mimes.includes(info.mime)) continue;
-39 |       const meta = info.extmetadata || {};
-40 |       const description = strip(meta.ImageDescription?.value);
-41 |       if (!relevant(query, `${page.title} ${description}`, 0.67)) continue;
-42 |       const artist = strip(meta.Artist?.value).slice(0, 100);
-43 |       const license = strip(meta.LicenseShortName?.value).slice(0, 40);
-44 |       found.push({ url: filter === 'bitmap' ? info.thumburl || info.url : info.url, title: page.title.replace(/^File:/, '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' ').slice(0, 120), credit: `Wikimedia Commons${artist ? ` — ${artist}` : ''}${license ? `, ${license}` : ''}`.slice(0, 300), source_page: info.descriptionurl, rank: 2 });
-45 |     }
-46 |   }
-47 |   return found;
-48 | }
-49 |
-50 | export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
-51 |   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
-52 |   reserveSearch();
-53 |   let response;
-54 |   try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
-55 |   catch { diagnostic('youtube_http', { status: null, reason: 'network_or_timeout' }); throw new Error('YouTube search unavailable'); }
-56 |   const data = await response.json().catch(() => null);
-57 |   const reasons = new Set(['quotaExceeded', 'dailyLimitExceeded', 'keyInvalid', 'accessNotConfigured', 'forbidden', 'API_KEY_INVALID', 'SERVICE_DISABLED', 'API_KEY_SERVICE_BLOCKED', 'RATE_LIMIT_EXCEEDED']);
-58 |   const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
-59 |   diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
-60 |   if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
+31 |
+32 | export const cleanQueries = queries => (Array.isArray(queries) ? queries : []).filter(query => typeof query === 'string').map(query => query.replace(/\s+/g, ' ').trim()).filter(query => query.length >= 3 && query.length <= 80).slice(0, 2);
+33 |
+34 | export function catalogCandidates(discipline, section, queries) {
+35 |   const text = queries.length ? queries.join(' ') : '';
+36 |   return mediaCatalog.filter(item => item.disciplines.includes(discipline) && item.terms.test(text)).flatMap(item => [
+37 |     { url: item.image, title: item.title, credit: item.credit, source_page: item.source, rank: 0 },
+38 |     ...(item.video ? [{ url: `https://www.youtube.com/watch?v=${youtubeId(item.video)}`, title: item.title, credit: item.credit, source_page: item.source, rank: 0 }] : []),
+39 |   ]);
+40 | }
+41 |
+42 | export async function commonsCandidates(query, fetcher = fetch) {
+43 |   const found = [];
+44 |   for (const [filter, mimes] of [['bitmap', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']], ['video', ['video/webm', 'video/mp4']]]) {
+45 |     const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`${query} filetype:${filter}`)}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime%7Cextmetadata&iiurlwidth=800&format=json&formatversion=2`;
+46 |     const data = await jsonFrom(fetcher, url);
+47 |     for (const page of data.query?.pages || []) {
+48 |       const info = page.imageinfo?.[0];
+49 |       if (!info || !mimes.includes(info.mime)) continue;
+50 |       const meta = info.extmetadata || {};
+51 |       const description = strip(meta.ImageDescription?.value);
+52 |       if (!relevant(query, `${page.title} ${description}`, 0.67)) continue;
+53 |       const artist = strip(meta.Artist?.value).slice(0, 100);
+54 |       const license = strip(meta.LicenseShortName?.value).slice(0, 40);
+55 |       found.push({ url: filter === 'bitmap' ? info.thumburl || info.url : info.url, title: page.title.replace(/^File:/, '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' ').slice(0, 120), credit: `Wikimedia Commons${artist ? ` — ${artist}` : ''}${license ? `, ${license}` : ''}`.slice(0, 300), source_page: info.descriptionurl, rank: 2 });
+56 |     }
+57 |   }
+58 |   return found;
+59 | }
+60 |
 ```
 
-- **Line 31:** Exports commonsCandidates: searches Wikimedia Commons (freely licensed media) for a phrase.
-- **Line 32:** Collects found candidates.
-- **Line 33:** Runs two searches: pictures (bitmap files) and videos, each with the file types CoachLab can display.
-- **Line 34:** Builds the search address for the Commons API: a file-namespace search for the phrase with the file-type filter, asking for the address, type and licence details of each result and a 800-pixel picture version.
-- **Line 35:** Runs the search.
-- **Line 36:** Looks at each result page (missing data is treated as an empty list).
-- **Line 37:** The file details.
-- **Line 38:** Skips results without details or with an unsupported file type such as SVG or Ogg video.
-- **Line 39:** The licence and author details.
-- **Line 40:** The file description text with HTML removed.
-- **Line 41:** Skips results where the title and description mention fewer than two thirds of the search words, which filters out unrelated pictures.
-- **Line 42:** The author’s name, tidied and limited to 100 characters.
-- **Line 43:** The licence name, limited to 40 characters.
-- **Line 44:** Adds a candidate: the 800-pixel picture or the video file address, a readable title made from the file name, a credit line naming Wikimedia Commons, the author and licence, and the Commons description page as source page.
-- **Line 45:** Closes the preceding block (function, object, or statement body).
-- **Line 46:** Closes the preceding block (function, object, or statement body).
-- **Line 47:** Returns the candidates.
-- **Line 48:** Closes the preceding block (function, object, or statement body).
-- **Line 49:** Blank line separates related sections for readability; it performs no operation.
-- **Line 50:** Extends the existing bounded YouTube search function with an optional diagnostic callback, defaulting to silence for other callers.
-- **Line 51:** Builds the YouTube search address: embeddable videos only, strict safe search, five results, for the phrase plus the discipline.
-- **Line 52:** Reserves one search synchronously immediately before HTTP execution; if the quota throws, no request reaches YouTube. Failed HTTP attempts still count.
-- **Line 53:** Declares the variable that will hold the HTTP response.
-- **Line 54:** Calls YouTube with the key only in a header, requests JSON, and applies an eight-second timeout. The full URL and headers are never passed to diagnostics.
-- **Line 55:** Logs only a fixed network/timeout classification with no HTTP status when the request cannot complete, then throws a safe search-unavailable error.
-- **Line 56:** Parses response JSON, using null for unreadable responses rather than exposing a parsing exception or raw body.
-- **Line 57:** Defines an allowlist of safe provider reason codes; arbitrary provider error text cannot enter logs.
-- **Line 58:** Selects a recognized structured error-detail reason first, then a legacy error reason; the next line still allowlists the selected value.
-- **Line 59:** Logs the numeric HTTP status and either ok, a recognized reason code or unclassified_error. No raw provider message, request URL or credential is logged.
-- **Line 60:** Treats failed HTTP responses and malformed success bodies as unavailable search rather than falsely reporting no matches.
+- **Line 31:** Blank line separates related sections for readability; it performs no operation.
+- **Line 32:** Exports cleanQueries: keeps at most two text search phrases of 3–80 characters, with white space tidied.
+- **Line 33:** Blank line separates related sections for readability; it performs no operation.
+- **Line 34:** Exports catalogCandidates: reviewed catalog items for a section.
+- **Line 35:** The catalog is matched on the technique phrases the AI named for the section, not on any passing mention inside the instructions, so a lesson that merely mentions a jab does not receive jab videos. With no phrases there is no catalog match.
+- **Line 36:** Keeps catalog items for this discipline whose technique pattern matches that text, and turns each into candidates.
+- **Line 37:** The catalog picture, with its title, credit and source page. rank 0 means “most trusted”.
+- **Line 38:** The catalog video (if any), converted to a standard YouTube watch address.
+- **Line 39:** Closes the candidate list.
+- **Line 40:** Closes the preceding block (function, object, or statement body).
+- **Line 41:** Blank line separates related sections for readability; it performs no operation.
+- **Line 42:** Exports commonsCandidates: searches Wikimedia Commons (freely licensed media) for a phrase.
+- **Line 43:** Collects found candidates.
+- **Line 44:** Runs two searches: pictures (bitmap files) and videos, each with the file types CoachLab can display.
+- **Line 45:** Builds the search address for the Commons API: a file-namespace search for the phrase with the file-type filter, asking for the address, type and licence details of each result and a 800-pixel picture version.
+- **Line 46:** Runs the search.
+- **Line 47:** Looks at each result page (missing data is treated as an empty list).
+- **Line 48:** The file details.
+- **Line 49:** Skips results without details or with an unsupported file type such as SVG or Ogg video.
+- **Line 50:** The licence and author details.
+- **Line 51:** The file description text with HTML removed.
+- **Line 52:** Skips results where the title and description mention fewer than two thirds of the search words, which filters out unrelated pictures.
+- **Line 53:** The author’s name, tidied and limited to 100 characters.
+- **Line 54:** The licence name, limited to 40 characters.
+- **Line 55:** Adds a candidate: the 800-pixel picture or the video file address, a readable title made from the file name, a credit line naming Wikimedia Commons, the author and licence, and the Commons description page as source page.
+- **Line 56:** Closes the preceding block (function, object, or statement body).
+- **Line 57:** Closes the preceding block (function, object, or statement body).
+- **Line 58:** Returns the candidates.
+- **Line 59:** Closes the preceding block (function, object, or statement body).
+- **Line 60:** Blank line separates related sections for readability; it performs no operation.
 
 ### Lines 61–90
 
 ```text
-61 |   const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '') && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
-62 |   diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
-63 |   return candidates;
-64 | }
-65 |
-66 | export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
-67 |   const key = (env.YOUTUBE_API_KEY || '').trim();
-68 |   const perSection = await Promise.all(sections.map(async section => {
-69 |     const queries = cleanQueries(section.queries);
-70 |     const candidates = catalogCandidates(discipline, section, queries);
-71 |     for (const query of queries) {
-72 |       const sources = [commonsCandidates(query, fetcher)];
-73 |       if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher, query, reserveSearch));
-74 |       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
-75 |     }
-76 |     candidates.sort((a, b) => a.rank - b.rank);
-77 |     const checked = await Promise.allSettled(candidates.slice(0, 8).map(candidate => verify(candidate.url).then(info => ({ candidate, info }))));
-78 |     return { section, verified: checked.filter(result => result.status === 'fulfilled').map(result => result.value), tried: queries.length > 0 || candidates.length > 0 };
-79 |   }));
-80 |   const used = new Set();
-81 |   const media = [];
-82 |   const notes = [];
-83 |   for (const { section, verified, tried } of perSection) {
-84 |     const picked = { image: 0, video: 0 };
-85 |     for (const { candidate, info } of verified) {
-86 |       const slot = info.kind === 'image' ? 'image' : 'video';
-87 |       if (picked[slot] >= 1 || used.has(info.url) || media.length >= 8) continue;
-88 |       picked[slot] += 1;
-89 |       used.add(info.url);
-90 |       media.push({ origin: 'suggested', kind: info.kind, url: info.url, title: (candidate.title || info.title).slice(0, 120), activity: section.name, credit: candidate.credit || info.credit || '', source_page: candidate.source_page || info.source_page || '' });
+61 | export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
+62 |   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=15&q=${encodeURIComponent(query.toLowerCase().includes(discipline.toLowerCase()) ? query : `${query} ${discipline}`)}`;
+63 |   reserveSearch();
+64 |   let response;
+65 |   try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
+66 |   catch { diagnostic('youtube_http', { status: null, reason: 'network_or_timeout' }); throw new Error('YouTube search unavailable'); }
+67 |   const data = await response.json().catch(() => null);
+68 |   const reasons = new Set(['quotaExceeded', 'dailyLimitExceeded', 'keyInvalid', 'accessNotConfigured', 'forbidden', 'API_KEY_INVALID', 'SERVICE_DISABLED', 'API_KEY_SERVICE_BLOCKED', 'RATE_LIMIT_EXCEEDED']);
+69 |   const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
+70 |   diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
+71 |   if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
+72 |   const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '')).map(item => ({ item, score: videoScore(matchQuery, item.snippet?.title || '', item.snippet?.description || '') }))
+73 |     .filter(result => result.score > 0).sort((a, b) => b.score - a.score).map(({ item }) => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+74 |   diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
+75 |   return candidates;
+76 | }
+77 |
+78 | export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
+79 |   const key = (env.YOUTUBE_API_KEY || '').trim();
+80 |   const perSection = await Promise.all(sections.map(async section => {
+81 |     const queries = cleanQueries(section.queries);
+82 |     const candidates = catalogCandidates(discipline, section, queries);
+83 |     for (const query of queries) {
+84 |       const sources = [commonsCandidates(query, fetcher)];
+85 |       if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher, query, reserveSearch));
+86 |       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
+87 |     }
+88 |     candidates.sort((a, b) => a.rank - b.rank);
+89 |     const checked = await Promise.allSettled(candidates.slice(0, 8).map(candidate => verify(candidate.url).then(info => ({ candidate, info }))));
+90 |     return { section, verified: checked.filter(result => result.status === 'fulfilled').map(result => result.value), tried: queries.length > 0 || candidates.length > 0 };
 ```
 
-- **Line 61:** Keeps valid eleven-character YouTube IDs whose titles match the selected phrase, then creates sanitized bounded titles, credit and canonical links.
-- **Line 62:** Logs raw and retained result counts and the active filter settings: embeddable videos, strict safe search, no duration filter.
-- **Line 63:** Returns the filtered candidate list to the caller for playback verification.
-- **Line 64:** Closes the preceding block (function, object, or statement body).
-- **Line 65:** Blank line separates related sections for readability; it performs no operation.
-- **Line 66:** Extends the existing media finder with an optional reservation callback while preserving its verifier, environment and fetch defaults.
-- **Line 67:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
-- **Line 68:** Handles all sections at the same time.
-- **Line 69:** Cleans the section’s search phrases.
-- **Line 70:** Starts with the reviewed catalog candidates.
-- **Line 71:** For each phrase…
-- **Line 72:** …searches Wikimedia Commons…
-- **Line 73:** When a key exists, starts a YouTube candidate search with the caller's reservation callback, ensuring the older route cannot bypass the shared cap.
-- **Line 74:** Adds the results of the sources that worked; a source that failed is ignored without stopping the others.
-- **Line 75:** Closes the preceding block (function, object, or statement body).
-- **Line 76:** Orders candidates by trust: catalog first, then YouTube, then Commons.
-- **Line 77:** Verifies the first eight candidates at the same time with verifyLink; each success keeps the candidate together with what the checker confirmed.
-- **Line 78:** Returns the section with only the candidates that passed verification, and whether anything was tried.
-- **Line 79:** Closes the per-section work.
-- **Line 80:** A set of addresses already chosen, to avoid repeats across sections.
-- **Line 81:** The final list.
-- **Line 82:** Friendly notes about sections with nothing found.
-- **Line 83:** Goes through the sections in order.
-- **Line 84:** Counts picked pictures and videos for this section.
-- **Line 85:** Looks at each verified candidate.
-- **Line 86:** Decides whether it is a picture or a video (YouTube counts as video).
-- **Line 87:** Skips it if the section already has one of that kind, if the address was used already, or if eight items have been chosen.
-- **Line 88:** Counts it.
-- **Line 89:** Remembers its address.
-- **Line 90:** Adds it to the result, labeled “suggested”, with the verified kind and address, a caption, the section it belongs to, the credit and the source page.
+- **Line 61:** Extends the existing bounded YouTube search function with an optional diagnostic callback, defaulting to silence for other callers.
+- **Line 62:** Builds a search URL for up to 15 video candidates with strict safe search and embedding enabled. Encodes the query and adds discipline only if it is absent; credentials are still supplied separately in the request header.
+- **Line 63:** Reserves one search synchronously immediately before HTTP execution; if the quota throws, no request reaches YouTube. Failed HTTP attempts still count.
+- **Line 64:** Declares the variable that will hold the HTTP response.
+- **Line 65:** Calls YouTube with the key only in a header, requests JSON, and applies an eight-second timeout. The full URL and headers are never passed to diagnostics.
+- **Line 66:** Logs only a fixed network/timeout classification with no HTTP status when the request cannot complete, then throws a safe search-unavailable error.
+- **Line 67:** Parses response JSON, using null for unreadable responses rather than exposing a parsing exception or raw body.
+- **Line 68:** Defines an allowlist of safe provider reason codes; arbitrary provider error text cannot enter logs.
+- **Line 69:** Selects a recognized structured error-detail reason first, then a legacy error reason; the next line still allowlists the selected value.
+- **Line 70:** Logs the numeric HTTP status and either ok, a recognized reason code or unclassified_error. No raw provider message, request URL or credential is logged.
+- **Line 71:** Treats failed HTTP responses and malformed success bodies as unavailable search rather than falsely reporting no matches.
+- **Line 72:** Keeps valid YouTube IDs and pairs each result with a relevance score from its title and description; missing fields become empty strings.
+- **Line 73:** Drops zero scores, sorts highest scores first, and maps results into the existing safe canonical watch-link and credit format. The next stage verifies only the best five candidates.
+- **Line 74:** Logs raw and retained result counts and the active filter settings: embeddable videos, strict safe search, no duration filter.
+- **Line 75:** Returns the filtered candidate list to the caller for playback verification.
+- **Line 76:** Closes the preceding block (function, object, or statement body).
+- **Line 77:** Blank line separates related sections for readability; it performs no operation.
+- **Line 78:** Extends the existing media finder with an optional reservation callback while preserving its verifier, environment and fetch defaults.
+- **Line 79:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
+- **Line 80:** Handles all sections at the same time.
+- **Line 81:** Cleans the section’s search phrases.
+- **Line 82:** Starts with the reviewed catalog candidates.
+- **Line 83:** For each phrase…
+- **Line 84:** …searches Wikimedia Commons…
+- **Line 85:** When a key exists, starts a YouTube candidate search with the caller's reservation callback, ensuring the older route cannot bypass the shared cap.
+- **Line 86:** Adds the results of the sources that worked; a source that failed is ignored without stopping the others.
+- **Line 87:** Closes the preceding block (function, object, or statement body).
+- **Line 88:** Orders candidates by trust: catalog first, then YouTube, then Commons.
+- **Line 89:** Verifies the first eight candidates at the same time with verifyLink; each success keeps the candidate together with what the checker confirmed.
+- **Line 90:** Returns the section with only the candidates that passed verification, and whether anything was tried.
 
-### Lines 91–95
+### Lines 91–107
 
 ```text
-91 |     }
-92 |     if (tried && !picked.image && !picked.video) notes.push(`No verified picture or video was found for ${section.name}.`);
-93 |   }
-94 |   return { media, notes };
-95 | }
+91 |   }));
+92 |   const used = new Set();
+93 |   const media = [];
+94 |   const notes = [];
+95 |   for (const { section, verified, tried } of perSection) {
+96 |     const picked = { image: 0, video: 0 };
+97 |     for (const { candidate, info } of verified) {
+98 |       const slot = info.kind === 'image' ? 'image' : 'video';
+99 |       if (picked[slot] >= 1 || used.has(info.url) || media.length >= 8) continue;
+100 |       picked[slot] += 1;
+101 |       used.add(info.url);
+102 |       media.push({ origin: 'suggested', kind: info.kind, url: info.url, title: (candidate.title || info.title).slice(0, 120), activity: section.name, credit: candidate.credit || info.credit || '', source_page: candidate.source_page || info.source_page || '' });
+103 |     }
+104 |     if (tried && !picked.image && !picked.video) notes.push(`No verified picture or video was found for ${section.name}.`);
+105 |   }
+106 |   return { media, notes };
+107 | }
 ```
 
-- **Line 91:** Closes the preceding block (function, object, or statement body).
-- **Line 92:** If something was searched but nothing verified, writes a note naming the section.
-- **Line 93:** Closes the preceding block (function, object, or statement body).
-- **Line 94:** Returns the media and the notes.
-- **Line 95:** Closes the preceding block (function, object, or statement body).
+- **Line 91:** Closes the per-section work.
+- **Line 92:** A set of addresses already chosen, to avoid repeats across sections.
+- **Line 93:** The final list.
+- **Line 94:** Friendly notes about sections with nothing found.
+- **Line 95:** Goes through the sections in order.
+- **Line 96:** Counts picked pictures and videos for this section.
+- **Line 97:** Looks at each verified candidate.
+- **Line 98:** Decides whether it is a picture or a video (YouTube counts as video).
+- **Line 99:** Skips it if the section already has one of that kind, if the address was used already, or if eight items have been chosen.
+- **Line 100:** Counts it.
+- **Line 101:** Remembers its address.
+- **Line 102:** Adds it to the result, labeled “suggested”, with the verified kind and address, a caption, the section it belongs to, the credit and the source page.
+- **Line 103:** Closes the preceding block (function, object, or statement body).
+- **Line 104:** If something was searched but nothing verified, writes a note naming the section.
+- **Line 105:** Closes the preceding block (function, object, or statement body).
+- **Line 106:** Returns the media and the notes.
+- **Line 107:** Closes the preceding block (function, object, or statement body).
 
 ## server/media-fixtures.js
 
@@ -7849,7 +7873,7 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 96 |   let searches = 0;
 97 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
 98 |     env: { YOUTUBE_API_KEY: 'fake' },
-99 |     search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+99 |     search: async (query, discipline) => { searches++; assert.equal(query, 'jab Boxing drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
 100 |     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
 101 |   });
 102 |   assert.equal(searches, 1);
@@ -7881,7 +7905,7 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 96:** Initializes a counter for mocked YouTube search calls.
 - **Line 97:** Starts a kids jab suggestion with explicitly injected test dependencies.
 - **Line 98:** Supplies a fake API key solely to exercise the configured-search branch; no real key is loaded.
-- **Line 99:** Counts the search, checks the exact safe query and discipline, then generates eight synthetic candidate URLs to test the five-candidate verification bound.
+- **Line 99:** Injects a fake search that checks technique-first Boxing and kids non-contact context, counts calls and returns eight fake candidates for the existing bounds test.
 - **Line 100:** Makes one candidate fail verification with a synthetic private error and returns safe metadata for the others.
 - **Line 101:** Closes the callback body and the function call that received it.
 - **Line 102:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
@@ -8168,7 +8192,7 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 239:** Registers the YouTube-key test.
 - **Line 240:** Records every request’s address and key header.
 
-### Lines 241–251
+### Lines 241–270
 
 ```text
 241 |   const fetcher = async (url, options) => {
@@ -8182,6 +8206,25 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 249 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
 250 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
 251 | });
+252 |
+253 | test('video relevance normalizes plurals and punctuation, checks descriptions and ranks technique matches', async () => {
+254 |   const items = [
+255 |     ['Inside Leg Kick Tutorial', 'Learn inside leg kicks'],
+256 |     ['How to Throw a Low Kick | Muay Thai', 'Technical instruction'],
+257 |     ['Distance control', 'Use LEG-KICKS to enter safely'],
+258 |     ['Cooking dinner', 'A delicious recipe'],
+259 |     ['Leg day workout', 'Strength exercises'],
+260 |   ].map(([title, description], index) => ({ id: { videoId: 'abcdefghij' + index }, snippet: { title, description } }));
+261 |   const fetcher = async url => {
+262 |     const params = new URL(url).searchParams;
+263 |     assert.equal(params.get('maxResults'), '15');
+264 |     assert.equal(params.get('safeSearch'), 'strict');
+265 |     assert.equal(params.get('videoEmbeddable'), 'true');
+266 |     return Response.json({ items });
+267 |   };
+268 |   const found = await youtubeCandidates('inside leg kicks', 'Muay Thai', 'fake', fetcher, 'inside leg kicks', () => {});
+269 |   assert.deepEqual(found.map(item => item.title), items.slice(0, 3).map(item => item.snippet.title));
+270 |   const punches = await youtubeCandidates('punches', 'Boxing', 'fake', async () => Response.json({ items: [{ id: { videoId: 'abcdefghij0' }, snippet: { title: 'PUNCH! tutorial' } }] }), 'punches', () => {});
 ```
 
 - **Line 241:** A fake search service.
@@ -8195,6 +8238,51 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 249:** The irrelevant video is not.
 - **Line 250:** The key was sent in the header and never appeared in the web address.
 - **Line 251:** Closes the callback body and the function call that received it.
+- **Line 252:** Blank line separates related sections for readability; it performs no operation.
+- **Line 253:** Defines an asynchronous regression test for normalized words, description matching, and relevance ordering.
+- **Line 254:** Starts an array of realistic fake title and description pairs; these fixtures do not call YouTube.
+- **Line 255:** A direct inside-leg-kick tutorial should rank first because both its title and description match.
+- **Line 256:** A low-kick tutorial should match the leg-kick variation even without the inside modifier.
+- **Line 257:** A general title remains eligible when its description contains the main technique with uppercase and punctuation.
+- **Line 258:** A cooking example must be rejected as unrelated.
+- **Line 259:** A leg workout must be rejected because leg alone does not establish leg-kick relevance.
+- **Line 260:** Converts each fixture pair to the shape of a YouTube search result with a unique test ID; destructuring names the title and description.
+- **Line 261:** Defines a mock HTTP request function accepting the generated search URL.
+- **Line 262:** Parses the mocked URL parameters so assertions can verify the 15-result limit and retained safety filters.
+- **Line 263:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 264:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 265:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 266:** Returns the fake result array as a JSON HTTP response without network access.
+- **Line 267:** Closes the preceding block and ends the statement.
+- **Line 268:** Runs the real matching code against fake search results and a no-op quota reservation, preserving real quotas.
+- **Line 269:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 270:** Checks singular punch against plural punches with punctuation using another mock response and no real quota or API key.
+
+### Lines 271–280
+
+```text
+271 |   assert.equal(punches.length, 1);
+272 | });
+273 |
+274 | test('reported lesson puts the technique before discipline, audience and goal context', async () => {
+275 |   const lesson = { title: 'Using Leg Kicks to Close the Distance', goal: 'inside leg kicks to close distance', discipline: 'Muay Thai', audience: 'Adults' };
+276 |   await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'fake' }, diagnostic: () => {}, search: async query => {
+277 |     assert.equal(query, 'inside leg kicks Muay Thai drill adults close distance');
+278 |     return [];
+279 |   } });
+280 | });
+```
+
+- **Line 271:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 272:** Closes the callback body and the function call that received it.
+- **Line 273:** Blank line separates related sections for readability; it performs no operation.
+- **Line 274:** Defines a regression test for the exact reported lesson query ordering.
+- **Line 275:** Defines the reported Muay Thai lesson exactly, including its title, goal and Adults audience, using no personal information.
+- **Line 276:** Runs suggestion construction with a fake key, silent diagnostics and an injected search callback that checks the generated query.
+- **Line 277:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 278:** Returns no candidates from the test callback so this query-only check never verifies external links.
+- **Line 279:** Closes the injected fetch function, options object and generateDraft call.
+- **Line 280:** Closes the callback body and the function call that received it.
 
 ## server/media-api.test.js
 
@@ -12647,30 +12735,30 @@ Owner-scoped suggestions with safe step diagnostics, phrase extraction, shared q
 34 |   const query = lessonVideoQuery(lesson);
 35 |   const key = (env.YOUTUBE_API_KEY || '').trim();
 36 |   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
-37 |   diagnostic('start', { key_present: !!key, search_terms: query ? `${query.technique} drill ${query.audience} ${lesson.discipline}` : '', match_terms: matchTerms });
-38 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
-39 |   const videos = [];
-40 |   let checked = 0;
-41 |   const check = async candidates => {
-42 |     for (const candidate of candidates.slice(0, 5)) {
-43 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
-44 |       checked++;
-45 |       try {
-46 |         const info = await verify(candidate.url);
-47 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
-48 |       } catch {
-49 |         const url = `https://www.youtube.com/watch?v=${youtubeId(candidate.url)}`;
-50 |         videos.push({ kind: 'youtube', origin: 'suggested', url, title: candidate.title, activity: '', link_only: true });
-51 |       }
-52 |     }
-53 |   };
-54 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
-55 |   diagnostic('catalog', { candidates: curated.length, skipped_for_kids: lesson.audience === 'Kids' });
-56 |   if (lesson.audience !== 'Kids') await check(curated);
-57 |   if (!videos.some(item => !item.link_only) && key) {
-58 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
-59 |     await check(await find(`${query.technique} drill ${query.audience}`, lesson.discipline, key));
-60 |   }
+37 |   const searchTerms = query ? `${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
+38 |   diagnostic('start', { key_present: !!key, search_terms: searchTerms, match_terms: matchTerms });
+39 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
+40 |   const videos = [];
+41 |   let checked = 0;
+42 |   const check = async candidates => {
+43 |     for (const candidate of candidates.slice(0, 5)) {
+44 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
+45 |       checked++;
+46 |       try {
+47 |         const info = await verify(candidate.url);
+48 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
+49 |       } catch {
+50 |         const url = `https://www.youtube.com/watch?v=${youtubeId(candidate.url)}`;
+51 |         videos.push({ kind: 'youtube', origin: 'suggested', url, title: candidate.title, activity: '', link_only: true });
+52 |       }
+53 |     }
+54 |   };
+55 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
+56 |   diagnostic('catalog', { candidates: curated.length, skipped_for_kids: lesson.audience === 'Kids' });
+57 |   if (lesson.audience !== 'Kids') await check(curated);
+58 |   if (!videos.some(item => !item.link_only) && key) {
+59 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
+60 |     await check(await find(searchTerms, lesson.discipline, key));
 ```
 
 - **Line 31:** Blank line separates related operations for readability.
@@ -12679,80 +12767,82 @@ Owner-scoped suggestions with safe step diagnostics, phrase extraction, shared q
 - **Line 34:** Builds a safe query description from the saved lesson.
 - **Line 35:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
 - **Line 36:** Selects the longest extracted phrase for title matching, preferring inside leg kicks over the higher-ranked but generic close distance in the reported example.
-- **Line 37:** Logs key presence, the derived search terms and selected title-match terms. It does not log the full lesson, provider URL, headers or key value.
-- **Line 38:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
-- **Line 39:** Creates an empty result array for verified video metadata.
-- **Line 40:** Initializes the number of playback checks actually attempted.
-- **Line 41:** Defines an asynchronous helper to check a bounded candidate list.
-- **Line 42:** Checks no more than the first five candidates serially to limit requests and memory.
-- **Line 43:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
-- **Line 44:** Counts each unique valid candidate immediately before trying its playback check.
-- **Line 45:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 46:** Runs the existing safe link verification, including YouTube oEmbed validation.
-- **Line 47:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
-- **Line 48:** Catches failure without including private exception details in public hosting logs.
-- **Line 49:** Reconstructs a canonical public YouTube watch URL from the validated video ID after a playback-check failure.
-- **Line 50:** Keeps failed-check candidates as suggested link-only metadata; the frontend cannot approve these as verified attachments.
-- **Line 51:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 37:** Builds technique-first search text followed by discipline, drill, audience and at most one additional context phrase; trim removes leftover end spaces, and absent query yields empty text.
+- **Line 38:** Logs only key presence and the derived search/match terms through the existing diagnostic helper.
+- **Line 39:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
+- **Line 40:** Creates an empty result array for verified video metadata.
+- **Line 41:** Initializes the number of playback checks actually attempted.
+- **Line 42:** Defines an asynchronous helper to check a bounded candidate list.
+- **Line 43:** Checks no more than the first five candidates serially to limit requests and memory.
+- **Line 44:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
+- **Line 45:** Counts each unique valid candidate immediately before trying its playback check.
+- **Line 46:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 47:** Runs the existing safe link verification, including YouTube oEmbed validation.
+- **Line 48:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
+- **Line 49:** Catches failure without including private exception details in public hosting logs.
+- **Line 50:** Reconstructs a canonical public YouTube watch URL from the validated video ID after a playback-check failure.
+- **Line 51:** Keeps failed-check candidates as suggested link-only metadata; the frontend cannot approve these as verified attachments.
 - **Line 52:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 53:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 54:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
-- **Line 55:** Logs catalog candidate count and whether Kids context skipped age-unclassified catalog entries.
-- **Line 56:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
-- **Line 57:** Attempts YouTube fallback when no verified video exists and a key is present; link-only catalog results do not masquerade as verified successes.
-- **Line 58:** Wraps existing YouTube search with the selected specific match phrase, shared quota reservation and safe diagnostic callback; tests can still inject search.
-- **Line 59:** Searches with the derived lesson/audience terms and discipline, then checks returned candidates using the existing verifier.
-- **Line 60:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 54:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 55:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
+- **Line 56:** Logs catalog candidate count and whether Kids context skipped age-unclassified catalog entries.
+- **Line 57:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
+- **Line 58:** Attempts YouTube fallback when no verified video exists and a key is present; link-only catalog results do not masquerade as verified successes.
+- **Line 59:** Wraps existing YouTube search with the selected specific match phrase, shared quota reservation and safe diagnostic callback; tests can still inject search.
+- **Line 60:** Calls the search with the same ordered terms shown in diagnostics, then verifies the highest-ranked returned candidates.
 
-### Lines 61–82
+### Lines 61–83
 
 ```text
-61 |   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
-62 |   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });
-63 |   return { videos: selected, message: selected.length ? 'Review relevance and age suitability. Videos with unconfirmed playback can be opened with Watch on YouTube but cannot be attached until verified. Add opens the editor; Save changes keeps verified videos.' : key ? 'No matches found. Try a simpler technique description or paste a video link.' : 'YouTube search unavailable: the server has no configured YouTube key. You can still paste a video link.' };
-64 | }
-65 |
-66 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
-67 |   const users = new Map();
-68 |   let busy = false;
-69 |   app.post('/api/lessons/:id/videos', async (request, response) => {
-70 |     videoDiagnostic('request_received', {});
-71 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
-72 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
-73 |     const time = now();
-74 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
-75 |     const times = users.get(request.user.id) || [];
-76 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
-77 |     users.set(request.user.id, [...times, time]); busy = true;
-78 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
-79 |     catch (error) { videoDiagnostic('request_failed', { reason: error instanceof YouTubeQuotaError ? 'local_quota' : 'search_unavailable' }); response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'YouTube search unavailable. Try later or paste a link in Edit lesson.' }); }
-80 |     finally { busy = false; }
-81 |   });
-82 | }
+61 |   }
+62 |   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
+63 |   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });
+64 |   return { videos: selected, message: selected.length ? 'Review relevance and age suitability. Videos with unconfirmed playback can be opened with Watch on YouTube but cannot be attached until verified. Add opens the editor; Save changes keeps verified videos.' : key ? 'No matches found. Try a simpler technique description or paste a video link.' : 'YouTube search unavailable: the server has no configured YouTube key. You can still paste a video link.' };
+65 | }
+66 |
+67 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
+68 |   const users = new Map();
+69 |   let busy = false;
+70 |   app.post('/api/lessons/:id/videos', async (request, response) => {
+71 |     videoDiagnostic('request_received', {});
+72 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
+73 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
+74 |     const time = now();
+75 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
+76 |     const times = users.get(request.user.id) || [];
+77 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
+78 |     users.set(request.user.id, [...times, time]); busy = true;
+79 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
+80 |     catch (error) { videoDiagnostic('request_failed', { reason: error instanceof YouTubeQuotaError ? 'local_quota' : 'search_unavailable' }); response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'YouTube search unavailable. Try later or paste a link in Edit lesson.' }); }
+81 |     finally { busy = false; }
+82 |   });
+83 | }
 ```
 
-- **Line 61:** Sorts verified videos before link-only candidates and caps the displayed list at five.
-- **Line 62:** Logs attempted playback checks, successful checks, link-only fallbacks and displayed result count, without candidate URLs or raw errors.
-- **Line 63:** Returns clear review instructions for candidates, No matches found for a successful empty search, or YouTube search unavailable when no key is configured. Unverified playback cannot bypass attachment verification.
-- **Line 64:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 65:** Blank line separates related operations for readability.
-- **Line 66:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
-- **Line 67:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
-- **Line 68:** Tracks whether this route has an external-provider operation in flight.
-- **Line 69:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
-- **Line 70:** Logs that an authenticated request reached this route without recording user IDs, lesson IDs or request data.
-- **Line 71:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
-- **Line 72:** Returns the same 404 for a missing lesson or one owned by someone else.
-- **Line 73:** Reads the clock once so cleanup and response calculations use a consistent time.
-- **Line 74:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
-- **Line 75:** Loads this coach's recent attempts or uses an empty list for a new coach.
-- **Line 76:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
-- **Line 77:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
-- **Line 78:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
-- **Line 79:** Logs a fixed local_quota or search_unavailable reason, then returns the existing safe 429 quota message or a clearer YouTube-unavailable 502 message.
-- **Line 80:** Always clears the in-flight flag after success or failure.
-- **Line 81:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 82:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 61:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 62:** Sorts verified videos before link-only candidates and caps the displayed list at five.
+- **Line 63:** Logs attempted playback checks, successful checks, link-only fallbacks and displayed result count, without candidate URLs or raw errors.
+- **Line 64:** Returns clear review instructions for candidates, No matches found for a successful empty search, or YouTube search unavailable when no key is configured. Unverified playback cannot bypass attachment verification.
+- **Line 65:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 66:** Blank line separates related operations for readability.
+- **Line 67:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
+- **Line 68:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
+- **Line 69:** Tracks whether this route has an external-provider operation in flight.
+- **Line 70:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
+- **Line 71:** Logs that an authenticated request reached this route without recording user IDs, lesson IDs or request data.
+- **Line 72:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
+- **Line 73:** Returns the same 404 for a missing lesson or one owned by someone else.
+- **Line 74:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 75:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
+- **Line 76:** Loads this coach's recent attempts or uses an empty list for a new coach.
+- **Line 77:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
+- **Line 78:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
+- **Line 79:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
+- **Line 80:** Logs a fixed local_quota or search_unavailable reason, then returns the existing safe 429 quota message or a clearer YouTube-unavailable 502 message.
+- **Line 81:** Always clears the in-flight flag after success or failure.
+- **Line 82:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 83:** Closes this function, conditional block or object; execution continues after the block.
 
 ## server/youtube-quota.js
 

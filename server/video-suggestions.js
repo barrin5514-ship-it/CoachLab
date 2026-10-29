@@ -34,7 +34,8 @@ export async function suggestLessonVideos(lesson, { env = process.env, verify = 
   const query = lessonVideoQuery(lesson);
   const key = (env.YOUTUBE_API_KEY || '').trim();
   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
-  diagnostic('start', { key_present: !!key, search_terms: query ? `${query.technique} drill ${query.audience} ${lesson.discipline}` : '', match_terms: matchTerms });
+  const searchTerms = query ? `${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
+  diagnostic('start', { key_present: !!key, search_terms: searchTerms, match_terms: matchTerms });
   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
   const videos = [];
   let checked = 0;
@@ -56,7 +57,7 @@ export async function suggestLessonVideos(lesson, { env = process.env, verify = 
   if (lesson.audience !== 'Kids') await check(curated);
   if (!videos.some(item => !item.link_only) && key) {
     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
-    await check(await find(`${query.technique} drill ${query.audience}`, lesson.discipline, key));
+    await check(await find(searchTerms, lesson.discipline, key));
   }
   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });

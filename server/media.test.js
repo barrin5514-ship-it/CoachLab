@@ -96,7 +96,7 @@ test('video fallback searches once, passes kids context, filters broken links an
   let searches = 0;
   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
     env: { YOUTUBE_API_KEY: 'fake' },
-    search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+    search: async (query, discipline) => { searches++; assert.equal(query, 'jab Boxing drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
   });
   assert.equal(searches, 1);
@@ -248,4 +248,33 @@ test('finder uses the optional YouTube key only on the server and drops irreleva
   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
+});
+
+test('video relevance normalizes plurals and punctuation, checks descriptions and ranks technique matches', async () => {
+  const items = [
+    ['Inside Leg Kick Tutorial', 'Learn inside leg kicks'],
+    ['How to Throw a Low Kick | Muay Thai', 'Technical instruction'],
+    ['Distance control', 'Use LEG-KICKS to enter safely'],
+    ['Cooking dinner', 'A delicious recipe'],
+    ['Leg day workout', 'Strength exercises'],
+  ].map(([title, description], index) => ({ id: { videoId: 'abcdefghij' + index }, snippet: { title, description } }));
+  const fetcher = async url => {
+    const params = new URL(url).searchParams;
+    assert.equal(params.get('maxResults'), '15');
+    assert.equal(params.get('safeSearch'), 'strict');
+    assert.equal(params.get('videoEmbeddable'), 'true');
+    return Response.json({ items });
+  };
+  const found = await youtubeCandidates('inside leg kicks', 'Muay Thai', 'fake', fetcher, 'inside leg kicks', () => {});
+  assert.deepEqual(found.map(item => item.title), items.slice(0, 3).map(item => item.snippet.title));
+  const punches = await youtubeCandidates('punches', 'Boxing', 'fake', async () => Response.json({ items: [{ id: { videoId: 'abcdefghij0' }, snippet: { title: 'PUNCH! tutorial' } }] }), 'punches', () => {});
+  assert.equal(punches.length, 1);
+});
+
+test('reported lesson puts the technique before discipline, audience and goal context', async () => {
+  const lesson = { title: 'Using Leg Kicks to Close the Distance', goal: 'inside leg kicks to close distance', discipline: 'Muay Thai', audience: 'Adults' };
+  await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'fake' }, diagnostic: () => {}, search: async query => {
+    assert.equal(query, 'inside leg kicks Muay Thai drill adults close distance');
+    return [];
+  } });
 });
