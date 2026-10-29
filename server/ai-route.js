@@ -1,5 +1,6 @@
 import { validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
 import { validateLesson } from './validate-lesson.js';
+import { reconcileDraftTiming } from './ai-timing.js';
 import { generateDraft, AiError } from './ai-provider.js';
 
 export function registerAiRoute(app, { provider = generateDraft, now = Date.now } = {}) {
@@ -15,8 +16,9 @@ export function registerAiRoute(app, { provider = generateDraft, now = Date.now 
     attempts.push(time);
     busy = true;
     try {
-      const draft = await provider(request.body);
-      if (validateDraft(draft, request.body)) throw new AiError(502, 'AI returned an incomplete lesson or incorrect duration. Please try again.');
+      const draft = reconcileDraftTiming(await provider(request.body), request.body);
+      const invalid = validateDraft(draft, request.body);
+      if (invalid) throw new AiError(502, `AI draft failed validation: ${invalid} Please try again.`);
       const lesson = toLesson(draft, request.body);
       if (validateLesson(lesson).error || Buffer.byteLength(JSON.stringify(lesson)) > 32000) throw new AiError(502, 'AI lesson is too large to save. Try a simpler request.');
       response.json({ draft });

@@ -4566,3 +4566,58 @@ REPORT BACK (in one code block)
 - Demo commands checked against package.json and the actual App heading. Reviewed documentation and commit scope. No secret values read/printed, real database records edited, historical SQLite data touched or neighboring projects changed. The only remote mutations are authorized Git pushes/Render's normal deployment. Migrations are additive and versioned.
 - Limits: live health and correct built assets are verified, not authenticated live CRUD or real Gemini output. Owner should test new lesson creation/editing, refresh/logout/login persistence, audience/discipline filters, real AI drafts and phone media playback. Local PostgreSQL Development will need the additive audience migration through its normal verified workflow; this session did not read local credentials or migrate it.
 - Step-four commit subject: docs: prepare three-minute demo and safe agent exercise. Its hash and final synchronization will be reported after commit/push.
+
+## 2026-10-28 — Longer-class AI draft reliability
+
+### Exact user prompt
+
+```text
+COACHLAB — FIX: AI FAILS ON LONGER CLASSES
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push.
+
+PROBLEM
+On the live site, AI lesson drafts fail for longer classes (e.g. 60
+min) with "AI returned an incomplete lesson or incorrect duration.
+Please try again." Shorter classes (30-45 min) work. Started after
+the detailed cues/mistakes/easier-harder upgrade.
+
+LIKELY CAUSES TO CHECK
+- Output getting cut off (too long for max tokens/size/timeout).
+- Section minutes not adding up exactly to total time.
+
+FIX (small, safe)
+- Find the real cause using mocked tests; do not burn live AI calls.
+- If cut off: make each section's text more concise (shorter cues,
+  fewer items) and/or raise limits within cost-aware bounds.
+- If minutes off: have the server fix small rounding differences
+  (adjust the last/longest section) instead of rejecting, and tell
+  the AI the exact minutes per section.
+- Keep all safety rules and validation.
+- 60 and 90 minute classes must work.
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass. No database changes. Never print .env values.
+
+REPORT BACK (in one code block)
+- The real cause, in plain English.
+- Commit hash + one line, push result, fresh test/build results.
+```
+
+### Additional exact user prompt
+
+```text
+continue
+```
+
+### Actual findings and work (assistant outcome summary)
+
+- Started clean at f668798860b581f327f17a40126d933c0aa2e906. Read AGENTS.md and traced the AI route, provider, shared validation and existing mocks.
+- The reported message is emitted only by post-generation validateDraft rejection. Token cutoff, oversized provider response, unreadable JSON and timeout have different messages in the provider. Before editing, mocks reproduced rejection for both 60 and 90 minutes when the sum was one minute off, and independently when per-section guidance exceeded 200 characters. The same otherwise valid drafts passed. A MAX_TOKENS mock produced the distinct cutoff message. This identifies the failure stage and reproducible causes, not the exact offending field in the unavailable live response.
+- Added server/ai-timing.js: compute an exact five-section schedule (15/25/30/20 percent rounded down, remainder to cooldown); reconcile discrepancies only up to both two minutes and 5% of duration. Only otherwise-valid drafts can be corrected; the longest section is adjusted without mutating source content, followed by full validation. Large gaps and invalid content remain rejected.
+- Updated server/ai-provider.js to supply exact schedule values and target concise 2–4 numbered cues, one mistake/easier/harder option, and shorter text regardless of duration. Existing safety instructions, 8192-token cap, 65536-byte response cap, 45-second timeout and rate limits are unchanged. No automatic retries or added API spending.
+- Updated server/ai-route.js to apply the narrow repair and expose the specific fixed validator reason, never generated content or credentials. Drafts still require explicit coach approval before saving. No schema/database changes.
+- Added repeatable tests: schedules for every duration 15–180; positive/negative one/two-minute repair; unchanged source text and safety; malformed/large-gap rejection; actual Gemini adapter plus HTTP API with mocked transport for 60/90 minutes across all six disciplines; save-format bounds; no automatic save; separate safe errors for long text, missing guidance, large gaps and cutoff.
+- Fresh targeted AI suite: 8 passed, 0 failed. Fresh full npm test: 85 passed, 0 failed, concurrency=1. After explicit completion, full npm run build passed (install, Prisma 7.10.0 generation/TypeScript compile, Vite 32 modules). Four current code/test listings, 345 lines and explanations verified; JavaScript syntax checks passed. No live AI request or .env read. Real Gemini success for the owner's input remains unverified.
+- Updated CODE_WALKTHROUGH.md for all new/modified source and test lines. No implementation/test failures encountered during this fix. Commit subject: fix: stabilize longer AI lessons with bounded timing repair. The containing commit hash and push verification are reported after committing.

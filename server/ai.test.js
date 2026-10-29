@@ -1,3 +1,5 @@
+import { sectionSchedule, reconcileDraftTiming } from './ai-timing.js';
+import { validateLesson } from './validate-lesson.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -150,4 +152,83 @@ test('every timed section requires numbered cues and bounded mistake and progres
   assert.equal((lesson.drills.match(/Common mistakes:/g) || []).length, 5);
   assert.equal((lesson.drills.match(/Easier option:/g) || []).length, 5);
   assert.equal((lesson.drills.match(/Harder option:/g) || []).length, 5);
+});
+
+test('exact section schedules sum to every supported class length and timing repair stays narrow', () => {
+  for (let duration = 15; duration <= 180; duration++) {
+    const schedule = sectionSchedule(duration);
+    assert.deepEqual(schedule.map(section => section.name), sections);
+    assert.equal(schedule.reduce((sum, section) => sum + section.minutes, 0), duration);
+    assert.ok(schedule.every(section => Number.isInteger(section.minutes) && section.minutes > 0));
+  }
+  for (const duration_minutes of [60, 90]) {
+    const input = { ...request, duration_minutes };
+    const valid = { ...draft, sections: draft.sections.map((section, index) => ({ ...section, minutes: sectionSchedule(duration_minutes)[index].minutes })) };
+    assert.equal(reconcileDraftTiming(valid, input), valid);
+    for (const difference of [-2, -1, 1, 2]) {
+      const mismatched = structuredClone(valid);
+      mismatched.sections[2].minutes += difference;
+      const before = structuredClone(mismatched);
+      assert.ok(validateDraft(mismatched, input));
+      const repaired = reconcileDraftTiming(mismatched, input);
+      assert.equal(validateDraft(repaired, input), null);
+      assert.deepEqual(mismatched, before);
+      assert.deepEqual(repaired.sections.map(section => section.instructions), before.sections.map(section => section.instructions));
+      assert.equal(repaired.safety, before.safety);
+    }
+    for (const change of [section => { section.minutes += 3; }, section => { section.minutes = 1.5; }, section => { section.minutes = 0; }, section => { section.instructions = ''; }, section => { section.common_mistakes = 'x'.repeat(201); }]) {
+      const invalid = structuredClone(valid);
+      invalid.sections[2].minutes++;
+      change(invalid.sections[0]);
+      assert.ok(validateDraft(reconcileDraftTiming(invalid, input), input));
+    }
+  }
+  assert.equal(reconcileDraftTiming(null, request), null);
+});
+
+test('60 and 90 minute AI requests succeed through mocked Gemini and HTTP; invalid output stays rejected', async t => {
+  const database = new Database(':memory:');
+  migrate(database);
+  let time = 0;
+  let mode = 'rounding';
+  const provider = input => generateDraft(input, { env, fetcher: async (url, options) => {
+    const body = JSON.parse(options.body);
+    const prompt = body.systemInstruction.parts[0].text;
+    assert.ok(prompt.includes(JSON.stringify(sectionSchedule(input.duration_minutes))));
+    assert.match(prompt, /2–4 numbered cues/);
+    assert.match(prompt, /Longer classes use more repetitions/);
+    assert.equal(body.generationConfig.maxOutputTokens, 8192);
+    if (mode === 'cutoff') return Response.json({ candidates: [{ finishReason: 'MAX_TOKENS' }] });
+    const generated = { ...draft, sections: draft.sections.map((section, index) => ({ ...section, minutes: sectionSchedule(input.duration_minutes)[index].minutes })) };
+    generated.sections[2].minutes += mode === 'large-gap' ? 8 : 1;
+    if (mode === 'long-text') generated.sections[0].easier = 'private-output-'.repeat(20);
+    if (mode === 'missing-guidance') delete generated.sections[0].common_mistakes;
+    return Response.json(envelope(generated));
+  } });
+  const server = createApp(database, { ...testOptions, provider, now: () => time }).listen(0, '127.0.0.1');
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); });
+  await once(server, 'listening');
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const generate = async input => {
+    time += 60001;
+    return fetch(base + '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  };
+  for (const duration_minutes of [60, 90]) for (const discipline of disciplines) {
+    const input = { ...request, duration_minutes, discipline, audience: 'Kids' };
+    const response = await generate(input);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(validateDraft(result.draft, input), null);
+    assert.equal(validateLesson(toLesson(result.draft, input)).error, undefined);
+    assert.ok(Buffer.byteLength(JSON.stringify(toLesson(result.draft, input))) < 32000);
+  }
+  assert.equal(database.prepare('SELECT COUNT(*) AS count FROM lessons').get().count, 0);
+  for (const failureMode of ['long-text', 'missing-guidance', 'large-gap', 'cutoff']) {
+    mode = failureMode;
+    const response = await generate({ ...request, duration_minutes: 90 });
+    assert.equal(response.status, 502);
+    const { error } = await response.json();
+    assert.doesNotMatch(error, /private-output/);
+    assert.match(error, mode === 'cutoff' ? /did not return a complete lesson/ : mode === 'large-gap' ? /Section times must add up/ : /Each section needs common mistakes/);
+  }
 });

@@ -1,3 +1,4 @@
+import { sectionSchedule } from './ai-timing.js';
 import { safetyGuidance } from '../client/src/lesson-draft.js';
 
 const string = { type: 'string' };
@@ -19,6 +20,7 @@ const instruction = `Create a complete coaching lesson DRAFT requiring qualified
 Return title (maximum 200 characters), objectives (maximum 1500), techniques, common_mistakes, coaching_corrections, modifications, safety (each maximum 1000).
 Return exactly five sections in this order: Warm-up, Technique teaching, Progressive drills, Partner exercises, Cooldown.
 Each section has name, integer minutes and instructions (maximum 1000 characters, at least two numbered step-by-step cues). Each section MUST also include common_mistakes, easier and harder (each maximum 200 characters). Harder means more coordination or precision, never breaking the safety rules. Minutes must sum exactly to duration_minutes. All sections need positive time except Partner exercises may be zero with a solo alternative.
+Keep output concise regardless of class length: use 2–4 numbered cues per section, target at most 450 characters for instructions and 100 characters each for common_mistakes, easier and harder. Use one short mistake and one option per field. Target at most 500 characters for each overall guidance field and objectives. Longer classes use more repetitions, practice rounds and breaks, not more text or techniques. Never omit safety guidance.
 When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. Use short newline-separated bullet cues, not long paragraphs. Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
 For sections that teach or drill a nameable technique or exercise, add media_queries: up to two short search phrases (2 to 5 words, maximum 80 characters) naming that technique, for example "knee cut half guard pass". Use an empty list for warm-ups, cooldowns and generic activity. Phrases are search terms only: never include web addresses.
 Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
@@ -32,7 +34,7 @@ export async function generateDraft(request, { env = process.env, fetcher = fetc
     const response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: `${instruction}\nMANDATORY CLASS SAFETY RULES:\n${safetyGuidance(request)}` }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify({ ...request, audience: request.audience ?? 'Unspecified' }) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }),
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: `${instruction}\nEXACT SECTION SCHEDULE (copy each minutes value; include repetitions, transitions and breaks within it; use solo alternatives for partner time when appropriate): ${JSON.stringify(sectionSchedule(request.duration_minutes))}\nMANDATORY CLASS SAFETY RULES:\n${safetyGuidance(request)}` }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify({ ...request, audience: request.audience ?? 'Unspecified' }) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }),
     });
     if (!response.ok) { await response.body?.cancel(); throw new AiError(response.status === 429 ? 429 : 502, 'AI provider unavailable or quota exhausted. Try later; manual lessons still work.'); }
     if (!response.body) throw new AiError(502, 'AI provider returned an empty response.');
