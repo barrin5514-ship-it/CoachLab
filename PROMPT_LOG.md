@@ -4900,3 +4900,53 @@ Actual checks today: 21 targeted media tests passed; complete serial npm test pa
 Genuine agent mistakes: initial edit helper assumed Python existed; command failed before edits, and the following 19 passing tests were the old baseline, not verification of the fix. Reapplied edits using available Node and patch tools, then ran the actual 21/104 passing tests above. Previous title-only logic omitted descriptions/plural normalization; owner logs confirmed its live rejection and these regressions cover the correction.
 
 Files: server/media-finder.js, server/video-suggestions.js, server/media.test.js, CODE_WALKTHROUGH.md, README.md, PROMPT_LOG.md. Source diffs reviewed, no changes to schema, dependencies or frontend. Prior completed fix hash: f8fe14c1d8633f02e89d142385783332c60ead4e. Intended single commit: "fix: rank video suggestions by normalized technique relevance"; containing hash and push result reported after commit.
+
+## 2026-10-29 — Multi-select video approval and beginner comments
+
+Exact user prompt:
+```text
+COACHLAB — MULTI-SELECT VIDEOS + BEGINNER CODE COMMENTS
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is tomorrow: small and safe.
+
+PART 1 — LET COACH ADD SEVERAL VIDEOS AT ONCE (commit 1)
+Problem: in Suggest videos, clicking Add on one video closes the panel.
+To add another, the coach must reopen it and search again.
+Fix:
+- Each suggestion gets a checkbox (or Add/Added toggle).
+- Panel stays open while selecting. Show "X selected".
+- One "Add selected" button adds all chosen videos to the editor,
+  then closes the panel. Coach still clicks Save changes to keep them.
+- Reuse the current results; don't run a new YouTube search.
+- Skip duplicates already attached to the lesson.
+- Keep approval, limits, kids rules, and verification unchanged.
+- Mobile-friendly. Add tests for selecting several videos and duplicates.
+
+PART 2 — BEGINNER-FRIENDLY CODE COMMENTS (commit 2, after Part 1 passes)
+Goal: plain-English comments so the owner can explain any part.
+- COMMENTS ONLY. No behavior, name, or logic changes.
+- Comment each file's purpose at the top, each function/route/component,
+  and tricky lines (security, limits, AI prompts, database, validation,
+  startup checks, video search). Skip obvious lines.
+- Simple words, short sentences, explain WHY not just WHAT.
+- Don't touch generated files, node_modules, or build output.
+- Confirm with a diff check that only comments changed.
+
+RULES
+- Low RAM: tests serially. Push only if tests and build pass.
+- No database changes. Never print .env values. Don't touch other projects.
+- If anything risks breaking the live site, stop and report instead.
+
+REPORT BACK (in one code block)
+- Commit hash + one line per part, push result.
+- Fresh test/build results.
+- Confirmation Part 2 changed comments only.
+```
+
+Part 1 outcome: checkboxes keep current results and show the selection count; one explicit Add selected passes a batch to the existing editor. Save changes remains the only persistence step. Duplicate YouTube IDs are skipped, including alternative URLs and attachments freshly fetched when opening the editor. Failed editor opening retains selections. Unverified links cannot be selected, the attachment limit remains enforced, and the clickable selection label is at least 44px high for phones. No new search occurs during selection or approval. Server rules, database, provider quotas and Kids safeguards are unchanged.
+
+Fresh checks: 23 targeted media tests and 106 full serial tests passed, zero failures/skips. Production build passed (Prisma generation/TypeScript/Vite, 34 modules). All five modified source/test listings checked against actual files: 753 lines and explanations; JavaScript syntax passed. Handler tests execute transformed actual JSX with mocked hooks/network, verifying two selections, count, disabled attached/unverified candidates, failure retention, successful close and a single search. Batch tests cover repeated IDs, original-list preservation and limits. These are automated handler tests, not real-browser interaction claims.
+
+Genuine tooling mistakes: the edit helper used index instead of JavaScript indexOf and stopped before writing the component; corrected by writing the intended component and running tests. Also launched the build after a poll still showed the test process running, briefly overlapping those processes despite the low-RAM instruction. Both completed successfully; subsequent verification commands will wait for process completion before starting the next heavy command. No application bug or test outcome was concealed.
+
+Reviewed changed code, tests and refreshed walkthrough; no secrets, database files, generated output or dependencies intended for commit. Previous fix: e6ddbc2d1fb19f90c69ca7da15ce87681be00059. Part 1 commit subject: "feat: select several suggested videos before opening editor". Hash and push outcome recorded after commit; Part 2 follows only after this verified milestone.

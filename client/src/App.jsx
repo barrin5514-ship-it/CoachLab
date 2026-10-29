@@ -4,7 +4,7 @@ import LessonForm from './LessonForm.jsx';
 import LessonCard from './LessonCard.jsx';
 import AiLessonForm from './AiLessonForm.jsx';
 import { disciplineNavigation, filterLessons } from './lesson-view.js';
-import { fetchMedia, withApprovedVideo } from './media.js';
+import { fetchMedia, withApprovedVideos } from './media.js';
 
 export default function App({ user, onLogOut }) {
   const [lessons, setLessons] = useState([]);
@@ -61,20 +61,22 @@ export default function App({ user, onLogOut }) {
 
   const mediaFor = id => media.filter(item => item.lesson_id === id);
 
-  async function handleEdit(lesson, approvedVideo) {
+  async function handleEdit(lesson, approvedVideos = []) {
     setNotice(null);
     setOpening(true);
     try {
       const fresh = await fetchMedia();
       const attached = fresh.filter(item => item.lesson_id === lesson.id);
-      setEditingMedia(withApprovedVideo(attached, approvedVideo));
+      setEditingMedia(withApprovedVideos(attached, approvedVideos));
       setMedia(fresh);
       setMediaError('');
       setEditing(lesson);
       setFormOpen('manual');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
     } catch {
       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+      return false;
     } finally { setOpening(false); }
   }
 

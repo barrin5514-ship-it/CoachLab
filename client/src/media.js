@@ -46,6 +46,9 @@ export function withApprovedVideo(media, video) {
   if (media.length >= mediaLimits.perLesson) throw new Error('This lesson already has the maximum number of attachments. Remove one in Edit lesson first.');
   return [...media, { ...video, activity: '', origin: 'suggested' }];
 }
+export function withApprovedVideos(media, videos = []) {
+  return videos.reduce((result, video) => video.link_only ? result : withApprovedVideo(result, video), [...media]);
+}
 export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
 export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
 

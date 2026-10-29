@@ -153,3 +153,6 @@ button.link:hover:not(:disabled) { background: none; color: #104b42; }
 .chat-panel form > button { margin-top: 8px; }
 .chat-panel button { min-height: 44px; }
 body:has(.coach-chat) main { padding-bottom: 100px; }
+
+.video-choice { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; }
+.video-choice input { width: auto; margin: 0; }

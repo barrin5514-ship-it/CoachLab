@@ -99,7 +99,7 @@ Signed-in dashboard coordinates lesson workflows. Approved video attachments are
 4 | import LessonCard from './LessonCard.jsx';
 5 | import AiLessonForm from './AiLessonForm.jsx';
 6 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
-7 | import { fetchMedia, withApprovedVideo } from './media.js';
+7 | import { fetchMedia, withApprovedVideos } from './media.js';
 8 |
 9 | export default function App({ user, onLogOut }) {
 10 |   const [lessons, setLessons] = useState([]);
@@ -228,157 +228,161 @@ Signed-in dashboard coordinates lesson workflows. Approved video attachments are
 61 |
 62 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
 63 |
-64 |   async function handleEdit(lesson, approvedVideo) {
+64 |   async function handleEdit(lesson, approvedVideos = []) {
 65 |     setNotice(null);
 66 |     setOpening(true);
 67 |     try {
 68 |       const fresh = await fetchMedia();
 69 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
-70 |       setEditingMedia(withApprovedVideo(attached, approvedVideo));
+70 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
 71 |       setMedia(fresh);
 72 |       setMediaError('');
 73 |       setEditing(lesson);
 74 |       setFormOpen('manual');
 75 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-76 |     } catch {
-77 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-78 |     } finally { setOpening(false); }
-79 |   }
-80 |
-81 |   async function handleSaved(lesson, sent) {
-82 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-83 |     setAudience('All');
-84 |     setDiscipline('All');
-85 |     setFormOpen(false);
-86 |     setEditing(null);
-87 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-88 |     let text = `Saved “${lesson.title}”.`;
-89 |     let tone = 'success';
-90 |     try {
+76 |       return true;
+77 |     } catch {
+78 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+79 |       return false;
+80 |     } finally { setOpening(false); }
+81 |   }
+82 |
+83 |   async function handleSaved(lesson, sent) {
+84 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+85 |     setAudience('All');
+86 |     setDiscipline('All');
+87 |     setFormOpen(false);
+88 |     setEditing(null);
+89 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+90 |     let text = `Saved “${lesson.title}”.`;
 ```
 
 - **Line 61:** Blank line separates related sections; it performs no operation.
 - **Line 62:** Helper that returns only the attachments of one lesson.
 - **Line 63:** Blank line separates related sections; it performs no operation.
-- **Line 64:** Opens the existing lesson editor and optionally includes one explicitly approved video.
+- **Line 64:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
 - **Line 65:** Clears any old message.
 - **Line 66:** Shows that opening is in progress (the buttons are disabled meanwhile).
 - **Line 67:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
 - **Line 68:** Asks the server what attachments are really stored now.
 - **Line 69:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
-- **Line 70:** Builds an editable attachment copy with the approved video, checking duplicates and the attachment limit before opening the editor.
+- **Line 70:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
 - **Line 71:** Replaces the page’s attachment list with that fresh copy.
 - **Line 72:** Clears any earlier media error.
 - **Line 73:** Remembers which lesson is being edited.
 - **Line 74:** Opens the manual form.
 - **Line 75:** Scrolls to the top where the form appears, as before.
-- **Line 76:** Catches failure without including private exception details in public hosting logs.
-- **Line 77:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 78:** Always ends the opening state.
-- **Line 79:** Closes the App function.
-- **Line 80:** Blank line separates related sections; it performs no operation.
-- **Line 81:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 82:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 83:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 84:** Resets discipline filtering after a save so the saved lesson can be seen.
-- **Line 85:** Closes the form; unmounting it discards its input state after success.
-- **Line 86:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 87:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 88:** Starts the final message text.
-- **Line 89:** Starts as a success tone.
-- **Line 90:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 76:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
+- **Line 77:** Catches failure without including private exception details in public hosting logs.
+- **Line 78:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 79:** Reports failure to the selection panel so it can keep results and checked videos for retry.
+- **Line 80:** Always ends the opening state.
+- **Line 81:** Closes the App function.
+- **Line 82:** Blank line separates related sections; it performs no operation.
+- **Line 83:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 84:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 85:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 86:** Resets discipline filtering after a save so the saved lesson can be seen.
+- **Line 87:** Closes the form; unmounting it discards its input state after success.
+- **Line 88:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 89:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 90:** Starts the final message text.
 
 ### Lines 91–120
 
 ```text
-91 |       const fresh = await fetchMedia();
-92 |       setMedia(fresh);
-93 |       setMediaError('');
-94 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-95 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-96 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-97 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-98 |     } catch {
-99 |       tone = 'warning';
-100 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-101 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-102 |     }
-103 |     setNotice({ tone, text });
-104 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-105 |   }
-106 |
-107 |   return (
-108 |     <main>
-109 |       <header className="hero">
-110 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-111 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-112 |       </header>
-113 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
-114 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-115 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-116 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-117 |       <section aria-labelledby="lessons-heading">
-118 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
-119 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-120 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+91 |     let tone = 'success';
+92 |     try {
+93 |       const fresh = await fetchMedia();
+94 |       setMedia(fresh);
+95 |       setMediaError('');
+96 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+97 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+98 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+99 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+100 |     } catch {
+101 |       tone = 'warning';
+102 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+103 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+104 |     }
+105 |     setNotice({ tone, text });
+106 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+107 |   }
+108 |
+109 |   return (
+110 |     <main>
+111 |       <header className="hero">
+112 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+113 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+114 |       </header>
+115 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+116 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+117 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+118 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+119 |       <section aria-labelledby="lessons-heading">
+120 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
 ```
 
-- **Line 91:** Asks the server what attachments are really stored now.
-- **Line 92:** Replaces the page’s attachment list with that fresh copy.
-- **Line 93:** Clears any earlier media error.
-- **Line 94:** Counts the stored attachments of this lesson.
-- **Line 95:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 96:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 97:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 98:** Catches failure without including private exception details in public hosting logs.
-- **Line 99:** …uses a warning tone,
-- **Line 100:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 101:** …and shows the retry banner.
-- **Line 102:** Closes the App function.
-- **Line 103:** Shows the final message.
-- **Line 104:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 105:** Closes the App function.
-- **Line 106:** Blank line separates related sections; it performs no operation.
-- **Line 107:** Begins returning a parenthesized JSX tree.
-- **Line 108:** Opens the semantic main content element.
-- **Line 109:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 110:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
-- **Line 111:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 112:** Closes the header.
-- **Line 113:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
-- **Line 114:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 115:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
-- **Line 116:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 117:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 118:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
-- **Line 119:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 120:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 91:** Starts as a success tone.
+- **Line 92:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 93:** Asks the server what attachments are really stored now.
+- **Line 94:** Replaces the page’s attachment list with that fresh copy.
+- **Line 95:** Clears any earlier media error.
+- **Line 96:** Counts the stored attachments of this lesson.
+- **Line 97:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 98:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 99:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 100:** Catches failure without including private exception details in public hosting logs.
+- **Line 101:** …uses a warning tone,
+- **Line 102:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 103:** …and shows the retry banner.
+- **Line 104:** Closes the App function.
+- **Line 105:** Shows the final message.
+- **Line 106:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 107:** Closes the App function.
+- **Line 108:** Blank line separates related sections; it performs no operation.
+- **Line 109:** Begins returning a parenthesized JSX tree.
+- **Line 110:** Opens the semantic main content element.
+- **Line 111:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 112:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 113:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 114:** Closes the header.
+- **Line 115:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
+- **Line 116:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 117:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
+- **Line 118:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 119:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 120:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
 
-### Lines 121–130
+### Lines 121–132
 
 ```text
-121 |         {loading && <p role="status">Loading lesson plans…</p>}
-122 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-123 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-124 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-125 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-126 |       </section>
-127 |       <CoachingChat key={user.id} />
-128 |     </main>
-129 |   );
-130 | }
+121 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+122 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+123 |         {loading && <p role="status">Loading lesson plans…</p>}
+124 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+125 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+126 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+127 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+128 |       </section>
+129 |       <CoachingChat key={user.id} />
+130 |     </main>
+131 |   );
+132 | }
 ```
 
-- **Line 121:** Conditionally shows loading text as a live status paragraph.
-- **Line 122:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 123:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 124:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 125:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
-- **Line 126:** Closes the lesson section.
-- **Line 127:** Renders chat only within the signed-in app; changing the user ID resets its React state.
-- **Line 128:** Closes main.
-- **Line 129:** Closes the parenthesized return statement with a semicolon.
-- **Line 130:** Closes the App function.
+- **Line 121:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 122:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 123:** Conditionally shows loading text as a live status paragraph.
+- **Line 124:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 125:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 126:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 127:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
+- **Line 128:** Closes the lesson section.
+- **Line 129:** Renders chat only within the signed-in app; changing the user ID resets its React state.
+- **Line 130:** Closes main.
+- **Line 131:** Closes the parenthesized return statement with a semicolon.
+- **Line 132:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -716,7 +720,7 @@ Shared application styling, including a compact corner chat panel constrained to
 - **Line 149:** Limits transcript height to 200 pixels with scrolling; preserves line breaks and wraps long words.
 - **Line 150:** Adds a thin pale separator above each question/answer pair.
 
-### Lines 151–155
+### Lines 151–158
 
 ```text
 151 | .chat-panel label { margin: 12px 0 4px; }
@@ -724,6 +728,9 @@ Shared application styling, including a compact corner chat panel constrained to
 153 | .chat-panel form > button { margin-top: 8px; }
 154 | .chat-panel button { min-height: 44px; }
 155 | body:has(.coach-chat) main { padding-bottom: 100px; }
+156 |
+157 | .video-choice { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; }
+158 | .video-choice input { width: auto; margin: 0; }
 ```
 
 - **Line 151:** Spaces labels twelve pixels above and four below, with no horizontal margin.
@@ -731,6 +738,9 @@ Shared application styling, including a compact corner chat panel constrained to
 - **Line 153:** Adds eight pixels above the send button.
 - **Line 154:** Gives panel buttons a minimum 44-pixel touch target height.
 - **Line 155:** When chat exists, reserves 100 pixels beneath main content so the floating control is less likely to cover it.
+- **Line 156:** Blank line separating related statements; it has no runtime effect.
+- **Line 157:** Uses a flex row, centered checkbox, readable spacing and a minimum 44-pixel clickable label for phone use.
+- **Line 158:** Keeps checkbox width natural and removes input margins so global text-field styling does not stretch it.
 
 ## client/vite.config.js
 
@@ -6363,18 +6373,18 @@ Shared attachment helpers and existing HTTP utilities. withApprovedVideo makes a
 46 |   if (media.length >= mediaLimits.perLesson) throw new Error('This lesson already has the maximum number of attachments. Remove one in Edit lesson first.');
 47 |   return [...media, { ...video, activity: '', origin: 'suggested' }];
 48 | }
-49 | export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
-50 | export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
-51 |
-52 | export function groupMedia(media, blocks) {
-53 |   const headings = blocks.map(headingOf);
-54 |   const byBlock = new Map();
-55 |   const rest = [];
-56 |   for (const item of media) {
-57 |     const index = (item.activity || '').trim() ? headings.findIndex(heading => heading && sameActivity(item, heading)) : -1;
-58 |     if (index < 0) rest.push(item);
-59 |     else byBlock.set(index, [...(byBlock.get(index) || []), item]);
-60 |   }
+49 | export function withApprovedVideos(media, videos = []) {
+50 |   return videos.reduce((result, video) => video.link_only ? result : withApprovedVideo(result, video), [...media]);
+51 | }
+52 | export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
+53 | export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+54 |
+55 | export function groupMedia(media, blocks) {
+56 |   const headings = blocks.map(headingOf);
+57 |   const byBlock = new Map();
+58 |   const rest = [];
+59 |   for (const item of media) {
+60 |     const index = (item.activity || '').trim() ? headings.findIndex(heading => heading && sameActivity(item, heading)) : -1;
 ```
 
 - **Line 31:** New links are sent with their address, origin, caption, activity and credit details. The server decides the real kind after checking the link, so the browser’s guess is not sent.
@@ -6395,76 +6405,82 @@ Shared attachment helpers and existing HTTP utilities. withApprovedVideo makes a
 - **Line 46:** Throws a readable error when adding a new attachment would exceed the existing per-lesson maximum.
 - **Line 47:** Appends the approved video as a suggested whole-lesson attachment to a new array, leaving the saved array untouched.
 - **Line 48:** Closes the preceding block (function, object, or statement body).
-- **Line 49:** Chooses the small label shown under an attachment so people know whether they uploaded it, pasted it, or CoachLab suggested it (and that the link was checked).
-- **Line 50:** Returns the text only if it is a string starting with https://, otherwise null. It stops unsafe schemes such as javascript: from becoming clickable links.
-- **Line 51:** Blank line separates related sections for readability; it performs no operation.
-- **Line 52:** Exports groupMedia, used by lesson cards to place attachments under activities.
-- **Line 53:** Takes the first line of every activity block.
-- **Line 54:** A Map from block position to its attachments.
-- **Line 55:** The list of attachments that belong to no visible activity.
-- **Line 56:** Loops over every attachment.
-- **Line 57:** Finds the first block whose heading matches the attachment’s activity; blank activities and blank headings never match (index -1). Using the first match means a duplicated heading shows the attachment once.
-- **Line 58:** No matching block: the attachment goes to the rest list.
-- **Line 59:** Otherwise it is added to that block’s list, creating a new list from the old one plus the new attachment.
-- **Line 60:** Closes the preceding block (function, object, or statement body).
+- **Line 49:** Defines the batch helper; ordinary editing passes no videos and gets a copy of the existing attachments.
+- **Line 50:** Reduces the batch into a new attachment array through the existing duplicate/limit helper, excluding link-only candidates. The original list is never mutated if a limit error occurs.
+- **Line 51:** Closes the preceding block (function, object, or statement body).
+- **Line 52:** Chooses the small label shown under an attachment so people know whether they uploaded it, pasted it, or CoachLab suggested it (and that the link was checked).
+- **Line 53:** Returns the text only if it is a string starting with https://, otherwise null. It stops unsafe schemes such as javascript: from becoming clickable links.
+- **Line 54:** Blank line separates related sections for readability; it performs no operation.
+- **Line 55:** Exports groupMedia, used by lesson cards to place attachments under activities.
+- **Line 56:** Takes the first line of every activity block.
+- **Line 57:** A Map from block position to its attachments.
+- **Line 58:** The list of attachments that belong to no visible activity.
+- **Line 59:** Loops over every attachment.
+- **Line 60:** Finds the first block whose heading matches the attachment’s activity; blank activities and blank headings never match (index -1). Using the first match means a duplicated heading shows the attachment once.
 
-### Lines 61–86
+### Lines 61–89
 
 ```text
-61 |   return { byBlock, rest };
-62 | }
-63 |
-64 | export async function uploadFile(file) {
-65 |   const response = await fetch('/api/media/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) }, body: file });
-66 |   const data = await response.json().catch(() => ({}));
-67 |   if (response.status !== 201) throw new Error(data.error || 'The upload failed. Check the connection and try again.');
-68 |   return data;
-69 | }
-70 |
-71 | export async function checkLink(url) {
-72 |   const response = await fetch('/api/media/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-73 |   const data = await response.json().catch(() => ({}));
-74 |   if (!response.ok) throw new Error(data.error || 'The link could not be checked.');
-75 |   return data;
-76 | }
-77 |
-78 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
-79 |
-80 | export async function fetchMedia(signal) {
-81 |   const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
-82 |   if (!response.ok) throw new Error('Unable to load media.');
-83 |   const data = await response.json();
-84 |   if (!Array.isArray(data)) throw new Error('Unexpected media response.');
-85 |   return data;
-86 | }
+61 |     if (index < 0) rest.push(item);
+62 |     else byBlock.set(index, [...(byBlock.get(index) || []), item]);
+63 |   }
+64 |   return { byBlock, rest };
+65 | }
+66 |
+67 | export async function uploadFile(file) {
+68 |   const response = await fetch('/api/media/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) }, body: file });
+69 |   const data = await response.json().catch(() => ({}));
+70 |   if (response.status !== 201) throw new Error(data.error || 'The upload failed. Check the connection and try again.');
+71 |   return data;
+72 | }
+73 |
+74 | export async function checkLink(url) {
+75 |   const response = await fetch('/api/media/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+76 |   const data = await response.json().catch(() => ({}));
+77 |   if (!response.ok) throw new Error(data.error || 'The link could not be checked.');
+78 |   return data;
+79 | }
+80 |
+81 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
+82 |
+83 | export async function fetchMedia(signal) {
+84 |   const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
+85 |   if (!response.ok) throw new Error('Unable to load media.');
+86 |   const data = await response.json();
+87 |   if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+88 |   return data;
+89 | }
 ```
 
-- **Line 61:** Returns both results as an object.
-- **Line 62:** Closes the preceding block (function, object, or statement body).
-- **Line 63:** Blank line separates related sections for readability; it performs no operation.
-- **Line 64:** Exports uploadFile, which sends one chosen file to the server.
-- **Line 65:** POSTs the raw file as the request body, declaring its type and sending its name (URL-encoded so any characters are safe) in a header. No form wrapper is needed.
-- **Line 66:** Reads the JSON reply, using an empty object if the reply is not JSON.
-- **Line 67:** Anything other than status 201 (Created) becomes an Error carrying the server’s message or a friendly default.
-- **Line 68:** Returns the saved file’s details.
-- **Line 69:** Closes the preceding block (function, object, or statement body).
-- **Line 70:** Blank line separates related sections for readability; it performs no operation.
-- **Line 71:** Exports checkLink, which asks the server to verify a pasted link.
-- **Line 72:** POSTs the link as JSON to the verification route.
-- **Line 73:** Reads the JSON reply, using an empty object if the reply is not JSON.
-- **Line 74:** A failed check throws an Error with the server’s explanation so the form can show it.
-- **Line 75:** Returns the saved file’s details.
-- **Line 76:** Closes the preceding block (function, object, or statement body).
-- **Line 77:** Blank line separates related sections for readability; it performs no operation.
-- **Line 78:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
-- **Line 79:** Blank line separates related sections for readability; it performs no operation.
-- **Line 80:** Exports fetchMedia, one shared function that loads the list of every saved attachment from the server. App uses it when the page opens, before opening a lesson for editing and after saving.
-- **Line 81:** Requests the list. cache: "no-store" forbids the browser from reusing an older copy, so an edit form can never start from a stale list; the optional signal lets the caller cancel.
-- **Line 82:** Any failure status becomes an error.
-- **Line 83:** Parses the server's JSON response.
-- **Line 84:** A reply that is not a list is treated as an error too.
-- **Line 85:** Returns the saved file’s details.
-- **Line 86:** Closes the preceding block (function, object, or statement body).
+- **Line 61:** No matching block: the attachment goes to the rest list.
+- **Line 62:** Otherwise it is added to that block’s list, creating a new list from the old one plus the new attachment.
+- **Line 63:** Closes the preceding block (function, object, or statement body).
+- **Line 64:** Returns both results as an object.
+- **Line 65:** Closes the preceding block (function, object, or statement body).
+- **Line 66:** Blank line separates related sections for readability; it performs no operation.
+- **Line 67:** Exports uploadFile, which sends one chosen file to the server.
+- **Line 68:** POSTs the raw file as the request body, declaring its type and sending its name (URL-encoded so any characters are safe) in a header. No form wrapper is needed.
+- **Line 69:** Reads the JSON reply, using an empty object if the reply is not JSON.
+- **Line 70:** Anything other than status 201 (Created) becomes an Error carrying the server’s message or a friendly default.
+- **Line 71:** Returns the saved file’s details.
+- **Line 72:** Closes the preceding block (function, object, or statement body).
+- **Line 73:** Blank line separates related sections for readability; it performs no operation.
+- **Line 74:** Exports checkLink, which asks the server to verify a pasted link.
+- **Line 75:** POSTs the link as JSON to the verification route.
+- **Line 76:** Reads the JSON reply, using an empty object if the reply is not JSON.
+- **Line 77:** A failed check throws an Error with the server’s explanation so the form can show it.
+- **Line 78:** Returns the saved file’s details.
+- **Line 79:** Closes the preceding block (function, object, or statement body).
+- **Line 80:** Blank line separates related sections for readability; it performs no operation.
+- **Line 81:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
+- **Line 82:** Blank line separates related sections for readability; it performs no operation.
+- **Line 83:** Exports fetchMedia, one shared function that loads the list of every saved attachment from the server. App uses it when the page opens, before opening a lesson for editing and after saving.
+- **Line 84:** Requests the list. cache: "no-store" forbids the browser from reusing an older copy, so an edit form can never start from a stale list; the optional signal lets the caller cancel.
+- **Line 85:** Any failure status becomes an error.
+- **Line 86:** Parses the server's JSON response.
+- **Line 87:** A reply that is not a list is treated as an error too.
+- **Line 88:** Returns the saved file’s details.
+- **Line 89:** Closes the preceding block (function, object, or statement body).
 
 ## client/src/MediaItem.jsx
 
@@ -8258,7 +8274,7 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 269:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 270:** Checks singular punch against plural punches with punctuation using another mock response and no real quota or API key.
 
-### Lines 271–280
+### Lines 271–300
 
 ```text
 271 |   assert.equal(punches.length, 1);
@@ -8271,6 +8287,26 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 278 |     return [];
 279 |   } });
 280 | });
+281 |
+282 | test('batch video approval skips existing and repeated IDs without mutating attachments', async () => {
+283 |   const { withApprovedVideos } = await import('../client/src/media.js');
+284 |   const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
+285 |   const first = { url: 'https://youtu.be/abcdefghij1', title: 'First' };
+286 |   const second = { url: 'https://www.youtube.com/watch?v=abcdefghij2', title: 'Second' };
+287 |   const result = withApprovedVideos(existing, [existing[0], first, second, { ...first, url: 'https://www.youtube.com/watch?v=abcdefghij1' }, { ...second, link_only: true }]);
+288 |   assert.equal(result.length, 3);
+289 |   assert.equal(existing.length, 1);
+290 |   assert.deepEqual(result.slice(1).map(item => item.title), ['First', 'Second']);
+291 |   assert.ok(result.slice(1).every(item => item.origin === 'suggested'));
+292 |   const full = Array.from({ length: 11 }, (_, id) => ({ id, url: 'https://example.com/' + id }));
+293 |   assert.throws(() => withApprovedVideos(full, [first, second]), /maximum/);
+294 |   assert.equal(full.length, 11);
+295 | });
+296 |
+297 | test('video selection keeps results open, batches approval and retains selection after failure', async () => {
+298 |   const { transformWithOxc } = await import('vite');
+299 |   const { readFileSync } = await import('node:fs');
+300 |   const { runInNewContext } = await import('node:vm');
 ```
 
 - **Line 271:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
@@ -8283,6 +8319,88 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 278:** Returns no candidates from the test callback so this query-only check never verifies external links.
 - **Line 279:** Closes the injected fetch function, options object and generateDraft call.
 - **Line 280:** Closes the callback body and the function call that received it.
+- **Line 281:** Blank line separates related sections for readability; it performs no operation.
+- **Line 282:** Defines a regression test for batching, duplicate IDs and preserving original attachments.
+- **Line 283:** Loads the real batch helper inside the test.
+- **Line 284:** Defines one existing synthetic attachment in the saved-media array.
+- **Line 285:** Creates one fake short-form YouTube suggestion.
+- **Line 286:** Creates a different fake canonical YouTube suggestion.
+- **Line 287:** Exercises an existing attachment, two new videos, a duplicate alternate URL and an unverified item in the same batch.
+- **Line 288:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 289:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 290:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 291:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 292:** Builds an eleven-attachment fixture to check that adding two more fails without mutating the original list.
+- **Line 293:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 294:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 295:** Closes the callback body and the function call that received it.
+- **Line 296:** Blank line separates related sections for readability; it performs no operation.
+- **Line 297:** Defines a component-handler test with fake React hooks and network responses; this checks state transitions without a browser or new test framework.
+- **Line 298:** Loads the existing Vite JSX transformer for testing the actual component source.
+- **Line 299:** Loads the file reader used to inspect the component source.
+- **Line 300:** Loads an isolated JavaScript execution context for the mocked component harness.
+
+### Lines 301–328
+
+```text
+301 |   const { mediaLimits } = await import('../client/src/media.js');
+302 |   const source = readFileSync(new URL('../client/src/VideoSuggestions.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
+303 |   const { code } = await transformWithOxc(source, 'VideoSuggestions.jsx', { jsx: { runtime: 'classic' } });
+304 |   const slots = [], ref = { current: false }; let cursor = 0, searches = 0, approved, succeeds = false;
+305 |   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
+306 |   const videos = Array.from({ length: 4 }, (_, i) => ({ url: 'https://www.youtube.com/watch?v=abcdefghij' + i, title: 'Video ' + i, link_only: i === 3 }));
+307 |   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }), Fragment: 'fragment' };
+308 |   const Component = runInNewContext(code + '; VideoSuggestions;', { React, useState, useRef: () => ref, MediaItem: () => null, mediaLimits, youtubeId, fetch: async () => { searches++; return Response.json({ videos, message: 'Review before saving' }); } });
+309 |   const render = () => { cursor = 0; return Component({ lesson: { id: 1 }, media: [videos[0]], onApprove: async items => { approved = items; return succeeds; } }); };
+310 |   const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+311 |   const button = (tree, label) => all(tree).find(node => node.type === 'button' && node.children.includes(label));
+312 |   await button(render(), 'Suggest videos').props.onClick();
+313 |   let tree = render(), boxes = all(tree).filter(node => node.type === 'input');
+314 |   assert.equal(boxes[0].props.disabled, true);
+315 |   assert.equal(boxes[3].props.disabled, true);
+316 |   boxes[1].props.onChange(); boxes[2].props.onChange();
+317 |   tree = render();
+318 |   assert.equal(all(tree).filter(node => node.type === 'input' && node.props.checked).length, 2);
+319 |   assert.ok(all(tree).some(node => node.type === 'p' && node.children[0] === 2));
+320 |   assert.equal(searches, 1);
+321 |   await button(tree, 'Add selected').props.onClick();
+322 |   assert.equal(approved.length, 2);
+323 |   assert.ok(button(render(), 'Add selected'));
+324 |   succeeds = true;
+325 |   await button(render(), 'Add selected').props.onClick();
+326 |   assert.equal(button(render(), 'Add selected'), undefined);
+327 |   assert.equal(searches, 1);
+328 | });
+```
+
+- **Line 301:** Loads the real attachment limits used by the component.
+- **Line 302:** Reads actual JSX, removes module imports and converts the export to a local function so dependencies can be supplied explicitly by the harness.
+- **Line 303:** Transforms JSX into ordinary React.createElement calls using the project transformer.
+- **Line 304:** Creates hook storage, a persistent request ref and counters for searches, approvals and simulated editor success.
+- **Line 305:** Imitates the state hook with stable indexed slots and functional updates, allowing tests to rerender after each click.
+- **Line 306:** Builds four fake results, including one link-only candidate that must remain disabled.
+- **Line 307:** Builds plain element objects instead of a browser DOM, preserving types, props and children for handler assertions.
+- **Line 308:** Executes the component with only mocked hooks, media display and HTTP, plus the real ID parser and attachment limits; no provider or database is contacted.
+- **Line 309:** Renders from the same state slots with one existing attachment and an approval callback whose success can be changed.
+- **Line 310:** Walks the returned element tree and nested child arrays for assertions and simulated clicks.
+- **Line 311:** Finds a button by its visible label.
+- **Line 312:** Simulates the initial search and waits for its fake response.
+- **Line 313:** Rerenders after the search and locates the result checkboxes.
+- **Line 314:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 315:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 316:** Selects two different candidates using their real onChange handlers.
+- **Line 317:** Rerenders to observe selection state and the count.
+- **Line 318:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 319:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 320:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 321:** Clicks Add selected while the fake editor returns failure, allowing the test to verify selections remain.
+- **Line 322:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 323:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 324:** Changes the fake editor to succeed on the retry.
+- **Line 325:** Retries approval using the preserved selection and then checks the panel closes without a second search.
+- **Line 326:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 327:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 328:** Closes the callback body and the function call that received it.
 
 ## server/media-api.test.js
 
@@ -12590,7 +12708,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Displays suggestion candidates, using existing thumbnail/embed media for verified videos and a clearly labeled external Watch on YouTube link for unverified playback. Coach approval is still required for verified attachments.
 
-### Lines 1–29
+### Lines 1–30
 
 ```text
 1 | import React, { useRef, useState } from 'react';
@@ -12599,29 +12717,30 @@ Displays suggestion candidates, using existing thumbnail/embed media for verifie
 4 |
 5 | export default function VideoSuggestions({ lesson, media, onApprove, disabled }) {
 6 |   const [result, setResult] = useState(null);
-7 |   const [busy, setBusy] = useState(false);
-8 |   const [error, setError] = useState('');
-9 |   const running = useRef(false);
-10 |   async function suggest() {
-11 |     if (running.current) return;
-12 |     running.current = true; setBusy(true); setError('');
-13 |     try {
-14 |       const response = await fetch(`/api/lessons/${lesson.id}/videos`, { method: 'POST' });
-15 |       const data = await response.json();
-16 |       if (!response.ok) throw new Error(data.error || 'Video search is unavailable.');
-17 |       setResult(data);
-18 |     } catch (failure) { setError(failure instanceof TypeError ? 'Could not reach video search. Try later.' : failure.message); }
-19 |     finally { running.current = false; setBusy(false); }
-20 |   }
-21 |   return <section aria-label="Video suggestions">
-22 |     <button type="button" className="secondary" disabled={disabled || busy} onClick={suggest}>{busy ? 'Finding videos…' : 'Suggest videos'}</button>
-23 |     {result && <><p role="status">{result.message}</p><ul className="media-list">{result.videos.map(item => {
-24 |       const attached = media.some(entry => youtubeId(entry.url) === youtubeId(item.url));
-25 |       return <li key={item.url}>{item.link_only ? <><strong>{item.title}</strong><p>Playback could not be verified. This video may be blocked or unavailable.</p><a href={item.url} target="_blank" rel="noopener noreferrer">Watch on YouTube</a></> : <MediaItem item={item} />}<button type="button" disabled={disabled || item.link_only || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{item.link_only ? 'Playback unverified' : attached ? 'Already attached' : 'Add'}</button></li>;
-26 |     })}</ul><button type="button" className="secondary" onClick={() => setResult(null)}>Close suggestions</button></>}
-27 |     {error && <p className="error" role="alert">{error}</p>}
-28 |   </section>;
-29 | }
+7 |   const [selected, setSelected] = useState([]);
+8 |   const [busy, setBusy] = useState(false);
+9 |   const [error, setError] = useState('');
+10 |   const running = useRef(false);
+11 |   async function suggest() {
+12 |     if (running.current) return;
+13 |     running.current = true; setBusy(true); setError('');
+14 |     try {
+15 |       const response = await fetch(`/api/lessons/${lesson.id}/videos`, { method: 'POST' });
+16 |       const data = await response.json();
+17 |       if (!response.ok) throw new Error(data.error || 'Video search is unavailable.');
+18 |       setResult(data); setSelected([]);
+19 |     } catch (failure) { setError(failure instanceof TypeError ? 'Could not reach video search. Try later.' : failure.message); }
+20 |     finally { running.current = false; setBusy(false); }
+21 |   }
+22 |   async function approveSelected() {
+23 |     if (running.current || !selected.length) return;
+24 |     running.current = true; setBusy(true); setError('');
+25 |     try {
+26 |       const approved = result.videos.filter(item => selected.includes(item.url) && !item.link_only);
+27 |       if (await onApprove(approved) !== false) { setResult(null); setSelected([]); }
+28 |       else setError('Could not open the editor. Your selection is kept; try again.');
+29 |     } catch { setError('Could not add the selected videos. Your selection is kept; try again.'); }
+30 |     finally { running.current = false; setBusy(false); }
 ```
 
 - **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
@@ -12630,29 +12749,68 @@ Displays suggestion candidates, using existing thumbnail/embed media for verifie
 - **Line 4:** Blank line separates related operations for readability.
 - **Line 5:** Exports the lesson-specific suggestion panel, receiving saved lesson/media, approval callback and disabled state.
 - **Line 6:** Stores the latest suggestions and explanatory message; null means results are hidden.
-- **Line 7:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
-- **Line 8:** Stores a safe user-facing error message, initially empty.
-- **Line 9:** Keeps a synchronous in-flight flag in a ref to prevent duplicate clicks before React rerenders.
-- **Line 10:** Defines the asynchronous search-button handler.
-- **Line 11:** Ignores a second click while the current request is running.
-- **Line 12:** Marks the request active, displays busy state and clears the previous error.
-- **Line 13:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 14:** Posts only the saved lesson ID in the route; the server reads owned lesson fields rather than trusting client-provided text.
-- **Line 15:** Parses the server's JSON response.
-- **Line 16:** Converts unsuccessful responses into the server's safe message or a generic search-unavailable fallback.
-- **Line 17:** Stores the returned candidates for display only; this does not approve or save them.
-- **Line 18:** Displays a connection-friendly message for fetch failures and the safe API message for other errors.
-- **Line 19:** Always releases the synchronous flag and React busy state so another attempt is possible.
-- **Line 20:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 21:** Returns a section labeled for assistive technology as video suggestions.
-- **Line 22:** Renders the non-submit suggestion button, disables it while busy or externally blocked, and changes its caption during the search.
-- **Line 23:** When results exist, announces the explanatory message and maps candidates into the existing responsive media-list layout.
-- **Line 24:** Checks canonical YouTube IDs to determine whether this candidate is already attached to the saved lesson.
-- **Line 25:** For link-only candidates, displays a title, unverified-playback warning and a new-tab YouTube link instead of the embed component. Add is disabled for unverified, already-attached, full or externally disabled items. Verified items still use MediaItem and explicit approval; the URL is canonicalized by the server.
-- **Line 26:** Closes the result list and renders a non-submit close button that clears visible suggestions without changing lesson data.
-- **Line 27:** Shows errors in an accessible alert using the existing error styling.
-- **Line 28:** Closes the suggestion section and ends the JSX return statement.
-- **Line 29:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 7:** Keeps selected video URLs in React state for this open panel only; the setter triggers a fresh render.
+- **Line 8:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 9:** Stores a safe user-facing error message, initially empty.
+- **Line 10:** Keeps a synchronous in-flight flag in a ref to prevent duplicate clicks before React rerenders.
+- **Line 11:** Defines the asynchronous search-button handler.
+- **Line 12:** Ignores a second click while the current request is running.
+- **Line 13:** Marks the request active, displays busy state and clears the previous error.
+- **Line 14:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 15:** Posts only the saved lesson ID in the route; the server reads owned lesson fields rather than trusting client-provided text.
+- **Line 16:** Parses the server's JSON response.
+- **Line 17:** Converts unsuccessful responses into the server's safe message or a generic search-unavailable fallback.
+- **Line 18:** Stores the new search results and starts them with no selections.
+- **Line 19:** Displays a connection-friendly message for fetch failures and the safe API message for other errors.
+- **Line 20:** Always releases the synchronous flag and React busy state so another attempt is possible.
+- **Line 21:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 22:** Defines the asynchronous approval handler used once for the whole selected batch.
+- **Line 23:** Ignores repeated clicks while running, and refuses an empty selection.
+- **Line 24:** Marks the request active, displays busy state and clears the previous error.
+- **Line 25:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 26:** Collects only selected, playback-verified candidates from the existing results without another search.
+- **Line 27:** Waits for the editor to open; only success clears results and selections, closing the panel.
+- **Line 28:** Explains an editor-opening failure while leaving checked videos available for retry.
+- **Line 29:** Catches unexpected approval errors with a friendly message and preserves the selection.
+- **Line 30:** Always releases the synchronous flag and React busy state so another attempt is possible.
+
+### Lines 31–46
+
+```text
+31 |   }
+32 |   return <section aria-label="Video suggestions">
+33 |     <button type="button" className="secondary" disabled={disabled || busy || !!result} onClick={suggest}>{busy ? 'Finding videos…' : 'Suggest videos'}</button>
+34 |     {result && <><p role="status">{result.message}</p><ul className="media-list">{result.videos.map(item => {
+35 |       const attached = media.some(entry => youtubeId(entry.url) === youtubeId(item.url));
+36 |       const chosen = selected.includes(item.url);
+37 |       return <li key={item.url}>
+38 |         {item.link_only ? <><strong>{item.title}</strong><p>Playback could not be verified. This video may be blocked or unavailable.</p><a href={item.url} target="_blank" rel="noopener noreferrer">Watch on YouTube</a></> : <MediaItem item={item} />}
+39 |         <label className="video-choice"><input type="checkbox" checked={chosen} disabled={disabled || busy || item.link_only || attached || (!chosen && media.length + selected.length >= mediaLimits.perLesson)} onChange={() => setSelected(current => current.includes(item.url) ? current.filter(url => url !== item.url) : [...current, item.url])} />{item.link_only ? 'Playback unverified' : attached ? 'Already attached' : 'Select video'}</label>
+40 |       </li>;
+41 |     })}</ul><p role="status">{selected.length} selected</p>
+42 |       <button type="button" disabled={disabled || busy || !selected.length} onClick={approveSelected}>Add selected</button>
+43 |       <button type="button" className="secondary" disabled={busy} onClick={() => { setResult(null); setSelected([]); }}>Close suggestions</button></>}
+44 |     {error && <p className="error" role="alert">{error}</p>}
+45 |   </section>;
+46 | }
+```
+
+- **Line 31:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 32:** Returns a section labeled for assistive technology as video suggestions.
+- **Line 33:** Disables another search while results are open, during a request or while the parent editor blocks changes; the label shows progress.
+- **Line 34:** When results exist, announces the explanatory message and maps candidates into the existing responsive media-list layout.
+- **Line 35:** Checks canonical YouTube IDs to determine whether this candidate is already attached to the saved lesson.
+- **Line 36:** Checks whether this result is currently selected.
+- **Line 37:** Starts one result list item with its URL as the stable React key.
+- **Line 38:** Shows unverified playback as an external link with a warning; verified candidates keep the existing MediaItem display.
+- **Line 39:** Wraps a checkbox in a clickable label. Disables unverified or already attached videos and additions past the attachment limit, but still allows unchecking. The state callback adds or removes the URL without mutating the old selection.
+- **Line 40:** Closes the result list item returned by the map callback.
+- **Line 41:** Closes the list and announces the current selection count through a status paragraph.
+- **Line 42:** Adds the whole selection to the editor on one explicit click; an empty selection or a busy/disabled panel cannot be approved.
+- **Line 43:** Lets the coach close the panel and clear selections when no request is in flight.
+- **Line 44:** Shows errors in an accessible alert using the existing error styling.
+- **Line 45:** Closes the suggestion section and ends the JSX return statement.
+- **Line 46:** Closes this function, conditional block or object; execution continues after the block.
 
 ## server/video-suggestions.js
 

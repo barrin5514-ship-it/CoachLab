@@ -278,3 +278,51 @@ test('reported lesson puts the technique before discipline, audience and goal co
     return [];
   } });
 });
+
+test('batch video approval skips existing and repeated IDs without mutating attachments', async () => {
+  const { withApprovedVideos } = await import('../client/src/media.js');
+  const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
+  const first = { url: 'https://youtu.be/abcdefghij1', title: 'First' };
+  const second = { url: 'https://www.youtube.com/watch?v=abcdefghij2', title: 'Second' };
+  const result = withApprovedVideos(existing, [existing[0], first, second, { ...first, url: 'https://www.youtube.com/watch?v=abcdefghij1' }, { ...second, link_only: true }]);
+  assert.equal(result.length, 3);
+  assert.equal(existing.length, 1);
+  assert.deepEqual(result.slice(1).map(item => item.title), ['First', 'Second']);
+  assert.ok(result.slice(1).every(item => item.origin === 'suggested'));
+  const full = Array.from({ length: 11 }, (_, id) => ({ id, url: 'https://example.com/' + id }));
+  assert.throws(() => withApprovedVideos(full, [first, second]), /maximum/);
+  assert.equal(full.length, 11);
+});
+
+test('video selection keeps results open, batches approval and retains selection after failure', async () => {
+  const { transformWithOxc } = await import('vite');
+  const { readFileSync } = await import('node:fs');
+  const { runInNewContext } = await import('node:vm');
+  const { mediaLimits } = await import('../client/src/media.js');
+  const source = readFileSync(new URL('../client/src/VideoSuggestions.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
+  const { code } = await transformWithOxc(source, 'VideoSuggestions.jsx', { jsx: { runtime: 'classic' } });
+  const slots = [], ref = { current: false }; let cursor = 0, searches = 0, approved, succeeds = false;
+  const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
+  const videos = Array.from({ length: 4 }, (_, i) => ({ url: 'https://www.youtube.com/watch?v=abcdefghij' + i, title: 'Video ' + i, link_only: i === 3 }));
+  const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }), Fragment: 'fragment' };
+  const Component = runInNewContext(code + '; VideoSuggestions;', { React, useState, useRef: () => ref, MediaItem: () => null, mediaLimits, youtubeId, fetch: async () => { searches++; return Response.json({ videos, message: 'Review before saving' }); } });
+  const render = () => { cursor = 0; return Component({ lesson: { id: 1 }, media: [videos[0]], onApprove: async items => { approved = items; return succeeds; } }); };
+  const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+  const button = (tree, label) => all(tree).find(node => node.type === 'button' && node.children.includes(label));
+  await button(render(), 'Suggest videos').props.onClick();
+  let tree = render(), boxes = all(tree).filter(node => node.type === 'input');
+  assert.equal(boxes[0].props.disabled, true);
+  assert.equal(boxes[3].props.disabled, true);
+  boxes[1].props.onChange(); boxes[2].props.onChange();
+  tree = render();
+  assert.equal(all(tree).filter(node => node.type === 'input' && node.props.checked).length, 2);
+  assert.ok(all(tree).some(node => node.type === 'p' && node.children[0] === 2));
+  assert.equal(searches, 1);
+  await button(tree, 'Add selected').props.onClick();
+  assert.equal(approved.length, 2);
+  assert.ok(button(render(), 'Add selected'));
+  succeeds = true;
+  await button(render(), 'Add selected').props.onClick();
+  assert.equal(button(render(), 'Add selected'), undefined);
+  assert.equal(searches, 1);
+});
