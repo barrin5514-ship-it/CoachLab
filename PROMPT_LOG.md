@@ -4736,3 +4736,63 @@ Commit reference: preceding commit 0a8e67b00f929e93d63c373b463079acb944bba0. Sin
 Exact user prompt: `continue`
 
 Assistant response/outcome: resumed final review and upload of the same video-suggestion change. Checked current Git status and the completed test/build output: 97 passing tests and successful production build from this implementation. No executable changes since those checks, so no repeat test run was necessary. Rechecked documentation listings, syntax, diff whitespace and staged paths/secret patterns before the single commit. Push and remote-hash verification follow the commit and are reported in the final response.
+
+## 2026-10-29 — Whole-lesson video queries and raised limits
+
+Previous entry resolution: video suggestions were committed/pushed as e5946abf861efb615893ebd1da6a0edcc01a6052; GitHub/local hashes matched, working tree was clean, public health returned HTTP 200.
+
+Exact user prompt:
+
+```text
+COACHLAB — FIX SUGGEST VIDEOS + RAISE LIMITS
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. DEMO IS TODAY: keep this small and safe.
+
+PART 1 — SUGGEST VIDEOS SHOULD READ THE WHOLE LESSON
+Problem: it only matches "recognized technique names."
+Example: a manual Muay Thai lesson titled "Leg kicks" with goal
+"Using inside leg kicks to close the distance on an opponent"
+should find inside leg kick videos.
+Fix:
+- Build search terms from ALL lesson text: title, training goal,
+  techniques, section/activity names and cues, coaching notes,
+  plus discipline and audience.
+- Pull out the most useful 2-4 key phrases (skip filler words), so
+  unknown techniques still work. Keep the recognized list as a bonus.
+- Keep kids/non-contact context and coach approval. No AI calls.
+
+PART 2 — RAISE LIMITS (owner request)
+- Suggest videos: 25 per coach per rolling day, 80 per server per
+  rolling day, 5 per minute per coach.
+- Curated catalog matches do NOT count against the daily cap;
+  only real YouTube search calls count.
+- Respect YouTube's daily quota (~10,000 units, about 100 searches);
+  never exceed 80 server searches per day.
+- Coaching chat: 20 per coach and 40 per server per rolling day.
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass. No database changes. Never print .env values.
+- If anything risks breaking the live site, stop and report instead.
+
+REPORT BACK (in one code block)
+- Commit hash + one line, push result, fresh test/build results.
+- Search terms the "Leg kicks" example would produce.
+- New limits in plain English.
+```
+
+Exact clarification question: "The current counters reset whenever Render restarts, and the older media-search route also uses YouTube quota. A guaranteed 80-search ceiling across restarts needs shared persistent quota storage, which conflicts with ‘no database changes.’ Which should I implement?"
+
+Exact user answer: "Use an 80-search per-process cap shared by both routes; document restart limitation"
+
+Assistant outcome summary: replaced mandatory recognized-technique matching with bounded phrase extraction from title, goal, optional techniques, drills (including activity headings/cues) and coaching notes. Removes filler, ranks title/goal and recognized-technique hints, keeps up to four phrases and uses the top two in a compact query. Fewer than two are retained when the lesson only supplies one useful phrase. The example yields "inside leg kicks" and "close distance"; for Adults the full existing YouTube search text is "inside leg kicks close distance drill adults Muay Thai" (Unspecified uses beginners; Kids uses kids non contact). Title relevance uses the primary phrase so the candidate need not repeat every goal/audience word. Kids restrictions, catalog-first verification and explicit Add/Save approval remain. Common links/contact patterns are stripped, but arbitrary free-text name/privacy detection is not guaranteed; coaches must keep personal information out of lesson text.
+
+Added shared server/youtube-quota.js: synchronous reservation immediately before YouTube search HTTP requests, maximum 25 per coach and 80 per process per rolling 24 hours, shared by lesson suggestions and older activity discovery. Calls rejected before HTTP do not consume provider quota. Failed actual HTTP attempts count. Catalog and oEmbed checks do not consume daily search allowance; verified catalog results remain usable when a user's search allowance is exhausted. Suggestion request limiter is now five per minute per coach, retaining one in-flight suggestion. As explicitly accepted, counters reset on restart and do not coordinate multiple processes or other applications using the Google project. No schema/persistent store change or guarantee across restarts is claimed. Chat is now 20 per coach and 40 Gemini chat attempts per rolling day; three-per-minute and other chat bounds remain unchanged.
+
+Files changed: server/video-suggestions.js, server/media-finder.js, server/app.js, server/chat.js, client/src/CoachingChat.jsx, server/ai.test.js, server/media.test.js, server/media-api.test.js; new server/youtube-quota.js; README.md, CODE_WALKTHROUGH.md and this log. No dependencies, migrations, private configuration, actual lesson records or unrelated projects changed. No live Gemini/YouTube call or .env read occurred.
+
+Actual checks: early targeted suite 28/28 passed; initial full suite 98/98 and build passed before quota implementation. Follow-up safety suite 16/16 passed after plural kids-term correction. After shared quotas, targeted suite 39/39 passed. Final complete serial npm test: 100 passed, zero failed/skipped, approximately 42 seconds. Final npm run build passed after all executable changes (install, Prisma Client 7.10.0 generation/TypeScript compilation, Vite 8.3.4: 34 modules). Tests verify unknown phrases in each field, exact Leg kicks output, privacy patterns, kids plural exclusions, main-phrase relevance, 25/80 caps before HTTP, shared route reservations, catalog exemption, expiry, concurrency, raised 20/40 chat caps, approval/persistence and prior regression behavior. All provider responses were mocked. Nine affected source/test listings and 1260 numbered lines/explanations matched actual files; JavaScript syntax and git diff --check passed. Source diffs reviewed before commit; staged file/secret-pattern review follows. Real video availability, phone UI and deployment completion are not inferred from mocked tests.
+
+Genuine corrections: a Windows rg wildcard path was invalid; explicit file reads supplied the needed inspection. The first phrase splitter separated "close the distance" into single words; changed article handling so the tested phrase is "close distance". Review caught missing plural unsafe kids terms and the prior knee-strike exclusion; restored them and added a regression assertion before final verification. No test failures were hidden. The original whitelist restriction was the reported product bug and is now removed.
+
+Single intended commit subject: "fix: search whole lessons and share raised video quotas". Parent is e5946abf861efb615893ebd1da6a0edcc01a6052. The containing hash and actual push result are reported after commit, since a commit cannot contain its own hash.

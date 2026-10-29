@@ -32,12 +32,12 @@ export function registerChatRoute(app, { chatProvider = answerChat, now = Date.n
       if (recent.length) users.set(id, recent); else users.delete(id);
     }
     const attempts = users.get(request.user.id) || [];
-    if (attempts.length >= 5 || attempts.filter(start => time - start < 60000).length >= 3 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Chat limit reached: three questions per minute and five per day per coach. Try later.' });
+    if (attempts.length >= 20 || attempts.filter(start => time - start < 60000).length >= 3 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Chat limit reached: three questions per minute and twenty per day per coach. Try later.' });
     users.set(request.user.id, [...attempts, time]);
     const guidance = chatGuard(body.message);
     if (guidance) return response.json({ answer: guidance });
     calls = calls.filter(start => time - start < 86400000);
-    if (busy || calls.length >= 10) return response.status(429).json({ error: 'Chat is busy or its daily allowance is used. Lesson-draft limits are separate.' });
+    if (busy || calls.length >= 40) return response.status(429).json({ error: 'Chat is busy or its daily allowance is used. Lesson-draft limits are separate.' });
     calls.push(time);
     busy = true;
     try {

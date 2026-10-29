@@ -1,3 +1,4 @@
+import { createYouTubeQuota } from './youtube-quota.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -16,7 +17,7 @@ const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 test('lesson video suggestions require ownership, respect quotas, and attach only through an approved save', async t => {
   let time = 0, calls = 0;
   const video = { url: ytLink, kind: 'youtube', title: 'Jab', origin: 'suggested', activity: '' };
-  const state = await fixture(t, { now: () => time, videoFinder: async () => { calls++; return { videos: [video], message: 'Preview first' }; } });
+  const state = await fixture(t, { now: () => time, youtubeQuota: createYouTubeQuota(() => time), videoFinder: async (lesson, { reserveSearch }) => { reserveSearch(); calls++; return { videos: [video], message: 'Preview first' }; } });
   const body = { title: 'Jab class', discipline: 'Boxing', drills: 'Jab — 10 minutes\nPractice slowly.' };
   const lesson = await (await state.json('/api/lessons', 'POST', body)).json();
   const url = `${state.url}/api/lessons/${lesson.id}/videos`;
@@ -24,11 +25,11 @@ test('lesson video suggestions require ownership, respect quotas, and attach onl
   assert.equal((await fetch(url, { method: 'POST', headers: { 'x-test-user': 'user-b' } })).status, 404);
   assert.equal((await fetch(url, { method: 'POST', headers: { origin: 'https://evil.example' } })).status, 403);
   assert.equal(calls, 0);
-  for (let i = 0; i < 3; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+  for (let i = 0; i < 5; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
   assert.deepEqual(await state.media(), []);
   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
   time += 60001;
-  for (let i = 0; i < 2; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+  for (let i = 0; i < 20; i++) { time += 60001; assert.equal((await fetch(url, { method: 'POST' })).status, 200); }
   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
   time += 86400001;
   assert.equal((await fetch(url, { method: 'POST' })).status, 200);
@@ -41,21 +42,32 @@ test('lesson video suggestions require ownership, respect quotas, and attach onl
 
 test('video search failure is safe and still consumes the daily allowance', async t => {
   let time = 0;
-  const state = await fixture(t, { now: () => time, videoFinder: async () => { throw new Error('SECRET search failure'); } });
+  const state = await fixture(t, { now: () => time, youtubeQuota: createYouTubeQuota(() => time), videoFinder: async (lesson, { reserveSearch }) => { reserveSearch(); throw new Error('SECRET search failure'); } });
   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Jab', discipline: 'Boxing' })).json();
   const url = `${state.url}/api/lessons/${lesson.id}/videos`;
-  for (let i = 0; i < 5; i++) { const response = await fetch(url, { method: 'POST' }); assert.equal(response.status, 502); assert.doesNotMatch(await response.text(), /SECRET/); time += 60001; }
+  for (let i = 0; i < 25; i++) { const response = await fetch(url, { method: 'POST' }); assert.equal(response.status, 502); assert.doesNotMatch(await response.text(), /SECRET/); time += 60001; }
   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
 });
 
-test('video suggestions enforce one in-flight search and ten attempts per server day', async t => {
+test('old activity search and lesson suggestions share one user allowance while catalog-only requests remain available', async t => {
+  let time = 0, calls = 0;
+  const quota = createYouTubeQuota(() => time);
+  const state = await fixture(t, { now: () => time, youtubeQuota: quota, videoFinder: async (lesson, { reserveSearch }) => { reserveSearch(); calls++; return { videos: [] }; }, findMedia: async (body, { reserveSearch }) => { for (let i = 0; i < 25; i++) reserveSearch(); return { media: [], notes: [] }; } });
+  const old = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'Jab', instructions: 'Practice', queries: ['jab'] }] });
+  assert.equal(old.status, 200);
+  const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Leg kicks', discipline: 'Muay Thai' })).json();
+  assert.equal((await state.json(`/api/lessons/${lesson.id}/videos`, 'POST', {})).status, 429);
+  assert.equal(calls, 0);
+});
+
+test('video suggestions enforce one in-flight search and eighty YouTube searches per server day', async t => {
   let time = 0, release;
   const store = { list: async () => [{ id: 1, title: 'Jab', discipline: 'Boxing' }] };
-  const server = createApp(store, { ...testOptions, auth: { getUser: async request => ({ id: request.headers['x-test-user'] || 'a' }) }, now: () => time, videoFinder: () => new Promise(resolve => { release = resolve; }) }).listen(0, '127.0.0.1');
+  const server = createApp(store, { ...testOptions, auth: { getUser: async request => ({ id: request.headers['x-test-user'] || 'a' }) }, now: () => time, youtubeQuota: createYouTubeQuota(() => time), videoFinder: (lesson, { reserveSearch }) => { reserveSearch(); return new Promise(resolve => { release = resolve; }); } }).listen(0, '127.0.0.1');
   t.after(() => new Promise(resolve => server.close(resolve)));
   await once(server, 'listening');
   const post = user => fetch(`http://127.0.0.1:${server.address().port}/api/lessons/1/videos`, { method: 'POST', headers: { 'x-test-user': user } });
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 80; i++) {
     release = null;
     const pending = post(`coach-${i}`);
     while (!release) await new Promise(resolve => setTimeout(resolve, 5));

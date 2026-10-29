@@ -1,6 +1,7 @@
 import { mediaCatalog } from '../client/src/lesson-media.js';
 import { youtubeId } from '../client/src/media.js';
 import { verifyLink } from './media-verify.js';
+import { youtubeQuota } from './youtube-quota.js';
 
 const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'drill', 'drills', 'basic', 'basics', 'how', 'technique', 'exercise']);
 const significant = text => [...new Set(String(text).toLowerCase().match(/[a-z0-9]{3,}/g) || [])].filter(word => !stopWords.has(word));
@@ -46,20 +47,21 @@ export async function commonsCandidates(query, fetcher = fetch) {
   return found;
 }
 
-export async function youtubeCandidates(query, discipline, key, fetcher = fetch) {
+export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take()) {
   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
+  reserveSearch();
   const data = await jsonFrom(fetcher, url, { 'x-goog-api-key': key });
-  return (data.items || []).filter(item => item.id?.videoId && relevant(query, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+  return (data.items || []).filter(item => item.id?.videoId && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
 }
 
-export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env } = {}) {
+export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
   const key = (env.YOUTUBE_API_KEY || '').trim();
   const perSection = await Promise.all(sections.map(async section => {
     const queries = cleanQueries(section.queries);
     const candidates = catalogCandidates(discipline, section, queries);
     for (const query of queries) {
       const sources = [commonsCandidates(query, fetcher)];
-      if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher));
+      if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher, query, reserveSearch));
       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
     }
     candidates.sort((a, b) => a.rank - b.rank);

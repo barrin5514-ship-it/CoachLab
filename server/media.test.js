@@ -5,15 +5,46 @@ import { youtubeId, renameActivity, mediaPayload, unassignedMedia } from '../cli
 import { isPublicAddress, publicLookup, safeFetch, verifyLink, MediaLinkError } from './media-verify.js';
 import { validateMediaList } from './media-validate.js';
 import { png, webm } from './media-fixtures.js';
-import { findMedia, commonsCandidates, cleanQueries } from './media-finder.js';
+import { findMedia, commonsCandidates, cleanQueries, youtubeCandidates } from './media-finder.js';
 import { lessonVideoQuery, suggestLessonVideos } from './video-suggestions.js';
 import { withApprovedVideo } from '../client/src/media.js';
+import { createYouTubeQuota } from './youtube-quota.js';
 
-test('lesson video queries use recognized techniques, discipline separately, audience and no raw personal notes', () => {
-  assert.deepEqual(lessonVideoQuery({ title: 'Jab drills for Jane', goal: 'person@example.com', drills: 'Jab — 5 minutes', audience: 'Kids' }), { technique: 'jab', audience: 'kids non contact' });
-  assert.deepEqual(lessonVideoQuery({ title: 'Double-leg takedown', audience: 'Adults' }), { technique: 'double leg', audience: 'adults' });
+test('shared YouTube quota counts actual searches, preserves catalog access and expires after a day', async () => {
+  let time = 0, requests = 0;
+  const quota = createYouTubeQuota(() => time);
+  const fetcher = async () => { requests++; return Response.json({ items: [] }); };
+  for (let i = 0; i < 25; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
+  await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a')), error => error.status === 429);
+  assert.equal(requests, 25);
+  const catalog = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: { YOUTUBE_API_KEY: 'fake' }, reserveSearch: () => quota.take('coach-a'), verify: async url => ({ url, kind: 'youtube', title: 'Jab' }) });
+  assert.equal(catalog.videos.length, 1);
+  assert.equal(requests, 25);
+  for (let i = 25; i < 80; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take(`coach-${i}`));
+  await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('another')), error => error.status === 429);
+  assert.equal(requests, 80);
+  time += 86400001;
+  await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
+  assert.equal(requests, 81);
+});
+
+test('lesson video queries extract unknown techniques across lesson text and keep audience context', () => {
+  const query = lessonVideoQuery({ title: 'Leg kicks', goal: 'Using inside leg kicks to close the distance on an opponent', discipline: 'Muay Thai', audience: 'Adults' });
+  assert.deepEqual(query.phrases, ['inside leg kicks', 'close distance']);
+  assert.equal(query.technique, 'inside leg kicks close distance');
+  assert.equal(query.audience, 'adults');
+  for (const field of ['title', 'goal', 'techniques', 'drills', 'coaching_notes']) {
+    const result = lessonVideoQuery({ [field]: 'Inside leg kicks', audience: 'Kids' });
+    assert.ok(result.phrases.includes('inside leg kicks'));
+    assert.equal(result.audience, 'kids non contact');
+  }
   assert.equal(lessonVideoQuery({ title: 'Kimura armbar triangle', audience: 'Kids' }), null);
-  assert.equal(lessonVideoQuery({ title: 'Unrecognized lesson' }), null);
+  assert.equal(lessonVideoQuery({ title: 'Chokes and knee strike', audience: 'Kids' }), null);
+  assert.equal(lessonVideoQuery({ title: 'the lesson and training' }), null);
+  const privateDetails = lessonVideoQuery({ title: 'Jab', coaching_notes: 'person@example.com https://example.com/private 555-123-4567' });
+  assert.deepEqual(privateDetails.phrases, ['jab']);
+  const long = lessonVideoQuery({ drills: 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau' });
+  assert.ok(long.phrases.length <= 4);
 });
 
 test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
@@ -24,6 +55,12 @@ test('video suggestions verify catalog first, avoid YouTube quota when found and
   assert.equal(result.videos.length, 1);
   assert.equal(result.videos[0].kind, 'youtube');
   assert.match(result.message, /Save changes/);
+});
+
+test('YouTube relevance uses the main technique rather than requiring every goal or audience word in a title', async () => {
+  const results = await youtubeCandidates('inside leg kicks close distance drill kids non contact', 'Muay Thai', 'fake', async () => Response.json({ items: [{ id: { videoId: 'abcdefghij0' }, snippet: { title: 'Inside leg kicks tutorial', channelTitle: 'Coach' } }, { id: { videoId: 'abcdefghij1' }, snippet: { title: 'Cooking tutorial' } }] }), 'inside leg kicks');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].title, 'Inside leg kicks tutorial');
 });
 
 test('video fallback searches once, passes kids context, filters broken links and bounds results', async () => {

@@ -1,5 +1,6 @@
 import { registerChatRoute } from './chat.js';
 import { registerVideoSuggestions } from './video-suggestions.js';
+import { youtubeQuota as defaultYouTubeQuota } from './youtube-quota.js';
 import express from 'express';
 import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
 import { validateLesson } from './validate-lesson.js';
@@ -177,7 +178,7 @@ export function createApp(database, options = {}) {
     suggestions.push(now);
     suggesting = true;
     try {
-      response.json(await findMedia({ discipline: body.discipline, sections }));
+      response.json(await findMedia({ discipline: body.discipline, sections }, { reserveSearch: () => (options.youtubeQuota || defaultYouTubeQuota).take(request.user.id) }));
     } catch {
       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
     } finally {

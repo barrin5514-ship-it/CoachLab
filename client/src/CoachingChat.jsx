@@ -40,7 +40,7 @@ export default function CoachingChat() {
       <div className="chat-messages" role="log" aria-live="polite">{messages.map((item, index) => <div key={index}><p><strong>You:</strong> {item.question}</p><p><strong>CoachLab:</strong> {item.answer}</p></div>)}</div>
       <form onSubmit={submit}>
         <label>Your coaching or app question<textarea ref={input} required maxLength={600} value={message} disabled={busy} onChange={event => setMessage(event.target.value)} /></label>
-        <small>{message.length}/600 · 3 questions/minute, 5/day per coach</small>
+        <small>{message.length}/600 · 3 questions/minute, 20/day per coach</small>
         <button type="submit" disabled={busy || !message.trim()}>{busy ? 'Thinking…' : 'Send question'}</button>
       </form>
       {busy && <p role="status">Waiting for a short answer…</p>}

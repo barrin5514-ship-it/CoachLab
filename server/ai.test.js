@@ -281,10 +281,10 @@ test('chat per-user and shared daily caps expire independently of lesson draft c
   assert.equal((await state.post()).status, 429);
   assert.equal((await state.post(undefined, 'coach-b')).status, 200);
   state.advance(60001);
-  for (let i = 0; i < 2; i++) assert.equal((await state.post()).status, 200);
+  for (let i = 0; i < 17; i++) { state.advance(60001); assert.equal((await state.post()).status, 200); }
   assert.equal((await state.post()).status, 429);
-  for (let i = 0; i < 4; i++) { state.advance(60001); assert.equal((await state.post(undefined, 'coach-b')).status, 200); }
-  assert.equal(calls, 10);
+  for (let i = 0; i < 19; i++) { state.advance(60001); assert.equal((await state.post(undefined, 'coach-b')).status, 200); }
+  assert.equal(calls, 40);
   assert.equal((await state.post(undefined, 'coach-c')).status, 429);
   assert.equal((await state.draft()).status, 200);
   state.advance(86400001);
