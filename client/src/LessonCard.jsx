@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import VideoSuggestions from './VideoSuggestions.jsx';
 import LessonMedia from './LessonMedia.jsx';
 import MediaItem from './MediaItem.jsx';
 import { activityBlocks, activityMinutes } from './activities.js';
@@ -17,7 +18,7 @@ export function CoachingText({ text, after }) {
     </section>;
   })}</>;
 }
-export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media = [] }) {
+export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,6 +43,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media 
     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
     <LessonMedia lesson={lesson} />
+    <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
     {error && <p className="error" role="alert">{error}</p>}

@@ -12,6 +12,65 @@ import { MediaLinkError } from './media-verify.js';
 import { png, webm } from './media-fixtures.js';
 
 const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+test('lesson video suggestions require ownership, respect quotas, and attach only through an approved save', async t => {
+  let time = 0, calls = 0;
+  const video = { url: ytLink, kind: 'youtube', title: 'Jab', origin: 'suggested', activity: '' };
+  const state = await fixture(t, { now: () => time, videoFinder: async () => { calls++; return { videos: [video], message: 'Preview first' }; } });
+  const body = { title: 'Jab class', discipline: 'Boxing', drills: 'Jab — 10 minutes\nPractice slowly.' };
+  const lesson = await (await state.json('/api/lessons', 'POST', body)).json();
+  const url = `${state.url}/api/lessons/${lesson.id}/videos`;
+  assert.equal((await fetch(url, { method: 'POST', headers: { 'x-test-user': 'anonymous' } })).status, 401);
+  assert.equal((await fetch(url, { method: 'POST', headers: { 'x-test-user': 'user-b' } })).status, 404);
+  assert.equal((await fetch(url, { method: 'POST', headers: { origin: 'https://evil.example' } })).status, 403);
+  assert.equal(calls, 0);
+  for (let i = 0; i < 3; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+  assert.deepEqual(await state.media(), []);
+  assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+  time += 60001;
+  for (let i = 0; i < 2; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+  assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+  time += 86400001;
+  assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+  const { kind, ...attachment } = video;
+  assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [attachment] })).status, 200);
+  assert.equal((await state.media()).length, 1);
+  await state.stop(); await state.start();
+  assert.equal((await state.media()).length, 1);
+});
+
+test('video search failure is safe and still consumes the daily allowance', async t => {
+  let time = 0;
+  const state = await fixture(t, { now: () => time, videoFinder: async () => { throw new Error('SECRET search failure'); } });
+  const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Jab', discipline: 'Boxing' })).json();
+  const url = `${state.url}/api/lessons/${lesson.id}/videos`;
+  for (let i = 0; i < 5; i++) { const response = await fetch(url, { method: 'POST' }); assert.equal(response.status, 502); assert.doesNotMatch(await response.text(), /SECRET/); time += 60001; }
+  assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+});
+
+test('video suggestions enforce one in-flight search and ten attempts per server day', async t => {
+  let time = 0, release;
+  const store = { list: async () => [{ id: 1, title: 'Jab', discipline: 'Boxing' }] };
+  const server = createApp(store, { ...testOptions, auth: { getUser: async request => ({ id: request.headers['x-test-user'] || 'a' }) }, now: () => time, videoFinder: () => new Promise(resolve => { release = resolve; }) }).listen(0, '127.0.0.1');
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  await once(server, 'listening');
+  const post = user => fetch(`http://127.0.0.1:${server.address().port}/api/lessons/1/videos`, { method: 'POST', headers: { 'x-test-user': user } });
+  for (let i = 0; i < 10; i++) {
+    release = null;
+    const pending = post(`coach-${i}`);
+    while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal((await post('busy-coach')).status, 429);
+    release({ videos: [], message: 'No results' });
+    assert.equal((await pending).status, 200);
+  }
+  assert.equal((await post('another-coach')).status, 429);
+  time += 86400001;
+  release = null;
+  const next = post('another-coach');
+  while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+  release({ videos: [], message: 'No results' });
+  assert.equal((await next).status, 200);
+});
 const verifyLink = async url => {
   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
   if (url.includes('offline')) throw new Error('private transport detail');

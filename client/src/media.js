@@ -41,6 +41,11 @@ export const formatSize = bytes => bytes >= 1048576 ? `${(bytes / 1048576).toFix
 let keyCounter = 0;
 export const newKey = () => `new-${++keyCounter}`;
 export const mediaKey = item => item.id ?? item.clientKey;
+export function withApprovedVideo(media, video) {
+  if (!video || media.some(item => youtubeId(item.url) === youtubeId(video.url))) return [...media];
+  if (media.length >= mediaLimits.perLesson) throw new Error('This lesson already has the maximum number of attachments. Remove one in Edit lesson first.');
+  return [...media, { ...video, activity: '', origin: 'suggested' }];
+}
 export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
 export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
 

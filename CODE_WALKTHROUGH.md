@@ -88,7 +88,7 @@ The frontend entry module. It loads App and CSS, then attaches React to the HTML
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Signed-in dashboard coordinates existing lesson workflows and mounts temporary coaching chat keyed by account ID.
+Signed-in dashboard coordinates lesson workflows. Approved video attachments are copied into isolated editor state so Cancel never changes saved dashboard media.
 
 ### Lines 1–30
 
@@ -99,7 +99,7 @@ Signed-in dashboard coordinates existing lesson workflows and mounts temporary c
 4 | import LessonCard from './LessonCard.jsx';
 5 | import AiLessonForm from './AiLessonForm.jsx';
 6 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
-7 | import { fetchMedia } from './media.js';
+7 | import { fetchMedia, withApprovedVideo } from './media.js';
 8 |
 9 | export default function App({ user, onLogOut }) {
 10 |   const [lessons, setLessons] = useState([]);
@@ -113,16 +113,16 @@ Signed-in dashboard coordinates existing lesson workflows and mounts temporary c
 18 |   const [formOpen, setFormOpen] = useState(false);
 19 |   const [reload, setReload] = useState(0);
 20 |   const [editing, setEditing] = useState(null);
-21 |   const [media, setMedia] = useState([]);
-22 |   const [mediaError, setMediaError] = useState('');
-23 |   const [mediaReload, setMediaReload] = useState(0);
-24 |
-25 |   useEffect(() => {
-26 |     const controller = new AbortController();
-27 |     async function loadLessons() {
-28 |       setLoading(true);
-29 |       setError('');
-30 |       try {
+21 |   const [editingMedia, setEditingMedia] = useState([]);
+22 |   const [media, setMedia] = useState([]);
+23 |   const [mediaError, setMediaError] = useState('');
+24 |   const [mediaReload, setMediaReload] = useState(0);
+25 |
+26 |   useEffect(() => {
+27 |     const controller = new AbortController();
+28 |     async function loadLessons() {
+29 |       setLoading(true);
+30 |       setError('');
 ```
 
 - **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
@@ -131,7 +131,7 @@ Signed-in dashboard coordinates existing lesson workflows and mounts temporary c
 - **Line 4:** Imports the neighboring card component as LessonCard.
 - **Line 5:** Imports the new browser component for requesting, reviewing and approving an AI draft.
 - **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 7:** Imports the shared function that loads attachments.
+- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 8:** Blank line separates related sections; it performs no operation.
 - **Line 9:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
 - **Line 10:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
@@ -139,238 +139,246 @@ Signed-in dashboard coordinates existing lesson workflows and mounts temporary c
 - **Line 12:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
 - **Line 13:** Combines the audience and discipline filters using the shared, tested helper without modifying the source lessons.
 - **Line 14:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 15:** Stores a displayable error message, initially empty.
+- **Line 15:** Stores a safe user-facing error message, initially empty.
 - **Line 16:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
 - **Line 17:** True while a lesson is being opened for editing and its attachments are being fetched.
 - **Line 18:** Stores whether the form is mounted; false initially hides it.
 - **Line 19:** Stores a numeric retry counter; changing it reruns the effect.
 - **Line 20:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 21:** State for every saved attachment returned by the server.
-- **Line 22:** State for an error message when attachments could not be loaded.
-- **Line 23:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 24:** Blank line separates related sections; it performs no operation.
-- **Line 25:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 26:** Creates a browser cancellation controller for this request.
-- **Line 27:** Declares an async helper, allowing await inside its braces.
-- **Line 28:** Marks the list request as running.
-- **Line 29:** Clears the previous list error before retrying.
-- **Line 30:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 21:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
+- **Line 22:** State for every saved attachment returned by the server.
+- **Line 23:** State for an error message when attachments could not be loaded.
+- **Line 24:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 25:** Blank line separates related sections; it performs no operation.
+- **Line 26:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 27:** Creates a browser cancellation controller for this request.
+- **Line 28:** Declares an async helper, allowing await inside its braces.
+- **Line 29:** Marks the list request as running.
+- **Line 30:** Clears the previous list error before retrying.
 
 ### Lines 31–60
 
 ```text
-31 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-32 |         if (!response.ok) throw new Error('Unable to load lessons.');
-33 |         const data = await response.json();
-34 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-35 |         setLessons(data);
-36 |       } catch (failure) {
-37 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-38 |       } finally {
-39 |         if (!controller.signal.aborted) setLoading(false);
-40 |       }
-41 |     }
-42 |     loadLessons();
-43 |     return () => controller.abort();
-44 |   }, [reload]);
-45 |
-46 |   useEffect(() => {
-47 |     const controller = new AbortController();
-48 |     async function loadMedia() {
-49 |       try {
-50 |         const data = await fetchMedia(controller.signal);
-51 |         setMedia(data);
-52 |         setMediaError('');
-53 |       } catch (failure) {
-54 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-55 |       }
-56 |     }
-57 |     loadMedia();
-58 |     return () => controller.abort();
-59 |   }, [reload, mediaReload]);
-60 |
+31 |       try {
+32 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+33 |         if (!response.ok) throw new Error('Unable to load lessons.');
+34 |         const data = await response.json();
+35 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+36 |         setLessons(data);
+37 |       } catch (failure) {
+38 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+39 |       } finally {
+40 |         if (!controller.signal.aborted) setLoading(false);
+41 |       }
+42 |     }
+43 |     loadLessons();
+44 |     return () => controller.abort();
+45 |   }, [reload]);
+46 |
+47 |   useEffect(() => {
+48 |     const controller = new AbortController();
+49 |     async function loadMedia() {
+50 |       try {
+51 |         const data = await fetchMedia(controller.signal);
+52 |         setMedia(data);
+53 |         setMediaError('');
+54 |       } catch (failure) {
+55 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+56 |       }
+57 |     }
+58 |     loadMedia();
+59 |     return () => controller.abort();
+60 |   }, [reload, mediaReload]);
 ```
 
-- **Line 31:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 32:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 33:** Parses the server's JSON response.
-- **Line 34:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 35:** Stores the backend records, triggering a render.
-- **Line 36:** Catches request, response or cancellation failures.
-- **Line 37:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 38:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 39:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 40:** Closes the App function.
+- **Line 31:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 32:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 33:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 34:** Parses the server's JSON response.
+- **Line 35:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 36:** Stores the backend records, triggering a render.
+- **Line 37:** Catches request, response or cancellation failures.
+- **Line 38:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 39:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 40:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
 - **Line 41:** Closes the App function.
-- **Line 42:** Starts the helper; its own try/catch handles its failures.
-- **Line 43:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 44:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 45:** Blank line separates related sections; it performs no operation.
-- **Line 46:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 47:** Creates a browser cancellation controller for this request.
-- **Line 48:** Declares the loader for attachments inside the effect.
-- **Line 49:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 50:** The attachment loader now uses fetchMedia, with the abort signal.
-- **Line 51:** Stores the attachments.
-- **Line 52:** Clears any earlier media error.
-- **Line 53:** Catches request, response or cancellation failures.
-- **Line 54:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 55:** Closes the App function.
+- **Line 42:** Closes the App function.
+- **Line 43:** Starts the helper; its own try/catch handles its failures.
+- **Line 44:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 45:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 46:** Blank line separates related sections; it performs no operation.
+- **Line 47:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 48:** Creates a browser cancellation controller for this request.
+- **Line 49:** Declares the loader for attachments inside the effect.
+- **Line 50:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 51:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 52:** Stores the attachments.
+- **Line 53:** Clears any earlier media error.
+- **Line 54:** Catches request, response or cancellation failures.
+- **Line 55:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
 - **Line 56:** Closes the App function.
-- **Line 57:** Starts the load.
-- **Line 58:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 59:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 60:** Blank line separates related sections; it performs no operation.
+- **Line 57:** Closes the App function.
+- **Line 58:** Starts the load.
+- **Line 59:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 60:** Ends the effect; it re-runs when either reload counter changes.
 
 ### Lines 61–90
 
 ```text
-61 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
-62 |
-63 |   async function handleEdit(lesson) {
-64 |     setNotice(null);
-65 |     setOpening(true);
-66 |     try {
-67 |       setMedia(await fetchMedia());
-68 |       setMediaError('');
-69 |       setEditing(lesson);
-70 |       setFormOpen('manual');
-71 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-72 |     } catch {
-73 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-74 |     } finally { setOpening(false); }
-75 |   }
-76 |
-77 |   async function handleSaved(lesson, sent) {
-78 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-79 |     setAudience('All');
-80 |     setDiscipline('All');
-81 |     setFormOpen(false);
-82 |     setEditing(null);
-83 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-84 |     let text = `Saved “${lesson.title}”.`;
-85 |     let tone = 'success';
-86 |     try {
-87 |       const fresh = await fetchMedia();
-88 |       setMedia(fresh);
-89 |       setMediaError('');
-90 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+61 |
+62 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+63 |
+64 |   async function handleEdit(lesson, approvedVideo) {
+65 |     setNotice(null);
+66 |     setOpening(true);
+67 |     try {
+68 |       const fresh = await fetchMedia();
+69 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
+70 |       setEditingMedia(withApprovedVideo(attached, approvedVideo));
+71 |       setMedia(fresh);
+72 |       setMediaError('');
+73 |       setEditing(lesson);
+74 |       setFormOpen('manual');
+75 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+76 |     } catch {
+77 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+78 |     } finally { setOpening(false); }
+79 |   }
+80 |
+81 |   async function handleSaved(lesson, sent) {
+82 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+83 |     setAudience('All');
+84 |     setDiscipline('All');
+85 |     setFormOpen(false);
+86 |     setEditing(null);
+87 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+88 |     let text = `Saved “${lesson.title}”.`;
+89 |     let tone = 'success';
+90 |     try {
 ```
 
-- **Line 61:** Helper that returns only the attachments of one lesson.
-- **Line 62:** Blank line separates related sections; it performs no operation.
-- **Line 63:** Defines handleEdit, run when Edit lesson is pressed. It is asynchronous because it first loads the newest attachments.
-- **Line 64:** Clears any old message.
-- **Line 65:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 66:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 67:** Loads the current attachments from the server right now and stores them. This is the key safeguard: the form always starts from what is really in the database, never from a possibly outdated copy.
-- **Line 68:** Clears any earlier media error.
-- **Line 69:** Remembers which lesson is being edited.
-- **Line 70:** Opens the manual form.
-- **Line 71:** Scrolls to the top where the form appears, as before.
-- **Line 72:** Catches failure without including private exception details in public hosting logs.
-- **Line 73:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 74:** Always ends the opening state.
-- **Line 75:** Closes the App function.
-- **Line 76:** Blank line separates related sections; it performs no operation.
-- **Line 77:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 78:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 79:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 80:** Resets discipline filtering after a save so the saved lesson can be seen.
-- **Line 81:** Closes the form; unmounting it discards its input state after success.
-- **Line 82:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 83:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 84:** Starts the final message text.
-- **Line 85:** Starts as a success tone.
-- **Line 86:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 87:** Asks the server what attachments are really stored now.
-- **Line 88:** Replaces the page’s attachment list with that fresh copy.
-- **Line 89:** Clears any earlier media error.
-- **Line 90:** Counts the stored attachments of this lesson.
+- **Line 61:** Blank line separates related sections; it performs no operation.
+- **Line 62:** Helper that returns only the attachments of one lesson.
+- **Line 63:** Blank line separates related sections; it performs no operation.
+- **Line 64:** Opens the existing lesson editor and optionally includes one explicitly approved video.
+- **Line 65:** Clears any old message.
+- **Line 66:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 67:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 68:** Asks the server what attachments are really stored now.
+- **Line 69:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
+- **Line 70:** Builds an editable attachment copy with the approved video, checking duplicates and the attachment limit before opening the editor.
+- **Line 71:** Replaces the page’s attachment list with that fresh copy.
+- **Line 72:** Clears any earlier media error.
+- **Line 73:** Remembers which lesson is being edited.
+- **Line 74:** Opens the manual form.
+- **Line 75:** Scrolls to the top where the form appears, as before.
+- **Line 76:** Catches failure without including private exception details in public hosting logs.
+- **Line 77:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 78:** Always ends the opening state.
+- **Line 79:** Closes the App function.
+- **Line 80:** Blank line separates related sections; it performs no operation.
+- **Line 81:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 82:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 83:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 84:** Resets discipline filtering after a save so the saved lesson can be seen.
+- **Line 85:** Closes the form; unmounting it discards its input state after success.
+- **Line 86:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 87:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 88:** Starts the final message text.
+- **Line 89:** Starts as a success tone.
+- **Line 90:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
 
 ### Lines 91–120
 
 ```text
-91 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-92 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-93 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-94 |     } catch {
-95 |       tone = 'warning';
-96 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-97 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-98 |     }
-99 |     setNotice({ tone, text });
-100 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-101 |   }
-102 |
-103 |   return (
-104 |     <main>
-105 |       <header className="hero">
-106 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-107 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-108 |       </header>
-109 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
-110 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-111 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-112 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-113 |       <section aria-labelledby="lessons-heading">
-114 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
-115 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-116 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
-117 |         {loading && <p role="status">Loading lesson plans…</p>}
-118 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-119 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-120 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+91 |       const fresh = await fetchMedia();
+92 |       setMedia(fresh);
+93 |       setMediaError('');
+94 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+95 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+96 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+97 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+98 |     } catch {
+99 |       tone = 'warning';
+100 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+101 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+102 |     }
+103 |     setNotice({ tone, text });
+104 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+105 |   }
+106 |
+107 |   return (
+108 |     <main>
+109 |       <header className="hero">
+110 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+111 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+112 |       </header>
+113 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+114 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+115 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+116 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+117 |       <section aria-labelledby="lessons-heading">
+118 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
+119 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+120 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
 ```
 
-- **Line 91:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 92:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 93:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 94:** Catches failure without including private exception details in public hosting logs.
-- **Line 95:** …uses a warning tone,
-- **Line 96:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 97:** …and shows the retry banner.
-- **Line 98:** Closes the App function.
-- **Line 99:** Shows the final message.
-- **Line 100:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 101:** Closes the App function.
-- **Line 102:** Blank line separates related sections; it performs no operation.
-- **Line 103:** Begins returning a parenthesized JSX tree.
-- **Line 104:** Opens the semantic main content element.
-- **Line 105:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 106:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
-- **Line 107:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 108:** Closes the header.
-- **Line 109:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
-- **Line 110:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 111:** The manual lesson form now receives the attachments of the lesson being edited (none for a new lesson).
-- **Line 112:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 113:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 114:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
-- **Line 115:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 116:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
-- **Line 117:** Conditionally shows loading text as a live status paragraph.
-- **Line 118:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 119:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 120:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 91:** Asks the server what attachments are really stored now.
+- **Line 92:** Replaces the page’s attachment list with that fresh copy.
+- **Line 93:** Clears any earlier media error.
+- **Line 94:** Counts the stored attachments of this lesson.
+- **Line 95:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 96:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 97:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 98:** Catches failure without including private exception details in public hosting logs.
+- **Line 99:** …uses a warning tone,
+- **Line 100:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 101:** …and shows the retry banner.
+- **Line 102:** Closes the App function.
+- **Line 103:** Shows the final message.
+- **Line 104:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 105:** Closes the App function.
+- **Line 106:** Blank line separates related sections; it performs no operation.
+- **Line 107:** Begins returning a parenthesized JSX tree.
+- **Line 108:** Opens the semantic main content element.
+- **Line 109:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 110:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 111:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 112:** Closes the header.
+- **Line 113:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
+- **Line 114:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 115:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
+- **Line 116:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 117:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 118:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
+- **Line 119:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 120:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
 
-### Lines 121–126
+### Lines 121–130
 
 ```text
-121 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-122 |       </section>
-123 |       <CoachingChat key={user.id} />
-124 |     </main>
-125 |   );
-126 | }
+121 |         {loading && <p role="status">Loading lesson plans…</p>}
+122 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+123 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+124 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+125 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+126 |       </section>
+127 |       <CoachingChat key={user.id} />
+128 |     </main>
+129 |   );
+130 | }
 ```
 
-- **Line 121:** Maps the filtered lessons into cards. Stable IDs preserve React identity; editing and deletion callbacks still update lessons, media and notices without changing account access.
-- **Line 122:** Closes the lesson section.
-- **Line 123:** Renders chat only within the signed-in app; changing the user ID resets its React state.
-- **Line 124:** Closes main.
-- **Line 125:** Closes the parenthesized return statement with a semicolon.
-- **Line 126:** Closes the App function.
+- **Line 121:** Conditionally shows loading text as a live status paragraph.
+- **Line 122:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 123:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 124:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 125:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
+- **Line 126:** Closes the lesson section.
+- **Line 127:** Renders chat only within the signed-in app; changing the user ID resets its React state.
+- **Line 128:** Closes main.
+- **Line 129:** Closes the parenthesized return statement with a semicolon.
+- **Line 130:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -1680,443 +1688,447 @@ Express application wiring retains authentication, origin protection and existin
 
 ```text
 1 | import { registerChatRoute } from './chat.js';
-2 | import express from 'express';
-3 | import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
-4 | import { validateLesson } from './validate-lesson.js';
-5 | import { registerAiRoute } from './ai-route.js';
-6 | import { validateMediaList } from './media-validate.js';
-7 | import { verifyLink as defaultVerify, MediaLinkError } from './media-verify.js';
-8 | import { findMedia as defaultFind } from './media-finder.js';
-9 | import { sniffMedia } from './media-sniff.js';
-10 | import { mediaLimits, uploadTypes } from '../client/src/media.js';
-11 | import { disciplines } from '../client/src/lesson-draft.js';
-12 | import { serveFrontend } from './web.js';
-13 | import { productionApiGuard } from './request-guard.js';
-14 |
-15 | const orphanAgeMs = 24 * 60 * 60 * 1000;
-16 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
-17 |
-18 | function sendFile(request, response, file) {
-19 |   const data = Buffer.from(file.data);
-20 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
-21 |   const range = request.headers.range;
-22 |   if (!range) return response.status(200).send(data);
-23 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-24 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
-25 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
-26 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
-27 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
-28 | }
-29 |
-30 | export function createApp(database, options = {}) {
+2 | import { registerVideoSuggestions } from './video-suggestions.js';
+3 | import express from 'express';
+4 | import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
+5 | import { validateLesson } from './validate-lesson.js';
+6 | import { registerAiRoute } from './ai-route.js';
+7 | import { validateMediaList } from './media-validate.js';
+8 | import { verifyLink as defaultVerify, MediaLinkError } from './media-verify.js';
+9 | import { findMedia as defaultFind } from './media-finder.js';
+10 | import { sniffMedia } from './media-sniff.js';
+11 | import { mediaLimits, uploadTypes } from '../client/src/media.js';
+12 | import { disciplines } from '../client/src/lesson-draft.js';
+13 | import { serveFrontend } from './web.js';
+14 | import { productionApiGuard } from './request-guard.js';
+15 |
+16 | const orphanAgeMs = 24 * 60 * 60 * 1000;
+17 | const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
+18 |
+19 | function sendFile(request, response, file) {
+20 |   const data = Buffer.from(file.data);
+21 |   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
+22 |   const range = request.headers.range;
+23 |   if (!range) return response.status(200).send(data);
+24 |   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+25 |   const start = match && match[1] !== '' ? Number(match[1]) : match && match[2] !== '' ? Math.max(0, data.length - Number(match[2])) : NaN;
+26 |   const end = match && match[1] !== '' && match[2] !== '' ? Math.min(Number(match[2]), data.length - 1) : data.length - 1;
+27 |   if (!match || Number.isNaN(start) || start >= data.length || start > end) return response.status(416).set('Content-Range', `bytes */${data.length}`).end();
+28 |   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
+29 | }
+30 |
 ```
 
 - **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 2:** Imports Express from the existing installed package.
-- **Line 3:** Imports MediaReferenceError (raised when an attachment id does not exist or belongs to another lesson) next to the SQLite store factory.
-- **Line 4:** Imports the named input-validation function from its neighboring module.
-- **Line 5:** Imports the server-only registration function for the unsaved AI draft endpoint.
-- **Line 6:** Imports the attachment list validator.
-- **Line 7:** Imports the link checker (renamed defaultVerify so tests can substitute their own) and the error type used for “this link cannot be used”.
-- **Line 8:** Imports the automatic media finder, also replaceable in tests.
-- **Line 9:** Imports the file-type sniffer.
-- **Line 10:** Imports the shared size limits and allowed upload types.
-- **Line 11:** Imports the six discipline names so the suggest route can reject unknown ones.
-- **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports Express from the existing installed package.
+- **Line 4:** Imports MediaReferenceError (raised when an attachment id does not exist or belongs to another lesson) next to the SQLite store factory.
+- **Line 5:** Imports the named input-validation function from its neighboring module.
+- **Line 6:** Imports the server-only registration function for the unsaved AI draft endpoint.
+- **Line 7:** Imports the attachment list validator.
+- **Line 8:** Imports the link checker (renamed defaultVerify so tests can substitute their own) and the error type used for “this link cannot be used”.
+- **Line 9:** Imports the automatic media finder, also replaceable in tests.
+- **Line 10:** Imports the file-type sniffer.
+- **Line 11:** Imports the shared size limits and allowed upload types.
+- **Line 12:** Imports the six discipline names so the suggest route can reject unknown ones.
 - **Line 13:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 14:** Blank line separates related sections; it performs no operation.
-- **Line 15:** One day in milliseconds: unsaved uploads older than this are purged.
-- **Line 16:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
-- **Line 17:** Blank line separates related sections; it performs no operation.
-- **Line 18:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
-- **Line 19:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
-- **Line 20:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
-- **Line 21:** Reads the Range header the browser sends when playing or seeking a video.
-- **Line 22:** Without a Range header, sends the whole file with status 200.
-- **Line 23:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
-- **Line 24:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
-- **Line 25:** Works out the last byte: the given end (capped at the file end) or the end of the file.
-- **Line 26:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
-- **Line 27:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
-- **Line 28:** Closes createApp.
-- **Line 29:** Blank line separates related sections; it performs no operation.
-- **Line 30:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
+- **Line 14:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 15:** Blank line separates related sections; it performs no operation.
+- **Line 16:** One day in milliseconds: unsaved uploads older than this are purged.
+- **Line 17:** Helper that returns a link’s host name for error messages, or “that link” if the text is not an address. It avoids echoing full addresses back.
+- **Line 18:** Blank line separates related sections; it performs no operation.
+- **Line 19:** Defines sendFile, which sends a stored upload with correct headers and optional byte ranges.
+- **Line 20:** Converts the stored bytes (a Buffer or typed array, depending on the database) into a Buffer.
+- **Line 21:** Uploaded files are now sent with Cache-Control “private, no-cache” and Vary: Cookie instead of a one-year cache. The browser must re-check with the server (which verifies the sign-in) before showing a cached picture, so one coach’s cached media cannot appear for another on a shared computer.
+- **Line 22:** Reads the Range header the browser sends when playing or seeking a video.
+- **Line 23:** Without a Range header, sends the whole file with status 200.
+- **Line 24:** Parses a header of the form bytes=START-END with a regular expression; both numbers are optional.
+- **Line 25:** Works out the first byte: the given start, or (for bytes=-N) the last N bytes, or NaN if it cannot be understood.
+- **Line 26:** Works out the last byte: the given end (capped at the file end) or the end of the file.
+- **Line 27:** If the range is malformed or outside the file, answers 416 (Range Not Satisfiable) with the actual file size.
+- **Line 28:** Otherwise answers 206 (Partial Content) with exactly the requested slice and the headers describing it.
+- **Line 29:** Closes createApp.
+- **Line 30:** Blank line separates related sections; it performs no operation.
 
 ### Lines 31–60
 
 ```text
-31 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
-32 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
-33 |   const { auth, allowedOrigins = [] } = options;
-34 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
-35 |   const app = express();
-36 |   app.disable('x-powered-by');
-37 |   if (options.production) {
-38 |     app.set('trust proxy', 1);
-39 |     app.use((request, response, next) => {
-40 |       request.headers['x-forwarded-for'] = request.ip;
-41 |       next();
-42 |     });
-43 |   }
-44 |   app.use('/api', (request, response, next) => {
-45 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
-46 |     next();
-47 |   });
-48 |   if (options.production) app.use('/api', productionApiGuard());
-49 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
-50 |   app.use(express.json({ limit: '32kb', inflate: !options.production }));
-51 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
-52 |   let suggestions = [];
-53 |   let suggesting = false;
-54 |
-55 |   async function verifiedMedia(rawMedia) {
-56 |     const checked = validateMediaList(rawMedia);
-57 |     if (checked.error) return { error: checked.error };
-58 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
-59 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
-60 |     const media = [];
+31 | export function createApp(database, options = {}) {
+32 |   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
+33 |   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
+34 |   const { auth, allowedOrigins = [] } = options;
+35 |   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
+36 |   const app = express();
+37 |   app.disable('x-powered-by');
+38 |   if (options.production) {
+39 |     app.set('trust proxy', 1);
+40 |     app.use((request, response, next) => {
+41 |       request.headers['x-forwarded-for'] = request.ip;
+42 |       next();
+43 |     });
+44 |   }
+45 |   app.use('/api', (request, response, next) => {
+46 |     response.set({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+47 |     next();
+48 |   });
+49 |   if (options.production) app.use('/api', productionApiGuard());
+50 |   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
+51 |   app.use(express.json({ limit: '32kb', inflate: !options.production }));
+52 |   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
+53 |   let suggestions = [];
+54 |   let suggesting = false;
+55 |
+56 |   async function verifiedMedia(rawMedia) {
+57 |     const checked = validateMediaList(rawMedia);
+58 |     if (checked.error) return { error: checked.error };
+59 |     if (!lessons.media) return { error: 'This database does not support media attachments.' };
+60 |     const results = await Promise.allSettled(checked.media.map(item => item.id ? item : verifyLink(item.url)));
 ```
 
-- **Line 31:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
-- **Line 32:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
-- **Line 33:** Reads the login adapter and the list of allowed browser origins from the options.
-- **Line 34:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
-- **Line 35:** Creates an Express application object.
-- **Line 36:** Stops Express from announcing itself in a response header.
-- **Line 37:** Enables the hosting proxy behavior only for the explicitly selected production server.
-- **Line 38:** Trusts one proxy hop: Render is the sole public ingress. Do not expose this server directly or add a different proxy chain without reviewing this setting.
-- **Line 39:** Installs request middleware before authentication so subsequent handlers receive the validated proxy address.
-- **Line 40:** Replaces the raw forwarded chain with Express’s nearest trusted client address, preventing Better Auth from accepting a forged leftmost address.
-- **Line 41:** Continues only when the request is within its limit and is not compressed.
-- **Line 42:** Closes the error callback and registration.
-- **Line 43:** Closes createApp.
-- **Line 44:** For every /api request, adds safety headers before anything else runs.
-- **Line 45:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
-- **Line 46:** Continues only when the request is within its limit and is not compressed.
-- **Line 47:** Closes the error callback and registration.
-- **Line 48:** Installs the bounded request guard only in production, after proxy normalization and before auth/body handlers. Development keeps its previous behavior.
-- **Line 49:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
-- **Line 50:** Preserves the 32 KB JSON limit and additionally disables automatic decompression in production; the early API guard provides a clearer rejection.
-- **Line 51:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
-- **Line 52:** Remembers the times of recent media searches for rate limiting.
-- **Line 53:** True while a media search is running, so only one runs at a time.
-- **Line 54:** Blank line separates related sections; it performs no operation.
-- **Line 55:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
-- **Line 56:** Validates and cleans the submitted list.
-- **Line 57:** Returns the validation message if it failed.
-- **Line 58:** Stores without media support (such as a test double) refuse media cleanly.
-- **Line 59:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
-- **Line 60:** The verified entries will be collected here.
+- **Line 31:** createApp now takes an options object instead of only AI options; the AI route still receives the same object.
+- **Line 32:** Reads the optional replacement functions (used by tests) for link verification and media finding, defaulting to the real ones.
+- **Line 33:** Chooses how unexpected server errors are logged: a function from the options, or (outside tests) console.error printing only the error’s name and code. Error messages are not printed because they could contain lesson text. Tests stay quiet.
+- **Line 34:** Reads the login adapter and the list of allowed browser origins from the options.
+- **Line 35:** Refuses to build the app without a login adapter: CoachLab never serves lessons unprotected, even by mistake.
+- **Line 36:** Creates an Express application object.
+- **Line 37:** Stops Express from announcing itself in a response header.
+- **Line 38:** Enables the hosting proxy behavior only for the explicitly selected production server.
+- **Line 39:** Trusts one proxy hop: Render is the sole public ingress. Do not expose this server directly or add a different proxy chain without reviewing this setting.
+- **Line 40:** Installs request middleware before authentication so subsequent handlers receive the validated proxy address.
+- **Line 41:** Replaces the raw forwarded chain with Express’s nearest trusted client address, preventing Better Auth from accepting a forged leftmost address.
+- **Line 42:** Continues only when the request is within its limit and is not compressed.
+- **Line 43:** Closes the error callback and registration.
+- **Line 44:** Closes createApp.
+- **Line 45:** For every /api request, adds safety headers before anything else runs.
+- **Line 46:** nosniff stops browsers guessing file types, no-store forbids caching private answers, and no-referrer stops the address of the page leaking to other sites.
+- **Line 47:** Continues only when the request is within its limit and is not compressed.
+- **Line 48:** Closes the error callback and registration.
+- **Line 49:** Installs the bounded request guard only in production, after proxy normalization and before auth/body handlers. Development keeps its previous behavior.
+- **Line 50:** Hands every /api/auth/... request (register, sign in, sign out, reset, session) to the Better Auth handler. It is registered before the JSON body reader because Better Auth reads the request body itself.
+- **Line 51:** Preserves the 32 KB JSON limit and additionally disables automatic decompression in production; the early API guard provides a clearer rejection.
+- **Line 52:** Adapts an object with SQLite prepare() into the shared store; an already-created Prisma store is used directly.
+- **Line 53:** Remembers the times of recent media searches for rate limiting.
+- **Line 54:** True while a media search is running, so only one runs at a time.
+- **Line 55:** Blank line separates related sections; it performs no operation.
+- **Line 56:** Defines verifiedMedia: validates the list and checks every new link before anything is saved.
+- **Line 57:** Validates and cleans the submitted list.
+- **Line 58:** Returns the validation message if it failed.
+- **Line 59:** Stores without media support (such as a test double) refuse media cleanly.
+- **Line 60:** Starts all link checks at once: stored attachments pass straight through, new links are verified. allSettled waits for all and reports each success or failure.
 
 ### Lines 61–90
 
 ```text
-61 |     for (const [index, result] of results.entries()) {
-62 |       const item = checked.media[index];
-63 |       if (result.status === 'rejected') {
-64 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
-65 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
-66 |       }
-67 |       if (item.id) { media.push(item); continue; }
-68 |       const info = result.value;
-69 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
-70 |     }
-71 |     return { media };
-72 |   }
-73 |   async function saveWithMedia(request, response, save) {
-74 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
-75 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
-76 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
-77 |     const result = validateLesson(hasMedia ? fields : request.body);
-78 |     if (result.error) return response.status(400).json({ error: result.error });
-79 |     let media;
-80 |     if (hasMedia) {
-81 |       const checked = await verifiedMedia(rawMedia);
-82 |       if (checked.error) return response.status(400).json({ error: checked.error });
-83 |       media = checked.media;
-84 |     }
-85 |     try {
-86 |       return await save(result.lesson, media);
-87 |     } catch (error) {
-88 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
-89 |       throw error;
-90 |     }
+61 |     const media = [];
+62 |     for (const [index, result] of results.entries()) {
+63 |       const item = checked.media[index];
+64 |       if (result.status === 'rejected') {
+65 |         if (result.reason instanceof MediaLinkError) return { error: `The link to ${hostOf(item.url)} could not be used: ${result.reason.message}` };
+66 |         return { error: `CoachLab could not check the link to ${hostOf(item.url)} right now. Try again in a moment.` };
+67 |       }
+68 |       if (item.id) { media.push(item); continue; }
+69 |       const info = result.value;
+70 |       media.push({ ...item, kind: info.kind, url: info.url, title: item.title || info.title, credit: item.credit || info.credit || '', source_page: item.source_page || info.source_page || '' });
+71 |     }
+72 |     return { media };
+73 |   }
+74 |   async function saveWithMedia(request, response, save) {
+75 |     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
+76 |     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
+77 |     const { media: rawMedia, ...fields } = hasMedia ? request.body : { ...request.body };
+78 |     const result = validateLesson(hasMedia ? fields : request.body);
+79 |     if (result.error) return response.status(400).json({ error: result.error });
+80 |     let media;
+81 |     if (hasMedia) {
+82 |       const checked = await verifiedMedia(rawMedia);
+83 |       if (checked.error) return response.status(400).json({ error: checked.error });
+84 |       media = checked.media;
+85 |     }
+86 |     try {
+87 |       return await save(result.lesson, media);
+88 |     } catch (error) {
+89 |       if (error instanceof MediaReferenceError) return response.status(400).json({ error: error.message });
+90 |       throw error;
 ```
 
-- **Line 61:** Walks through the results in order.
-- **Line 62:** The matching submitted entry.
-- **Line 63:** Handles a failed check.
-- **Line 64:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
-- **Line 65:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
-- **Line 66:** Closes createApp.
-- **Line 67:** Stored attachments are kept as they are.
-- **Line 68:** The successful check result.
-- **Line 69:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
-- **Line 70:** Closes createApp.
-- **Line 71:** Returns the verified list.
-- **Line 72:** Closes createApp.
-- **Line 73:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
-- **Line 74:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
-- **Line 75:** True when the body is an ordinary object that contains a media key.
-- **Line 76:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
-- **Line 77:** Validates the nine lesson fields exactly as before, without the media key.
-- **Line 78:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
-- **Line 79:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
-- **Line 80:** Only when media was sent.
-- **Line 81:** Validates and verifies it before touching the database.
-- **Line 82:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
-- **Line 83:** Uses the verified list.
-- **Line 84:** Closes createApp.
-- **Line 85:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 86:** Calls the store’s save function (create or update) and returns its response.
-- **Line 87:** Ends the try block and captures a thrown exception in error for controlled reporting.
-- **Line 88:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
-- **Line 89:** Any other error continues to the general safe 500 handler.
-- **Line 90:** Closes createApp.
+- **Line 61:** The verified entries will be collected here.
+- **Line 62:** Walks through the results in order.
+- **Line 63:** The matching submitted entry.
+- **Line 64:** Handles a failed check.
+- **Line 65:** A rejected link (not a picture or video, missing, private address …) is reported with the host name and the reason. Nothing is saved.
+- **Line 66:** Any other failure (such as the network being down) gets a neutral message that hides internal details.
+- **Line 67:** Closes createApp.
+- **Line 68:** Stored attachments are kept as they are.
+- **Line 69:** The successful check result.
+- **Line 70:** Builds the final entry from what the server verified (kind and address) and the coach’s caption and credit, filling blanks with the checked title and credit.
+- **Line 71:** Closes createApp.
+- **Line 72:** Returns the verified list.
+- **Line 73:** Closes createApp.
+- **Line 74:** Defines saveWithMedia, shared by create and update: validate the lesson, verify the media, then call the store.
+- **Line 75:** Requires the JSON Content-Type. A wrong or missing type returns HTTP 400 and a safe error object immediately; it does not continue to save.
+- **Line 76:** True when the body is an ordinary object that contains a media key.
+- **Line 77:** Separates the media list from the nine lesson fields. When there is no media key the body is copied as-is so the old validation behavior is unchanged.
+- **Line 78:** Validates the nine lesson fields exactly as before, without the media key.
+- **Line 79:** If validation returned an error, sends it with HTTP 400 and stops the handler before any SQL write.
+- **Line 80:** Stays undefined when the request had no media key, which tells the store to leave attachments alone.
+- **Line 81:** Only when media was sent.
+- **Line 82:** Validates and verifies it before touching the database.
+- **Line 83:** A bad link stops the whole save with a clear 400 message, so nothing is half-saved.
+- **Line 84:** Uses the verified list.
+- **Line 85:** Closes createApp.
+- **Line 86:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 87:** Calls the store’s save function (create or update) and returns its response.
+- **Line 88:** Ends the try block and captures a thrown exception in error for controlled reporting.
+- **Line 89:** An attachment that no longer exists or belongs to another lesson becomes a 400 with an explanation.
+- **Line 90:** Any other error continues to the general safe 500 handler.
 
 ### Lines 91–120
 
 ```text
-91 |   }
-92 |
-93 |   app.get('/api/health', (request, response) => {
-94 |     response.json({ status: 'ok', service: 'CoachLab API' });
-95 |   });
-96 |   app.get('/api/auth-config', (request, response) => {
-97 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
-98 |   });
-99 |   app.use('/api', async (request, response, next) => {
-100 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
-101 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
-102 |     }
-103 |     const user = await auth.getUser(request);
-104 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
-105 |     request.user = user;
-106 |     next();
-107 |   });
-108 |   app.get('/api/lessons', async (request, response) => {
-109 |     response.json(await lessons.list(request.user.id));
-110 |   });
-111 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
-112 |   app.param('id', (request, response, next, value) => {
-113 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
-114 |     request.lessonId = Number(value);
-115 |     next();
-116 |   });
-117 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
-118 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
-119 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
-120 |     return response.json(saved);
+91 |     }
+92 |   }
+93 |
+94 |   app.get('/api/health', (request, response) => {
+95 |     response.json({ status: 'ok', service: 'CoachLab API' });
+96 |   });
+97 |   app.get('/api/auth-config', (request, response) => {
+98 |     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
+99 |   });
+100 |   app.use('/api', async (request, response, next) => {
+101 |     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
+102 |       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
+103 |     }
+104 |     const user = await auth.getUser(request);
+105 |     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
+106 |     request.user = user;
+107 |     next();
+108 |   });
+109 |   app.get('/api/lessons', async (request, response) => {
+110 |     response.json(await lessons.list(request.user.id));
+111 |   });
+112 |   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
+113 |   app.param('id', (request, response, next, value) => {
+114 |     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
+115 |     request.lessonId = Number(value);
+116 |     next();
+117 |   });
+118 |   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
+119 |     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
+120 |     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
 ```
 
 - **Line 91:** Closes createApp.
-- **Line 92:** Blank line separates related sections; it performs no operation.
-- **Line 93:** Registers the existing GET health route with request/response callback parameters.
-- **Line 94:** Returns the same health JSON as before, normally with HTTP 200.
-- **Line 95:** Closes the error callback and registration.
-- **Line 96:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
-- **Line 97:** Returns public authentication capabilities only, including whether password reset is enabled; no secrets are included.
-- **Line 98:** Closes the error callback and registration.
-- **Line 99:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
-- **Line 100:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
-- **Line 101:** Blocks such a request with 403 and a plain message.
-- **Line 102:** Closes createApp.
-- **Line 103:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
-- **Line 104:** No valid session: answers 401 and never reaches the route.
-- **Line 105:** Remembers who is asking, so every route below can only touch that coach’s data.
-- **Line 106:** Continues only when the request is within its limit and is not compressed.
-- **Line 107:** Closes the error callback and registration.
-- **Line 108:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
-- **Line 109:** Lists only the signed-in coach’s lessons.
-- **Line 110:** Closes the error callback and registration.
-- **Line 111:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
-- **Line 112:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
-- **Line 113:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
-- **Line 114:** Converts the validated URL ID to a number and stores it on this request.
-- **Line 115:** Continues only when the request is within its limit and is not compressed.
-- **Line 116:** Closes the error callback and registration.
-- **Line 117:** Updating a lesson goes through saveWithMedia as well.
-- **Line 118:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
-- **Line 119:** A missing lesson still returns 404.
-- **Line 120:** Returns the updated lesson.
+- **Line 92:** Closes createApp.
+- **Line 93:** Blank line separates related sections; it performs no operation.
+- **Line 94:** Registers the existing GET health route with request/response callback parameters.
+- **Line 95:** Returns the same health JSON as before, normally with HTTP 200.
+- **Line 96:** Closes the error callback and registration.
+- **Line 97:** Public route that tells the login page which options exist (Google button, where reset links appear). It reveals no secrets.
+- **Line 98:** Returns public authentication capabilities only, including whether password reset is enabled; no secrets are included.
+- **Line 99:** Closes the error callback and registration.
+- **Line 100:** The gate for every /api route registered after this line: lessons, media, uploads, link checks and AI. Health and auth-config above it stay public.
+- **Line 101:** Cross-site protection: any request that changes data (not GET, HEAD or OPTIONS) must carry an Origin header that is on the allowed list. A malicious web page cannot make the browser send CoachLab’s own origin.
+- **Line 102:** Blocks such a request with 403 and a plain message.
+- **Line 103:** Closes createApp.
+- **Line 104:** Looks up the signed-in coach from the session cookie. The session is stored on the server, so a revoked or expired session stops working immediately.
+- **Line 105:** No valid session: answers 401 and never reaches the route.
+- **Line 106:** Remembers who is asking, so every route below can only touch that coach’s data.
+- **Line 107:** Continues only when the request is within its limit and is not compressed.
+- **Line 108:** Closes the error callback and registration.
+- **Line 109:** Registers an asynchronous read route; Express 5 routes rejected promises into its error middleware.
+- **Line 110:** Lists only the signed-in coach’s lessons.
+- **Line 111:** Closes the error callback and registration.
+- **Line 112:** Creates a lesson owned by the signed-in coach; the owner comes from the session, never from the request body.
+- **Line 113:** Registers a guard for every route with an id parameter; Express passes the raw URL value and next callback.
+- **Line 114:** Rejects nonpositive, fractional, nonnumeric or out-of-32-bit-range IDs before database access. The anchored regular expression permits only decimal digits beginning with 1–9.
+- **Line 115:** Converts the validated URL ID to a number and stores it on this request.
+- **Line 116:** Continues only when the request is within its limit and is not compressed.
+- **Line 117:** Closes the error callback and registration.
+- **Line 118:** Updating a lesson goes through saveWithMedia as well.
+- **Line 119:** Updates a lesson only if it belongs to the signed-in coach; otherwise the store finds nothing and the route answers 404.
+- **Line 120:** A missing lesson still returns 404.
 
 ### Lines 121–150
 
 ```text
-121 |   }));
-122 |   app.delete('/api/lessons/:id', async (request, response) => {
-123 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
-124 |     response.status(204).end();
-125 |   });
-126 |
-127 |   app.get('/api/lesson-media', async (request, response) => {
-128 |     if (!lessons.media) return response.json([]);
-129 |     response.json(await lessons.media.list(request.user.id));
-130 |   });
-131 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024, inflate: !options.production })(request, response, error => {
-132 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
-133 |     next();
-134 |   });
-135 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
-136 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
-137 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-138 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
-139 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-140 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
-141 |     const detected = sniffMedia(data);
-142 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
-143 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
-144 |     let name = '';
-145 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
-146 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
-147 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
-148 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
-149 |   });
-150 |   app.get('/api/media/:id/file', async (request, response) => {
+121 |     return response.json(saved);
+122 |   }));
+123 |   app.delete('/api/lessons/:id', async (request, response) => {
+124 |     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
+125 |     response.status(204).end();
+126 |   });
+127 |
+128 |   app.get('/api/lesson-media', async (request, response) => {
+129 |     if (!lessons.media) return response.json([]);
+130 |     response.json(await lessons.media.list(request.user.id));
+131 |   });
+132 |   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024, inflate: !options.production })(request, response, error => {
+133 |     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
+134 |     next();
+135 |   });
+136 |   app.post('/api/media/upload', uploadBody, async (request, response) => {
+137 |     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
+138 |     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+139 |     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
+140 |     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+141 |     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+142 |     const detected = sniffMedia(data);
+143 |     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
+144 |     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
+145 |     let name = '';
+146 |     try { name = decodeURIComponent(String(request.headers['x-file-name'] || '')); } catch { name = ''; }
+147 |     const title = name.split(/[\\/]/).pop().replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, mediaLimits.title);
+148 |     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
+149 |     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
+150 |   });
 ```
 
-- **Line 121:** Closes the handler and the route.
-- **Line 122:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
-- **Line 123:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
-- **Line 124:** Finishes a successful deletion response without a JSON body.
-- **Line 125:** Closes the error callback and registration.
-- **Line 126:** Blank line separates related sections; it performs no operation.
-- **Line 127:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
-- **Line 128:** Stores without media support return an empty list.
-- **Line 129:** Lists only the signed-in coach’s attachments.
-- **Line 130:** Closes the error callback and registration.
-- **Line 131:** Keeps the existing upload ceiling and disables decompression in production raw-body parsing too, protecting binary upload requests.
-- **Line 132:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
-- **Line 133:** Continues only when the request is within its limit and is not compressed.
-- **Line 134:** Closes the error callback and registration.
-- **Line 135:** New route: uploads one file. The browser sends the file bytes as the body.
-- **Line 136:** Refuses when the store has no media support.
-- **Line 137:** The type the browser declared, without parameters, in lowercase.
-- **Line 138:** Only the listed picture and video types are accepted (415 otherwise).
-- **Line 139:** The body as a Buffer, or an empty one if nothing usable arrived.
-- **Line 140:** Empty uploads are rejected.
-- **Line 141:** Looks at the file’s real first bytes.
-- **Line 142:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
-- **Line 143:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
-- **Line 144:** Prepares the default caption.
-- **Line 145:** Decodes the file name from the header, ignoring malformed encodings.
-- **Line 146:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
-- **Line 147:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
-- **Line 148:** Stores an upload as belonging to the signed-in coach.
-- **Line 149:** Closes the error callback and registration.
-- **Line 150:** New route: sends a stored file to the browser.
+- **Line 121:** Returns the updated lesson.
+- **Line 122:** Closes the handler and the route.
+- **Line 123:** Registers deletion of a validated numeric ID. The browser provides the confirmation interface.
+- **Line 124:** Deletes a lesson only if it belongs to the signed-in coach; another coach’s lesson answers 404, which does not reveal that it exists.
+- **Line 125:** Finishes a successful deletion response without a JSON body.
+- **Line 126:** Closes the error callback and registration.
+- **Line 127:** Blank line separates related sections; it performs no operation.
+- **Line 128:** New route: lists the attachments of all lessons (never including unsaved uploads or file bytes).
+- **Line 129:** Stores without media support return an empty list.
+- **Line 130:** Lists only the signed-in coach’s attachments.
+- **Line 131:** Closes the error callback and registration.
+- **Line 132:** Keeps the existing upload ceiling and disables decompression in production raw-body parsing too, protecting binary upload requests.
+- **Line 133:** Turns a body-reading error into 413 (too large) or 400 (unreadable).
+- **Line 134:** Continues only when the request is within its limit and is not compressed.
+- **Line 135:** Closes the error callback and registration.
+- **Line 136:** New route: uploads one file. The browser sends the file bytes as the body.
+- **Line 137:** Refuses when the store has no media support.
+- **Line 138:** The type the browser declared, without parameters, in lowercase.
+- **Line 139:** Only the listed picture and video types are accepted (415 otherwise).
+- **Line 140:** The body as a Buffer, or an empty one if nothing usable arrived.
+- **Line 141:** Empty uploads are rejected.
+- **Line 142:** Looks at the file’s real first bytes.
+- **Line 143:** The real contents must be a supported type and match what the browser declared; a text file renamed to .png is refused.
+- **Line 144:** Enforces the size limit for the detected kind (6 MB pictures, 20 MB videos).
+- **Line 145:** Prepares the default caption.
+- **Line 146:** Decodes the file name from the header, ignoring malformed encodings.
+- **Line 147:** Makes a caption from the file name: strips folders and the extension, turns dashes and underscores into spaces and limits the length.
+- **Line 148:** In the background, removes old unsaved uploads (older than a day). Errors are ignored because cleanup must never block an upload.
+- **Line 149:** Stores an upload as belonging to the signed-in coach.
+- **Line 150:** Closes the error callback and registration.
 
 ### Lines 151–180
 
 ```text
-151 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
-152 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
-153 |     sendFile(request, response, file);
-154 |   });
-155 |   app.delete('/api/media/:id', async (request, response) => {
-156 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
-157 |     response.status(204).end();
-158 |   });
-159 |   app.post('/api/media/verify', async (request, response) => {
-160 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
-161 |     try {
-162 |       response.json(await verifyLink(request.body.url));
-163 |     } catch (error) {
-164 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
-165 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
-166 |     }
-167 |   });
-168 |   app.post('/api/media/suggest', async (request, response) => {
-169 |     const body = request.body;
-170 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
-171 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
-172 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
-173 |     const now = Date.now();
-174 |     suggestions = suggestions.filter(time => now - time < 86400000);
-175 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
-176 |     suggestions.push(now);
-177 |     suggesting = true;
-178 |     try {
-179 |       response.json(await findMedia({ discipline: body.discipline, sections }));
-180 |     } catch {
+151 |   app.get('/api/media/:id/file', async (request, response) => {
+152 |     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
+153 |     if (!file) return response.status(404).json({ error: 'Media file not found.' });
+154 |     sendFile(request, response, file);
+155 |   });
+156 |   app.delete('/api/media/:id', async (request, response) => {
+157 |     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
+158 |     response.status(204).end();
+159 |   });
+160 |   app.post('/api/media/verify', async (request, response) => {
+161 |     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
+162 |     try {
+163 |       response.json(await verifyLink(request.body.url));
+164 |     } catch (error) {
+165 |       if (error instanceof MediaLinkError) return response.status(400).json({ error: error.message });
+166 |       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
+167 |     }
+168 |   });
+169 |   app.post('/api/media/suggest', async (request, response) => {
+170 |     const body = request.body;
+171 |     const sections = Array.isArray(body?.sections) ? body.sections : null;
+172 |     const valid = request.is('application/json') && disciplines.includes(body?.discipline) && sections && sections.length <= 5 && sections.every(section => section && typeof section.name === 'string' && section.name.length <= 100 && typeof section.instructions === 'string' && section.instructions.length <= 1500 && (section.queries === undefined || (Array.isArray(section.queries) && section.queries.length <= 3 && section.queries.every(query => typeof query === 'string' && query.length <= 80))));
+173 |     if (!valid) return response.status(400).json({ error: 'Send a discipline and up to five sections.' });
+174 |     const now = Date.now();
+175 |     suggestions = suggestions.filter(time => now - time < 86400000);
+176 |     if (suggesting || suggestions.length >= 60 || suggestions.filter(time => now - time < 60000).length >= 6) return response.status(429).json({ error: 'Media search limit reached. Try again shortly; you can still add media yourself.' });
+177 |     suggestions.push(now);
+178 |     suggesting = true;
+179 |     try {
+180 |       response.json(await findMedia({ discipline: body.discipline, sections }));
 ```
 
-- **Line 151:** Sends a stored file only if it belongs to the signed-in coach.
-- **Line 152:** Unknown file: 404.
-- **Line 153:** Sends it, honoring byte ranges.
-- **Line 154:** Closes the error callback and registration.
-- **Line 155:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
-- **Line 156:** Deletes an unsaved upload only if it belongs to the signed-in coach.
-- **Line 157:** Finishes a successful deletion response without a JSON body.
-- **Line 158:** Closes the error callback and registration.
-- **Line 159:** New route: checks one pasted link.
-- **Line 160:** Requires JSON containing a text url.
-- **Line 161:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 162:** Returns what the checker found.
-- **Line 163:** Ends the try block and captures a thrown exception in error for controlled reporting.
-- **Line 164:** A link that cannot be used returns 400 with the explanation.
-- **Line 165:** Unexpected problems return 502 with a neutral message.
-- **Line 166:** Closes createApp.
-- **Line 167:** Closes the error callback and registration.
-- **Line 168:** New route: finds and verifies pictures and videos for an AI draft.
-- **Line 169:** Reads the parsed JSON request body supplied by Express.
-- **Line 170:** The sections list, or null if it is missing.
-- **Line 171:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
-- **Line 172:** Invalid requests get a 400.
-- **Line 173:** The current time.
-- **Line 174:** Forgets searches older than one day.
-- **Line 175:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
-- **Line 176:** Records this search.
-- **Line 177:** Marks a search as running.
-- **Line 178:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 179:** Runs the finder and returns its verified results.
-- **Line 180:** Catches failure without including private exception details in public hosting logs.
+- **Line 151:** New route: sends a stored file to the browser.
+- **Line 152:** Sends a stored file only if it belongs to the signed-in coach.
+- **Line 153:** Unknown file: 404.
+- **Line 154:** Sends it, honoring byte ranges.
+- **Line 155:** Closes the error callback and registration.
+- **Line 156:** New route: deletes an unsaved upload (used when a coach cancels or removes a new file).
+- **Line 157:** Deletes an unsaved upload only if it belongs to the signed-in coach.
+- **Line 158:** Finishes a successful deletion response without a JSON body.
+- **Line 159:** Closes the error callback and registration.
+- **Line 160:** New route: checks one pasted link.
+- **Line 161:** Requires JSON containing a text url.
+- **Line 162:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 163:** Returns what the checker found.
+- **Line 164:** Ends the try block and captures a thrown exception in error for controlled reporting.
+- **Line 165:** A link that cannot be used returns 400 with the explanation.
+- **Line 166:** Unexpected problems return 502 with a neutral message.
+- **Line 167:** Closes createApp.
+- **Line 168:** Closes the error callback and registration.
+- **Line 169:** New route: finds and verifies pictures and videos for an AI draft.
+- **Line 170:** Reads the parsed JSON request body supplied by Express.
+- **Line 171:** The sections list, or null if it is missing.
+- **Line 172:** Validates the request: JSON content, a known discipline, at most five sections, each with a short name, instructions up to 1500 characters and optionally up to three short search phrases.
+- **Line 173:** Invalid requests get a 400.
+- **Line 174:** The current time.
+- **Line 175:** Forgets searches older than one day.
+- **Line 176:** Limits searches: one at a time, at most six per minute and sixty per day, returning 429 with a friendly message otherwise. This protects the free outside services.
+- **Line 177:** Records this search.
+- **Line 178:** Marks a search as running.
+- **Line 179:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 180:** Runs the finder and returns its verified results.
 
-### Lines 181–200
+### Lines 181–202
 
 ```text
-181 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
-182 |     } finally {
-183 |       suggesting = false;
-184 |     }
-185 |   });
-186 |
-187 |   registerAiRoute(app, options);
-188 |   registerChatRoute(app, options);
-189 |   if (options.production) serveFrontend(app, options.frontendDirectory);
-190 |   app.use((request, response) => {
-191 |     response.status(404).json({ error: 'Route not found.' });
-192 |   });
-193 |   app.use((error, request, response, next) => {
-194 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
-195 |     if (status === 500) logError(error);
-196 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
-197 |     response.status(status).json({ error: messages[status] });
-198 |   });
-199 |   return app;
-200 | }
+181 |     } catch {
+182 |       response.status(502).json({ error: 'CoachLab could not search for media right now. You can still add pictures and videos yourself.' });
+183 |     } finally {
+184 |       suggesting = false;
+185 |     }
+186 |   });
+187 |
+188 |   registerAiRoute(app, options);
+189 |   registerChatRoute(app, options);
+190 |   registerVideoSuggestions(app, lessons, options);
+191 |   if (options.production) serveFrontend(app, options.frontendDirectory);
+192 |   app.use((request, response) => {
+193 |     response.status(404).json({ error: 'Route not found.' });
+194 |   });
+195 |   app.use((error, request, response, next) => {
+196 |     const status = [400, 413, 415].includes(error.status) ? error.status : 500;
+197 |     if (status === 500) logError(error);
+198 |     const messages = { 400: 'Request body must contain valid JSON.', 413: 'JSON request must not exceed 32 KB.', 415: 'Unsupported request encoding.', 500: 'Unexpected server error.' };
+199 |     response.status(status).json({ error: messages[status] });
+200 |   });
+201 |   return app;
+202 | }
 ```
 
-- **Line 181:** A 502 with advice that media can still be added by hand.
-- **Line 182:** Whatever happened, finishes with…
-- **Line 183:** …allowing the next search.
-- **Line 184:** Closes createApp.
-- **Line 185:** Closes the error callback and registration.
-- **Line 186:** Blank line separates related sections; it performs no operation.
-- **Line 187:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
-- **Line 188:** Registers chat after the shared authentication/origin protections; options allow repeatable mocked tests.
-- **Line 189:** Adds production static hosting only when explicitly requested; tests may substitute a temporary build directory.
-- **Line 190:** Adds the fallback middleware for requests not answered by earlier routes.
-- **Line 191:** Sends HTTP 404 with a short route-not-found JSON error.
-- **Line 192:** Closes the error callback and registration.
-- **Line 193:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
-- **Line 194:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
-- **Line 195:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
-- **Line 196:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
-- **Line 197:** Sends the selected HTTP status and its safe JSON error message.
-- **Line 198:** Closes the error callback and registration.
-- **Line 199:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
-- **Line 200:** Closes createApp.
+- **Line 181:** Catches failure without including private exception details in public hosting logs.
+- **Line 182:** A 502 with advice that media can still be added by hand.
+- **Line 183:** Whatever happened, finishes with…
+- **Line 184:** …allowing the next search.
+- **Line 185:** Closes createApp.
+- **Line 186:** Closes the error callback and registration.
+- **Line 187:** Blank line separates related sections; it performs no operation.
+- **Line 188:** The AI route is registered with the whole options object (it reads provider and now from it and ignores the media functions).
+- **Line 189:** Registers chat after the shared authentication/origin protections; options allow repeatable mocked tests.
+- **Line 190:** Registers lesson-level video suggestions after authentication and lesson-ID parsing, passing the existing store and injectable test options.
+- **Line 191:** Adds production static hosting only when explicitly requested; tests may substitute a temporary build directory.
+- **Line 192:** Adds the fallback middleware for requests not answered by earlier routes.
+- **Line 193:** Sends HTTP 404 with a short route-not-found JSON error.
+- **Line 194:** Closes the error callback and registration.
+- **Line 195:** Registers Express error middleware. Its four parameters are required for Express to recognize it, even though request and next are unused here.
+- **Line 196:** Preserves the listed request-parser HTTP error statuses; any other error, including SQLite failures, becomes 500. includes returns a Boolean and the ternary chooses a status.
+- **Line 197:** In the general error handler, logs any error that is about to become a 500 response, so a failing save leaves a trace in the backend’s output instead of disappearing silently.
+- **Line 198:** Defines a fixed map of public messages for invalid JSON, excessive body size, unsupported encoding, and unexpected server errors. Internal exception messages are never copied into the response.
+- **Line 199:** Sends the selected HTTP status and its safe JSON error message.
+- **Line 200:** Closes the error callback and registration.
+- **Line 201:** Returns the configured app to the caller, which can listen on a real port or a temporary test port.
+- **Line 202:** Closes createApp.
 
 ## server/api.test.js
 
@@ -2680,119 +2692,123 @@ Audience support: this file connects the optional class-group field to validatio
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
 
-Focused dashboard polish: navigation and audience filters, readable timelines and responsive media reuse existing lesson and attachment data.
+Displays saved lessons, existing media and the new suggestion panel; delegates explicit Add approval to App.
 
 ### Lines 1–30
 
 ```text
 1 | import React, { useState } from 'react';
-2 | import LessonMedia from './LessonMedia.jsx';
-3 | import MediaItem from './MediaItem.jsx';
-4 | import { activityBlocks, activityMinutes } from './activities.js';
-5 | import { timelineEntries } from './lesson-view.js';
-6 | import { groupMedia, mediaKey } from './media.js';
-7 |
-8 | export function CoachingText({ text, after }) {
-9 |   if (!text) return <p>Not added</p>;
-10 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-11 |     const lines = block.split('\n').filter(Boolean);
-12 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-13 |     return <section className="coaching-block" key={index}>
-14 |       {heading && <h4>{lines[0]}</h4>}
-15 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-16 |       {after?.(index)}
-17 |     </section>;
-18 |   })}</>;
-19 | }
-20 | export default function LessonCard({ lesson, onEdit, onDeleted, disabled, media = [] }) {
-21 |   const [confirming, setConfirming] = useState(false);
-22 |   const [busy, setBusy] = useState(false);
-23 |   const [error, setError] = useState('');
-24 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
-25 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
-26 |   async function remove() {
-27 |     if (busy) return;
-28 |     setBusy(true); setError('');
-29 |     try {
-30 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+2 | import VideoSuggestions from './VideoSuggestions.jsx';
+3 | import LessonMedia from './LessonMedia.jsx';
+4 | import MediaItem from './MediaItem.jsx';
+5 | import { activityBlocks, activityMinutes } from './activities.js';
+6 | import { timelineEntries } from './lesson-view.js';
+7 | import { groupMedia, mediaKey } from './media.js';
+8 |
+9 | export function CoachingText({ text, after }) {
+10 |   if (!text) return <p>Not added</p>;
+11 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+12 |     const lines = block.split('\n').filter(Boolean);
+13 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+14 |     return <section className="coaching-block" key={index}>
+15 |       {heading && <h4>{lines[0]}</h4>}
+16 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+17 |       {after?.(index)}
+18 |     </section>;
+19 |   })}</>;
+20 | }
+21 | export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
+22 |   const [confirming, setConfirming] = useState(false);
+23 |   const [busy, setBusy] = useState(false);
+24 |   const [error, setError] = useState('');
+25 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+26 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+27 |   async function remove() {
+28 |     if (busy) return;
+29 |     setBusy(true); setError('');
+30 |     try {
 ```
 
 - **Line 1:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 2:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports the component that shows one picture or video.
-- **Line 4:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
-- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 6:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
-- **Line 7:** Blank line separates related sections for readability; it performs no operation.
-- **Line 8:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
-- **Line 9:** Renders a short placeholder when a text field is empty.
-- **Line 10:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 11:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 12:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 13:** Starts one formatted block, using its position as the React key.
-- **Line 14:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 15:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 16:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
-- **Line 17:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 18:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 19:** Closes the LessonCard function.
-- **Line 20:** The card receives its own attachments as media (empty list by default).
-- **Line 21:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 22:** Stores whether a request is in flight and provides its setter; false initially keeps controls available.
-- **Line 23:** Stores a safe user-facing failure message, initially empty.
-- **Line 24:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
-- **Line 25:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
-- **Line 26:** Defines the asynchronous deletion action, called only by the confirmation button.
-- **Line 27:** Ignores another action while a deletion request is in progress.
-- **Line 28:** Disables repeat actions and clears the previous error before making the request.
-- **Line 29:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 30:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 4:** Imports the component that shows one picture or video.
+- **Line 5:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
+- **Line 8:** Blank line separates related sections for readability; it performs no operation.
+- **Line 9:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
+- **Line 10:** Renders a short placeholder when a text field is empty.
+- **Line 11:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 12:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 13:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 14:** Starts one formatted block, using its position as the React key.
+- **Line 15:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 16:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 17:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
+- **Line 18:** Closes the suggestion section and ends the JSX return statement.
+- **Line 19:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 20:** Closes the LessonCard function.
+- **Line 21:** Defines the lesson card component, now accepting an explicit video-approval callback alongside existing lesson actions and media.
+- **Line 22:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 23:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 24:** Stores a safe user-facing error message, initially empty.
+- **Line 25:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 26:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 27:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 28:** Ignores another action while a deletion request is in progress.
+- **Line 29:** Shows busy state and clears the previous error before sending.
+- **Line 30:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
 
-### Lines 31–50
+### Lines 31–52
 
 ```text
-31 |       if (response.status !== 204 && response.status !== 404) throw new Error();
-32 |       onDeleted();
-33 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-34 |     finally { setBusy(false); }
-35 |   }
-36 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
-37 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
-38 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
-39 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-40 |     <h4>Lesson timeline</h4>
-41 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
-42 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
-43 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
-44 |     <LessonMedia lesson={lesson} />
-45 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-46 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-47 |     {error && <p className="error" role="alert">{error}</p>}
-48 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-49 |   </article>;
-50 | }
+31 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+32 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+33 |       onDeleted();
+34 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+35 |     finally { setBusy(false); }
+36 |   }
+37 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
+38 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
+39 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+40 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+41 |     <h4>Lesson timeline</h4>
+42 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
+43 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+44 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+45 |     <LessonMedia lesson={lesson} />
+46 |     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
+47 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+48 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+49 |     {error && <p className="error" role="alert">{error}</p>}
+50 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+51 |   </article>;
+52 | }
 ```
 
-- **Line 31:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
-- **Line 32:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
-- **Line 33:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 34:** Always releases the busy state after success or failure.
-- **Line 35:** Closes the LessonCard function.
-- **Line 36:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
-- **Line 37:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
-- **Line 38:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
-- **Line 39:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 40:** Adds the visible heading for the activity timeline.
-- **Line 41:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
-- **Line 42:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
-- **Line 43:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
-- **Line 44:** Passes the record to the reviewed-media lookup component.
-- **Line 45:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 46:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 47:** Displays the stored error as an accessible alert only when it is nonempty.
-- **Line 48:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 49:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 50:** Closes the LessonCard function.
+- **Line 31:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 32:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 33:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 34:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 35:** Always releases the busy state after success or failure.
+- **Line 36:** Closes the LessonCard function.
+- **Line 37:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
+- **Line 38:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
+- **Line 39:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 40:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 41:** Adds the visible heading for the activity timeline.
+- **Line 42:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
+- **Line 43:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
+- **Line 44:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
+- **Line 45:** Passes the record to the reviewed-media lookup component.
+- **Line 46:** Renders the suggestion controls on the saved lesson card and disables them while editing or deleting; approval delegates to the dashboard.
+- **Line 47:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 48:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 49:** Shows errors in an accessible alert using the existing error styling.
+- **Line 50:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 51:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 52:** Closes the LessonCard function.
 
 ## client/src/lesson-draft.js
 
@@ -6256,9 +6272,9 @@ Opt-in live Development test. Fresh independent Console verification is required
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\media.js`
 
-Shared pure helpers for pictures and videos. The browser components use them to show, edit and save attachments, and the Node server imports the same limits and YouTube parser so both sides apply identical rules. The only network calls here are the three small fetch helpers at the end.
+Shared attachment helpers and existing HTTP utilities. withApprovedVideo makes an editable copy only; the existing lesson save remains the persistence boundary.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | export const mediaLimits = { image: 6 * 1024 * 1024, video: 20 * 1024 * 1024, perLesson: 12, title: 120, activity: 200, url: 2000 };
@@ -6286,13 +6302,18 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 23 |   const source = (from || '').trim();
 24 |   if (!source || source === (to || '').trim()) return media;
 25 |   return media.map(item => sameActivity(item, source) ? { ...item, activity: to.trim() } : item);
+26 | }
+27 |
+28 | export function mediaPayload(media) {
+29 |   return media.map(item => item.id
+30 |     ? { id: item.id, title: item.title, activity: item.activity || '' }
 ```
 
 - **Line 1:** Exports the size and length limits: pictures up to 6 MB, videos up to 20 MB, at most 12 attachments per lesson, and maximum lengths for captions, activity headings and web addresses. 6 * 1024 * 1024 is 6 megabytes written out.
 - **Line 2:** Exports the allowed upload types mapped to what they are (image or video). Anything not listed, such as SVG, is refused.
 - **Line 3:** Blank line separates related sections for readability; it performs no operation.
 - **Line 4:** Exports youtubeId, which pulls the 11-character video id out of any common YouTube link form, or returns null.
-- **Line 5:** Declares url without a value so the try block below can fill it.
+- **Line 5:** Declares a variable for the parsed public application address.
 - **Line 6:** Parses the text as a web address after trimming spaces. If parsing throws (not a valid address) the catch returns null.
 - **Line 7:** Only http and https addresses are considered; other schemes such as javascript: return null.
 - **Line 8:** Removes a leading www. or m. from the host name so youtube.com, www.youtube.com and m.youtube.com all compare equal.
@@ -6313,15 +6334,15 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 - **Line 23:** The old heading, trimmed.
 - **Line 24:** Does nothing (returns the same list) if there was no old heading or nothing changed.
 - **Line 25:** Returns a new list in which every attachment with the old heading now carries the new heading; the other attachments are copied unchanged.
+- **Line 26:** Closes the preceding block (function, object, or statement body).
+- **Line 27:** Blank line separates related sections for readability; it performs no operation.
+- **Line 28:** Exports mediaPayload, which converts the editor’s attachments into the minimal objects the API accepts.
+- **Line 29:** Maps each attachment to a request object; the ternary on the next lines chooses between two shapes.
+- **Line 30:** Already saved or uploaded files are sent by id with only the editable fields (title and activity).
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 | }
-27 |
-28 | export function mediaPayload(media) {
-29 |   return media.map(item => item.id
-30 |     ? { id: item.id, title: item.title, activity: item.activity || '' }
 31 |     : { url: item.url, origin: item.origin === 'suggested' ? 'suggested' : 'link', title: item.title, activity: item.activity || '', credit: item.credit || '', source_page: item.source_page || '' });
 32 | }
 33 |
@@ -6335,20 +6356,25 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 41 | let keyCounter = 0;
 42 | export const newKey = () => `new-${++keyCounter}`;
 43 | export const mediaKey = item => item.id ?? item.clientKey;
-44 | export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
-45 | export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
-46 |
-47 | export function groupMedia(media, blocks) {
-48 |   const headings = blocks.map(headingOf);
-49 |   const byBlock = new Map();
-50 |   const rest = [];
+44 | export function withApprovedVideo(media, video) {
+45 |   if (!video || media.some(item => youtubeId(item.url) === youtubeId(video.url))) return [...media];
+46 |   if (media.length >= mediaLimits.perLesson) throw new Error('This lesson already has the maximum number of attachments. Remove one in Edit lesson first.');
+47 |   return [...media, { ...video, activity: '', origin: 'suggested' }];
+48 | }
+49 | export const originLabel = item => item.origin === 'upload' ? 'Uploaded file' : item.origin === 'suggested' ? 'Suggested by CoachLab · link checked' : 'Your link · checked';
+50 | export const safeLink = value => typeof value === 'string' && /^https:\/\//i.test(value) ? value : null;
+51 |
+52 | export function groupMedia(media, blocks) {
+53 |   const headings = blocks.map(headingOf);
+54 |   const byBlock = new Map();
+55 |   const rest = [];
+56 |   for (const item of media) {
+57 |     const index = (item.activity || '').trim() ? headings.findIndex(heading => heading && sameActivity(item, heading)) : -1;
+58 |     if (index < 0) rest.push(item);
+59 |     else byBlock.set(index, [...(byBlock.get(index) || []), item]);
+60 |   }
 ```
 
-- **Line 26:** Closes the preceding block (function, object, or statement body).
-- **Line 27:** Blank line separates related sections for readability; it performs no operation.
-- **Line 28:** Exports mediaPayload, which converts the editor’s attachments into the minimal objects the API accepts.
-- **Line 29:** Maps each attachment to a request object; the ternary on the next lines chooses between two shapes.
-- **Line 30:** Already saved or uploaded files are sent by id with only the editable fields (title and activity).
 - **Line 31:** New links are sent with their address, origin, caption, activity and credit details. The server decides the real kind after checking the link, so the browser’s guess is not sent.
 - **Line 32:** Closes the preceding block (function, object, or statement body).
 - **Line 33:** Blank line separates related sections for readability; it performs no operation.
@@ -6362,87 +6388,81 @@ Shared pure helpers for pictures and videos. The browser components use them to 
 - **Line 41:** A module-level counter used to make temporary keys.
 - **Line 42:** Returns a new temporary key such as new-1. React needs a stable key for attachments that have no database id yet.
 - **Line 43:** Uses the database id when there is one, otherwise the temporary key. ?? only falls back for null or undefined.
-- **Line 44:** Chooses the small label shown under an attachment so people know whether they uploaded it, pasted it, or CoachLab suggested it (and that the link was checked).
-- **Line 45:** Returns the text only if it is a string starting with https://, otherwise null. It stops unsafe schemes such as javascript: from becoming clickable links.
-- **Line 46:** Blank line separates related sections for readability; it performs no operation.
-- **Line 47:** Exports groupMedia, used by lesson cards to place attachments under activities.
-- **Line 48:** Takes the first line of every activity block.
-- **Line 49:** A Map from block position to its attachments.
-- **Line 50:** The list of attachments that belong to no visible activity.
+- **Line 44:** Exports a pure helper that copies attachments and optionally adds a coach-selected video; it performs no HTTP or database operation.
+- **Line 45:** Returns a copy unchanged when no video was approved or its YouTube ID already exists among attachments.
+- **Line 46:** Throws a readable error when adding a new attachment would exceed the existing per-lesson maximum.
+- **Line 47:** Appends the approved video as a suggested whole-lesson attachment to a new array, leaving the saved array untouched.
+- **Line 48:** Closes the preceding block (function, object, or statement body).
+- **Line 49:** Chooses the small label shown under an attachment so people know whether they uploaded it, pasted it, or CoachLab suggested it (and that the link was checked).
+- **Line 50:** Returns the text only if it is a string starting with https://, otherwise null. It stops unsafe schemes such as javascript: from becoming clickable links.
+- **Line 51:** Blank line separates related sections for readability; it performs no operation.
+- **Line 52:** Exports groupMedia, used by lesson cards to place attachments under activities.
+- **Line 53:** Takes the first line of every activity block.
+- **Line 54:** A Map from block position to its attachments.
+- **Line 55:** The list of attachments that belong to no visible activity.
+- **Line 56:** Loops over every attachment.
+- **Line 57:** Finds the first block whose heading matches the attachment’s activity; blank activities and blank headings never match (index -1). Using the first match means a duplicated heading shows the attachment once.
+- **Line 58:** No matching block: the attachment goes to the rest list.
+- **Line 59:** Otherwise it is added to that block’s list, creating a new list from the old one plus the new attachment.
+- **Line 60:** Closes the preceding block (function, object, or statement body).
 
-### Lines 51–75
-
-```text
-51 |   for (const item of media) {
-52 |     const index = (item.activity || '').trim() ? headings.findIndex(heading => heading && sameActivity(item, heading)) : -1;
-53 |     if (index < 0) rest.push(item);
-54 |     else byBlock.set(index, [...(byBlock.get(index) || []), item]);
-55 |   }
-56 |   return { byBlock, rest };
-57 | }
-58 |
-59 | export async function uploadFile(file) {
-60 |   const response = await fetch('/api/media/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) }, body: file });
-61 |   const data = await response.json().catch(() => ({}));
-62 |   if (response.status !== 201) throw new Error(data.error || 'The upload failed. Check the connection and try again.');
-63 |   return data;
-64 | }
-65 |
-66 | export async function checkLink(url) {
-67 |   const response = await fetch('/api/media/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-68 |   const data = await response.json().catch(() => ({}));
-69 |   if (!response.ok) throw new Error(data.error || 'The link could not be checked.');
-70 |   return data;
-71 | }
-72 |
-73 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
-74 |
-75 | export async function fetchMedia(signal) {
-```
-
-- **Line 51:** Loops over every attachment.
-- **Line 52:** Finds the first block whose heading matches the attachment’s activity; blank activities and blank headings never match (index -1). Using the first match means a duplicated heading shows the attachment once.
-- **Line 53:** No matching block: the attachment goes to the rest list.
-- **Line 54:** Otherwise it is added to that block’s list, creating a new list from the old one plus the new attachment.
-- **Line 55:** Closes the preceding block (function, object, or statement body).
-- **Line 56:** Returns both results as an object.
-- **Line 57:** Closes the preceding block (function, object, or statement body).
-- **Line 58:** Blank line separates related sections for readability; it performs no operation.
-- **Line 59:** Exports uploadFile, which sends one chosen file to the server.
-- **Line 60:** POSTs the raw file as the request body, declaring its type and sending its name (URL-encoded so any characters are safe) in a header. No form wrapper is needed.
-- **Line 61:** Reads the JSON reply, using an empty object if the reply is not JSON.
-- **Line 62:** Anything other than status 201 (Created) becomes an Error carrying the server’s message or a friendly default.
-- **Line 63:** Returns the saved file’s details.
-- **Line 64:** Closes the preceding block (function, object, or statement body).
-- **Line 65:** Blank line separates related sections for readability; it performs no operation.
-- **Line 66:** Exports checkLink, which asks the server to verify a pasted link.
-- **Line 67:** POSTs the link as JSON to the verification route.
-- **Line 68:** Reads the JSON reply, using an empty object if the reply is not JSON.
-- **Line 69:** A failed check throws an Error with the server’s explanation so the form can show it.
-- **Line 70:** Returns the saved file’s details.
-- **Line 71:** Closes the preceding block (function, object, or statement body).
-- **Line 72:** Blank line separates related sections for readability; it performs no operation.
-- **Line 73:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
-- **Line 74:** Blank line separates related sections for readability; it performs no operation.
-- **Line 75:** Exports fetchMedia, one shared function that loads the list of every saved attachment from the server. App uses it when the page opens, before opening a lesson for editing and after saving.
-
-### Lines 76–81
+### Lines 61–86
 
 ```text
-76 |   const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
-77 |   if (!response.ok) throw new Error('Unable to load media.');
-78 |   const data = await response.json();
-79 |   if (!Array.isArray(data)) throw new Error('Unexpected media response.');
-80 |   return data;
-81 | }
+61 |   return { byBlock, rest };
+62 | }
+63 |
+64 | export async function uploadFile(file) {
+65 |   const response = await fetch('/api/media/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) }, body: file });
+66 |   const data = await response.json().catch(() => ({}));
+67 |   if (response.status !== 201) throw new Error(data.error || 'The upload failed. Check the connection and try again.');
+68 |   return data;
+69 | }
+70 |
+71 | export async function checkLink(url) {
+72 |   const response = await fetch('/api/media/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+73 |   const data = await response.json().catch(() => ({}));
+74 |   if (!response.ok) throw new Error(data.error || 'The link could not be checked.');
+75 |   return data;
+76 | }
+77 |
+78 | export const discardUpload = item => item.pending && item.id ? fetch(`/api/media/${item.id}`, { method: 'DELETE' }).catch(() => {}) : undefined;
+79 |
+80 | export async function fetchMedia(signal) {
+81 |   const response = await fetch('/api/lesson-media', { signal, cache: 'no-store' });
+82 |   if (!response.ok) throw new Error('Unable to load media.');
+83 |   const data = await response.json();
+84 |   if (!Array.isArray(data)) throw new Error('Unexpected media response.');
+85 |   return data;
+86 | }
 ```
 
-- **Line 76:** Requests the list. cache: "no-store" forbids the browser from reusing an older copy, so an edit form can never start from a stale list; the optional signal lets the caller cancel.
-- **Line 77:** Any failure status becomes an error.
-- **Line 78:** Reads the JSON reply.
-- **Line 79:** A reply that is not a list is treated as an error too.
-- **Line 80:** Returns the saved file’s details.
-- **Line 81:** Closes the preceding block (function, object, or statement body).
+- **Line 61:** Returns both results as an object.
+- **Line 62:** Closes the preceding block (function, object, or statement body).
+- **Line 63:** Blank line separates related sections for readability; it performs no operation.
+- **Line 64:** Exports uploadFile, which sends one chosen file to the server.
+- **Line 65:** POSTs the raw file as the request body, declaring its type and sending its name (URL-encoded so any characters are safe) in a header. No form wrapper is needed.
+- **Line 66:** Reads the JSON reply, using an empty object if the reply is not JSON.
+- **Line 67:** Anything other than status 201 (Created) becomes an Error carrying the server’s message or a friendly default.
+- **Line 68:** Returns the saved file’s details.
+- **Line 69:** Closes the preceding block (function, object, or statement body).
+- **Line 70:** Blank line separates related sections for readability; it performs no operation.
+- **Line 71:** Exports checkLink, which asks the server to verify a pasted link.
+- **Line 72:** POSTs the link as JSON to the verification route.
+- **Line 73:** Reads the JSON reply, using an empty object if the reply is not JSON.
+- **Line 74:** A failed check throws an Error with the server’s explanation so the form can show it.
+- **Line 75:** Returns the saved file’s details.
+- **Line 76:** Closes the preceding block (function, object, or statement body).
+- **Line 77:** Blank line separates related sections for readability; it performs no operation.
+- **Line 78:** Exports discardUpload: for an uploaded file that was never saved with a lesson it asks the server to delete it; for everything else it does nothing. A failed delete is ignored because old orphans are purged automatically.
+- **Line 79:** Blank line separates related sections for readability; it performs no operation.
+- **Line 80:** Exports fetchMedia, one shared function that loads the list of every saved attachment from the server. App uses it when the page opens, before opening a lesson for editing and after saving.
+- **Line 81:** Requests the list. cache: "no-store" forbids the browser from reusing an older copy, so an edit form can never start from a stale list; the optional signal lets the caller cancel.
+- **Line 82:** Any failure status becomes an error.
+- **Line 83:** Parses the server's JSON response.
+- **Line 84:** A reply that is not a list is treated as an error too.
+- **Line 85:** Returns the saved file’s details.
+- **Line 86:** Closes the preceding block (function, object, or statement body).
 
 ## client/src/MediaItem.jsx
 
@@ -7594,9 +7614,9 @@ PostgreSQL migration that mirrors the SQLite one: it only adds the lesson_media 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media.test.js`
 
-Fast Node tests for the media rules that need no database and no internet: file signatures, YouTube link parsing, private-address blocking, redirect handling, link verification, attachment-list validation, activity helpers, and the automatic finder. Network access is replaced by small fake functions so the tests are deterministic.
+Unit tests use synthetic data and injected HTTP/verifier functions to check media matching, link validation and approved attachment copying.
 
-### Lines 1–25
+### Lines 1–30
 
 ```text
 1 | import test from 'node:test';
@@ -7607,23 +7627,28 @@ Fast Node tests for the media rules that need no database and no internet: file 
 6 | import { validateMediaList } from './media-validate.js';
 7 | import { png, webm } from './media-fixtures.js';
 8 | import { findMedia, commonsCandidates, cleanQueries } from './media-finder.js';
-9 |
-10 |
-11 | test('file signatures identify supported pictures and videos and reject everything else', () => {
-12 |   assert.deepEqual(sniffMedia(png), { kind: 'image', mime: 'image/png' });
-13 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)])), { kind: 'image', mime: 'image/jpeg' });
-14 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/gif' });
-15 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/webp' });
-16 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(32)])), { kind: 'video', mime: 'video/mp4' });
-17 |   assert.deepEqual(sniffMedia(webm), { kind: 'video', mime: 'video/webm' });
-18 |   assert.equal(sniffMedia(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
-19 |   assert.equal(sniffMedia(Buffer.from('<!doctype html><html></html>')), null);
-20 |   assert.equal(sniffMedia(Buffer.alloc(4)), null);
-21 |   assert.equal(sniffMedia(null), null);
-22 | });
-23 |
-24 | test('YouTube links in every common form resolve to the same 11 character ID', () => {
-25 |   const id = 'dQw4w9WgXcQ';
+9 | import { lessonVideoQuery, suggestLessonVideos } from './video-suggestions.js';
+10 | import { withApprovedVideo } from '../client/src/media.js';
+11 |
+12 | test('lesson video queries use recognized techniques, discipline separately, audience and no raw personal notes', () => {
+13 |   assert.deepEqual(lessonVideoQuery({ title: 'Jab drills for Jane', goal: 'person@example.com', drills: 'Jab — 5 minutes', audience: 'Kids' }), { technique: 'jab', audience: 'kids non contact' });
+14 |   assert.deepEqual(lessonVideoQuery({ title: 'Double-leg takedown', audience: 'Adults' }), { technique: 'double leg', audience: 'adults' });
+15 |   assert.equal(lessonVideoQuery({ title: 'Kimura armbar triangle', audience: 'Kids' }), null);
+16 |   assert.equal(lessonVideoQuery({ title: 'Unrecognized lesson' }), null);
+17 | });
+18 |
+19 | test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
+20 |   let searches = 0;
+21 |   const verify = async url => ({ url, kind: 'youtube', title: 'Verified instruction' });
+22 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Adults' }, { env: { YOUTUBE_API_KEY: 'fake' }, verify, search: async () => { searches++; return []; } });
+23 |   assert.equal(searches, 0);
+24 |   assert.equal(result.videos.length, 1);
+25 |   assert.equal(result.videos[0].kind, 'youtube');
+26 |   assert.match(result.message, /Save changes/);
+27 | });
+28 |
+29 | test('video fallback searches once, passes kids context, filters broken links and bounds results', async () => {
+30 |   let searches = 0;
 ```
 
 - **Line 1:** Imports Node’s built-in test function.
@@ -7634,285 +7659,376 @@ Fast Node tests for the media rules that need no database and no internet: file 
 - **Line 6:** Imports the attachment-list validator.
 - **Line 7:** Imports the fake PNG and WebM files.
 - **Line 8:** Imports the finder functions.
-- **Line 9:** Blank line separates related sections for readability; it performs no operation.
-- **Line 10:** Blank line separates related sections for readability; it performs no operation.
-- **Line 11:** Registers the test that real file signatures are recognised and everything else rejected.
-- **Line 12:** A PNG is recognised as an image of type image/png.
-- **Line 13:** A JPEG signature (FF D8 FF E0) plus padding is recognised.
-- **Line 14:** A GIF89a header is recognised.
-- **Line 15:** A RIFF container with WEBP is recognised (\0 is a zero byte).
-- **Line 16:** A file with ftyp at byte 4 is recognised as MP4.
-- **Line 17:** The fake WebM is recognised.
-- **Line 18:** SVG text is rejected, because SVG can contain scripts.
-- **Line 19:** HTML is rejected.
-- **Line 20:** A four-byte buffer is too short and is rejected.
-- **Line 21:** A missing buffer is rejected without an error.
-- **Line 22:** Closes the callback body and the function call that received it.
-- **Line 23:** Blank line separates related sections for readability; it performs no operation.
-- **Line 24:** Registers the YouTube link parsing test.
-- **Line 25:** A sample video id.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 11:** Blank line separates related sections for readability; it performs no operation.
+- **Line 12:** Registers a unit test showing that queries contain only recognized technique labels and audience context, not arbitrary names or contact details from lesson text.
+- **Line 13:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 14:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 15:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 16:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 17:** Closes the callback body and the function call that received it.
+- **Line 18:** Blank line separates related sections for readability; it performs no operation.
+- **Line 19:** Registers a mocked finder test that confirms catalog-first behavior and avoids YouTube search quota when a verified catalog video exists.
+- **Line 20:** Initializes a counter for mocked YouTube search calls.
+- **Line 21:** Defines a fake verifier returning a YouTube result without making a network request.
+- **Line 22:** Suggests videos for an adult jab lesson with a fake key, verifier and counted search function; the curated match should make search unnecessary.
+- **Line 23:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 24:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 25:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 26:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 27:** Closes the callback body and the function call that received it.
+- **Line 28:** Blank line separates related sections for readability; it performs no operation.
+- **Line 29:** Registers a test for one fallback search, explicit kids context, omission of failed checks and bounded output.
+- **Line 30:** Initializes a counter for mocked YouTube search calls.
 
-### Lines 26–50
+### Lines 31–60
 
 ```text
-26 |   for (const link of [`https://www.youtube.com/watch?v=${id}`, `https://youtube.com/watch?v=${id}&t=30s`, `https://m.youtube.com/watch?v=${id}`, `https://youtu.be/${id}?si=x`, `https://www.youtube.com/embed/${id}`, `https://www.youtube-nocookie.com/embed/${id}`, `https://www.youtube.com/shorts/${id}`, `  https://www.youtube.com/live/${id}  `]) assert.equal(youtubeId(link), id, link);
-27 |   for (const link of ['https://www.youtube.com/watch?v=short', 'https://example.com/watch?v=' + id, 'https://notyoutube.com/embed/' + id, 'javascript:alert(1)', 'not a link', '', null]) assert.equal(youtubeId(link), null, String(link));
-28 | });
-29 |
-30 | test('private, loopback and link-local network addresses are never public', async () => {
-31 |   for (const address of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'not-an-address']) assert.equal(isPublicAddress(address), false, address);
-32 |   for (const address of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(address), true, address);
-33 |   await new Promise(resolve => publicLookup('localhost', {}, error => { assert.ok(error instanceof MediaLinkError); resolve(); }));
-34 | });
-35 |
-36 | test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
-37 |   const calls = [];
-38 |   const request = async (url, options) => {
-39 |     calls.push(url.href);
-40 |     assert.equal(options.method, 'GET');
-41 |     if (url.pathname === '/start') return { status: 302, headers: { location: '/next' }, body: Buffer.alloc(0) };
-42 |     if (url.pathname === '/to-http') return { status: 302, headers: { location: 'http://example.com/plain' }, body: Buffer.alloc(0) };
-43 |     if (url.pathname === '/loop') return { status: 302, headers: { location: '/loop' }, body: Buffer.alloc(0) };
-44 |     return { status: 200, headers: {}, body: Buffer.from('ok') };
-45 |   };
-46 |   const result = await safeFetch('https://example.com/start', { request });
-47 |   assert.equal(result.url, 'https://example.com/next');
-48 |   assert.deepEqual(calls, ['https://example.com/start', 'https://example.com/next']);
-49 |   for (const bad of ['http://example.com/a', 'ftp://example.com/a', 'https://example.com:8443/a', 'https://user:pass@example.com/a', 'nonsense', 'https://example.com/to-http', 'https://example.com/loop']) await assert.rejects(safeFetch(bad, { request }), MediaLinkError, bad);
-50 | });
+31 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
+32 |     env: { YOUTUBE_API_KEY: 'fake' },
+33 |     search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+34 |     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
+35 |   });
+36 |   assert.equal(searches, 1);
+37 |   assert.equal(result.videos.length, 4);
+38 |   const empty = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: {}, verify: async () => { throw new Error('blocked'); } });
+39 |   assert.deepEqual(empty.videos, []);
+40 |   assert.match(empty.message, /No playable/);
+41 | });
+42 |
+43 | test('video approval creates an editable copy, preserves saved attachments and prevents duplicate additions', () => {
+44 |   const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
+45 |   const video = { url: 'https://www.youtube.com/watch?v=abcdefghij1', title: 'Drill' };
+46 |   const approved = withApprovedVideo(existing, video);
+47 |   assert.equal(existing.length, 1);
+48 |   assert.equal(approved.length, 2);
+49 |   assert.equal(approved[1].origin, 'suggested');
+50 |   assert.equal(withApprovedVideo(approved, video).length, 2);
+51 |   assert.equal(withApprovedVideo(existing).length, 1);
+52 |   assert.throws(() => withApprovedVideo(Array.from({ length: 12 }, () => existing[0]), video), /maximum/);
+53 | });
+54 |
+55 |
+56 | test('file signatures identify supported pictures and videos and reject everything else', () => {
+57 |   assert.deepEqual(sniffMedia(png), { kind: 'image', mime: 'image/png' });
+58 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)])), { kind: 'image', mime: 'image/jpeg' });
+59 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/gif' });
+60 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/webp' });
 ```
 
-- **Line 26:** Eight common link shapes (watch, with extra parameters, mobile, short youtu.be, embed, privacy-enhanced embed, shorts and live, including surrounding spaces) must all give the same id.
-- **Line 27:** Bad links must give null: wrong-length ids, other websites, look-alike host names, a javascript: address, plain text, an empty string and null.
-- **Line 28:** Closes the callback body and the function call that received it.
-- **Line 29:** Blank line separates related sections for readability; it performs no operation.
-- **Line 30:** Registers the private-address test (asynchronous because one check uses a real lookup of localhost).
-- **Line 31:** Loopback, private, link-local (cloud metadata), reserved, IPv6 private and IPv4-mapped private addresses, plus text that is not an address, must all be reported as not public.
-- **Line 32:** Ordinary public addresses, including ones just outside the private ranges, must be reported as public.
-- **Line 33:** Calls the real lookup function with the name localhost and expects it to be refused with a MediaLinkError (localhost resolves to a private address).
-- **Line 34:** Closes the callback body and the function call that received it.
-- **Line 35:** Blank line separates related sections for readability; it performs no operation.
-- **Line 36:** Registers the safeFetch test.
-- **Line 37:** Records the addresses requested.
-- **Line 38:** A fake request function that stands in for the network.
-- **Line 39:** Remembers each requested address.
-- **Line 40:** Checks that a GET request was made.
-- **Line 41:** The /start page redirects to /next.
-- **Line 42:** The /to-http page redirects to an insecure http address.
-- **Line 43:** The /loop page redirects to itself forever.
-- **Line 44:** Every other page answers 200 with a short body.
-- **Line 45:** Closes the preceding block and ends the statement.
-- **Line 46:** Fetches /start through the fake network.
-- **Line 47:** Expects the final address to be the redirect target.
-- **Line 48:** Expects exactly two requests, proving the redirect was followed once.
-- **Line 49:** Expects errors for insecure or non-web schemes, an unusual port, embedded credentials, nonsense text, a redirect to http and an endless redirect loop.
-- **Line 50:** Closes the callback body and the function call that received it.
+- **Line 31:** Starts a kids jab suggestion with explicitly injected test dependencies.
+- **Line 32:** Supplies a fake API key solely to exercise the configured-search branch; no real key is loaded.
+- **Line 33:** Counts the search, checks the exact safe query and discipline, then generates eight synthetic candidate URLs to test the five-candidate verification bound.
+- **Line 34:** Makes one candidate fail verification with a synthetic private error and returns safe metadata for the others.
+- **Line 35:** Closes the callback body and the function call that received it.
+- **Line 36:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 37:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 38:** Simulates an unavailable catalog video with no configured search key to exercise the friendly empty-results path.
+- **Line 39:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 40:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 41:** Closes the callback body and the function call that received it.
+- **Line 42:** Blank line separates related sections for readability; it performs no operation.
+- **Line 43:** Registers a pure approval test verifying copying, duplicate protection, attachment bounds and no implicit save.
+- **Line 44:** Defines one existing synthetic attachment in the saved-media array.
+- **Line 45:** Defines a different synthetic video available for explicit approval.
+- **Line 46:** Calls the approval helper and retains the new editable array for assertions without modifying the original.
+- **Line 47:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 48:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 49:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 50:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 51:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 52:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 53:** Closes the callback body and the function call that received it.
+- **Line 54:** Blank line separates related sections for readability; it performs no operation.
+- **Line 55:** Blank line separates related sections for readability; it performs no operation.
+- **Line 56:** Registers the test that real file signatures are recognised and everything else rejected.
+- **Line 57:** A PNG is recognised as an image of type image/png.
+- **Line 58:** A JPEG signature (FF D8 FF E0) plus padding is recognised.
+- **Line 59:** A GIF89a header is recognised.
+- **Line 60:** A RIFF container with WEBP is recognised (\0 is a zero byte).
 
-### Lines 51–75
+### Lines 61–90
 
 ```text
-51 |
-52 | test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
-53 |   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
-54 |   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
-55 |   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
-56 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(404, '') }), /does not exist or is private/);
-57 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(401, '') }), /does not allow embedding/);
-58 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(500, '') }), /could not confirm/);
-59 |   const image = await verifyLink('https://cdn.example.com/photos/Double-leg_setup.png', { fetcher: reply(200, png, { 'content-type': 'image/png' }) });
-60 |   assert.deepEqual(image, { kind: 'image', url: 'https://cdn.example.com/photos/Double-leg_setup.png', title: 'Double leg setup', credit: '', source_page: '' });
-61 |   assert.equal((await verifyLink('https://cdn.example.com/clip.webm', { fetcher: reply(206, webm, { 'content-range': 'bytes 0-67/68' }) })).kind, 'video');
-62 |   await assert.rejects(verifyLink('https://example.com/page', { fetcher: reply(200, '<html></html>', { 'content-type': 'text/html; charset=utf-8' }) }), /web page, not a picture or video/);
-63 |   await assert.rejects(verifyLink('https://example.com/logo.svg', { fetcher: reply(200, '<svg xmlns="http://www.w3.org/2000/svg"/>', { 'content-type': 'image/svg+xml' }) }), /not a supported picture/);
-64 |   await assert.rejects(verifyLink('https://example.com/missing.png', { fetcher: reply(404, 'no') }), /status 404/);
-65 |   await assert.rejects(verifyLink('https://example.com/huge.png', { fetcher: reply(200, png, { 'content-length': String(100 * 1024 * 1024) }) }), /very large/);
-66 |   for (const bad of ['', '   ', 'not a link', 'http://example.com/a.png', 'x'.repeat(2100)]) await assert.rejects(verifyLink(bad, { fetcher: reply(200, png) }), MediaLinkError, bad);
+61 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(32)])), { kind: 'video', mime: 'video/mp4' });
+62 |   assert.deepEqual(sniffMedia(webm), { kind: 'video', mime: 'video/webm' });
+63 |   assert.equal(sniffMedia(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
+64 |   assert.equal(sniffMedia(Buffer.from('<!doctype html><html></html>')), null);
+65 |   assert.equal(sniffMedia(Buffer.alloc(4)), null);
+66 |   assert.equal(sniffMedia(null), null);
 67 | });
 68 |
-69 | test('attachment lists accept saved IDs and new links only, with bounded text', () => {
-70 |   const good = validateMediaList([{ id: 3, title: ' Jab ', activity: 'Warm-up — 5 minutes' }, { url: ' https://youtu.be/dQw4w9WgXcQ ', title: '', activity: '', origin: 'suggested', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
-71 |   assert.deepEqual(good.media, [{ id: 3, title: 'Jab', activity: 'Warm-up — 5 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'suggested', title: '', activity: '', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
-72 |   for (const bad of ['x', {}, [null], [{ id: 0 }], [{ id: 1.5 }], [{ id: 1 }, { id: 1 }], [{ id: 1, url: 'https://a.com/x.png' }], [{ url: '' }], [{ url: 'https://a.com/x.png', origin: 'upload' }], [{ url: 'https://a.com/x.png', kind: 'video' }], [{ url: 'https://a.com/x.png', title: 'x'.repeat(121) }], [{ url: 'https://a.com/x.png', source_page: 'javascript:alert(1)' }], Array.from({ length: 13 }, (_, id) => ({ id: id + 1 }))]) assert.ok(validateMediaList(bad).error, JSON.stringify(bad).slice(0, 60));
-73 |   assert.deepEqual(validateMediaList([]).media, []);
-74 | });
-75 |
+69 | test('YouTube links in every common form resolve to the same 11 character ID', () => {
+70 |   const id = 'dQw4w9WgXcQ';
+71 |   for (const link of [`https://www.youtube.com/watch?v=${id}`, `https://youtube.com/watch?v=${id}&t=30s`, `https://m.youtube.com/watch?v=${id}`, `https://youtu.be/${id}?si=x`, `https://www.youtube.com/embed/${id}`, `https://www.youtube-nocookie.com/embed/${id}`, `https://www.youtube.com/shorts/${id}`, `  https://www.youtube.com/live/${id}  `]) assert.equal(youtubeId(link), id, link);
+72 |   for (const link of ['https://www.youtube.com/watch?v=short', 'https://example.com/watch?v=' + id, 'https://notyoutube.com/embed/' + id, 'javascript:alert(1)', 'not a link', '', null]) assert.equal(youtubeId(link), null, String(link));
+73 | });
+74 |
+75 | test('private, loopback and link-local network addresses are never public', async () => {
+76 |   for (const address of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'not-an-address']) assert.equal(isPublicAddress(address), false, address);
+77 |   for (const address of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(address), true, address);
+78 |   await new Promise(resolve => publicLookup('localhost', {}, error => { assert.ok(error instanceof MediaLinkError); resolve(); }));
+79 | });
+80 |
+81 | test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
+82 |   const calls = [];
+83 |   const request = async (url, options) => {
+84 |     calls.push(url.href);
+85 |     assert.equal(options.method, 'GET');
+86 |     if (url.pathname === '/start') return { status: 302, headers: { location: '/next' }, body: Buffer.alloc(0) };
+87 |     if (url.pathname === '/to-http') return { status: 302, headers: { location: 'http://example.com/plain' }, body: Buffer.alloc(0) };
+88 |     if (url.pathname === '/loop') return { status: 302, headers: { location: '/loop' }, body: Buffer.alloc(0) };
+89 |     return { status: 200, headers: {}, body: Buffer.from('ok') };
+90 |   };
 ```
 
-- **Line 51:** Blank line separates related sections for readability; it performs no operation.
-- **Line 52:** Registers the verifyLink test.
-- **Line 53:** Helper that creates a fake fetcher returning a chosen status, body and headers.
-- **Line 54:** A YouTube link whose fake oEmbed answer is 200 with a title and channel.
-- **Line 55:** Expects the checked result: kind youtube, the clean watch address, the title, the credit naming the channel and the source page.
-- **Line 56:** A 404 must say the video does not exist or is private.
-- **Line 57:** A 401 must say embedding is not allowed.
-- **Line 58:** A 500 must say YouTube cannot confirm the video now.
-- **Line 59:** A PNG link is verified from the file’s bytes.
-- **Line 60:** Expects kind image and a caption made from the file name (“Double leg setup”).
-- **Line 61:** A WebM link answering 206 (partial content) is recognised as a video.
-- **Line 62:** A link that returns an HTML page is refused with the “web page” message.
-- **Line 63:** An SVG picture is refused as unsupported even though the site calls it an image.
-- **Line 64:** A 404 answer is refused and the status is reported.
-- **Line 65:** A file claiming to be 100 MB is refused as very large.
-- **Line 66:** Empty, blank, non-address, insecure and over-long links must be refused with a MediaLinkError.
+- **Line 61:** A file with ftyp at byte 4 is recognised as MP4.
+- **Line 62:** The fake WebM is recognised.
+- **Line 63:** SVG text is rejected, because SVG can contain scripts.
+- **Line 64:** HTML is rejected.
+- **Line 65:** A four-byte buffer is too short and is rejected.
+- **Line 66:** A missing buffer is rejected without an error.
 - **Line 67:** Closes the callback body and the function call that received it.
 - **Line 68:** Blank line separates related sections for readability; it performs no operation.
-- **Line 69:** Registers the attachment-list validation test.
-- **Line 70:** Validates a good list: one stored attachment with extra spaces in its caption and one new suggested link with spaces around the address.
-- **Line 71:** Expects spaces trimmed and only the allowed fields kept.
-- **Line 72:** Expects errors for many bad lists: not a list, not objects, ids of zero or fractions, duplicate ids, a stored attachment carrying a link, an empty link, an upload origin, a client-supplied kind, an over-long caption, a javascript: source page, and more than 12 attachments.
-- **Line 73:** An empty list is valid.
-- **Line 74:** Closes the callback body and the function call that received it.
-- **Line 75:** Blank line separates related sections for readability; it performs no operation.
+- **Line 69:** Registers the YouTube link parsing test.
+- **Line 70:** A sample video id.
+- **Line 71:** Eight common link shapes (watch, with extra parameters, mobile, short youtu.be, embed, privacy-enhanced embed, shorts and live, including surrounding spaces) must all give the same id.
+- **Line 72:** Bad links must give null: wrong-length ids, other websites, look-alike host names, a javascript: address, plain text, an empty string and null.
+- **Line 73:** Closes the callback body and the function call that received it.
+- **Line 74:** Blank line separates related sections for readability; it performs no operation.
+- **Line 75:** Registers the private-address test (asynchronous because one check uses a real lookup of localhost).
+- **Line 76:** Loopback, private, link-local (cloud metadata), reserved, IPv6 private and IPv4-mapped private addresses, plus text that is not an address, must all be reported as not public.
+- **Line 77:** Ordinary public addresses, including ones just outside the private ranges, must be reported as public.
+- **Line 78:** Calls the real lookup function with the name localhost and expects it to be refused with a MediaLinkError (localhost resolves to a private address).
+- **Line 79:** Closes the callback body and the function call that received it.
+- **Line 80:** Blank line separates related sections for readability; it performs no operation.
+- **Line 81:** Registers the safeFetch test.
+- **Line 82:** Records the addresses requested.
+- **Line 83:** A fake request function that stands in for the network.
+- **Line 84:** Remembers each requested address.
+- **Line 85:** Checks that a GET request was made.
+- **Line 86:** The /start page redirects to /next.
+- **Line 87:** The /to-http page redirects to an insecure http address.
+- **Line 88:** The /loop page redirects to itself forever.
+- **Line 89:** Every other page answers 200 with a short body.
+- **Line 90:** Closes the preceding block and ends the statement.
 
-### Lines 76–100
-
-```text
-76 | test('activity helpers keep attachments with the right activity when headings change', () => {
-77 |   const media = [{ id: 1, activity: 'Warm-up — 10 minutes' }, { id: 2, activity: 'Drill — 5 minutes' }, { id: 3, activity: '' }];
-78 |   assert.deepEqual(renameActivity(media, 'Warm-up — 10 minutes', 'Warm-up — 12 minutes').map(item => item.activity), ['Warm-up — 12 minutes', 'Drill — 5 minutes', '']);
-79 |   assert.equal(renameActivity(media, '', 'New'), media);
-80 |   assert.deepEqual(unassignedMedia(media, ['Drill — 5 minutes']).map(item => item.id), [1, 3]);
-81 |   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
-82 | });
-83 |
-84 | const commonsReply = pages => async () => Response.json({ query: { pages } });
-85 | const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
-86 |
-87 | test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
-88 |   const results = await commonsCandidates('double leg takedown', commonsReply([page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg.svg', 'image/svg+xml'), page('File:Random_beach.jpg', 'image/jpeg', { ImageDescription: { value: 'Beach' } }), page('File:Clip.ogv', 'video/ogg')]));
-89 |   const images = results.filter(item => item.url.includes('/thumb/'));
-90 |   assert.equal(images.length, 1);
-91 |   assert.equal(images[0].title, 'Double leg takedown');
-92 |   assert.equal(images[0].credit, 'Wikimedia Commons — Jane Coach, CC BY-SA 4.0');
-93 |   assert.match(images[0].source_page, /^https:\/\/commons\.wikimedia\.org\//);
-94 |   await assert.rejects(commonsCandidates('x', async () => new Response('', { status: 500 })));
-95 |   assert.deepEqual(cleanQueries(['  knee   cut  ', 'a', 'x'.repeat(81), 7, 'b'.repeat(5), 'third one']), ['knee cut', 'bbbbb']);
-96 | });
-97 |
-98 | test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
-99 |   const verified = [];
-100 |   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
-```
-
-- **Line 76:** Registers the test for the activity helper functions.
-- **Line 77:** Three sample attachments: for a warm-up, for a drill and one for the whole lesson.
-- **Line 78:** Renaming the warm-up heading moves only the warm-up attachment to the new heading.
-- **Line 79:** Renaming from an empty heading returns the very same list, unchanged.
-- **Line 80:** With only the drill heading existing, the warm-up and whole-lesson attachments are unassigned (ids 1 and 3).
-- **Line 81:** The request payload keeps only the id, caption and activity for a stored attachment and the full link fields for a new one, ignoring the extra url on the stored one.
-- **Line 82:** Closes the callback body and the function call that received it.
-- **Line 83:** Blank line separates related sections for readability; it performs no operation.
-- **Line 84:** Helper that builds a fake Wikimedia answer containing the given pages.
-- **Line 85:** Helper that builds one fake Commons file page with picture and description addresses, a file type, an author containing HTML, a licence and a description.
-- **Line 86:** Blank line separates related sections for readability; it performs no operation.
-- **Line 87:** Registers the Commons search test.
-- **Line 88:** Searches with fake pages: a good JPEG, an SVG, an unrelated beach picture and an Ogg video.
-- **Line 89:** Keeps the picture results (their addresses contain /thumb/).
-- **Line 90:** Exactly one picture should remain.
-- **Line 91:** Its title is made from the file name.
-- **Line 92:** Its credit names Wikimedia Commons, the author (HTML stripped) and the licence.
-- **Line 93:** Its source page is a Commons address.
-- **Line 94:** A failing search service (status 500) makes the function reject.
-- **Line 95:** Search-phrase cleaning keeps two valid phrases, tidies spaces, and drops too short, too long, non-text and extra phrases.
-- **Line 96:** Closes the callback body and the function call that received it.
-- **Line 97:** Blank line separates related sections for readability; it performs no operation.
-- **Line 98:** Registers the finder test.
-- **Line 99:** Records the addresses sent to verification.
-- **Line 100:** A fake verifier that rejects any address containing “broken” and otherwise confirms a kind.
-
-### Lines 101–125
+### Lines 91–120
 
 ```text
-101 |   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
-102 |   const sections = [
-103 |     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
-104 |     { name: 'Technique teaching', instructions: 'Teach the double leg takedown.', queries: ['double leg takedown'] },
-105 |     { name: 'Progressive drills', instructions: 'Repeat the double leg takedown.', queries: ['double leg takedown'] },
-106 |   ];
-107 |   const result = await findMedia({ discipline: 'Wrestling', sections }, { fetcher, verify, env: {} });
-108 |   assert.ok(result.media.length >= 2);
-109 |   assert.ok(result.media.every(item => item.origin === 'suggested' && ['Technique teaching', 'Progressive drills'].includes(item.activity)));
-110 |   assert.equal(new Set(result.media.map(item => item.url)).size, result.media.length);
-111 |   assert.ok(result.media.every(item => !item.url.includes('broken')));
-112 |   assert.ok(!result.media.some(item => item.activity === 'Warm-up'));
-113 |   assert.ok(result.media.some(item => item.credit.startsWith('Wikimedia Commons') || item.credit.includes('David Avellan')));
-114 |   assert.ok(result.notes.every(note => typeof note === 'string'));
-115 | });
-116 |
-117 | test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
-118 |   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
-119 |   const fetcher = async () => Response.json({ query: { pages: [] } });
-120 |   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
-121 |   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
-122 |   const asked = await findMedia({ discipline: 'Muay Thai', sections: [{ ...passing, queries: ['jab'] }] }, { fetcher, verify, env: {} });
-123 |   assert.ok(asked.media.length >= 1 && asked.media.every(item => item.activity === 'Technique teaching'));
-124 | });
-125 |
+91 |   const result = await safeFetch('https://example.com/start', { request });
+92 |   assert.equal(result.url, 'https://example.com/next');
+93 |   assert.deepEqual(calls, ['https://example.com/start', 'https://example.com/next']);
+94 |   for (const bad of ['http://example.com/a', 'ftp://example.com/a', 'https://example.com:8443/a', 'https://user:pass@example.com/a', 'nonsense', 'https://example.com/to-http', 'https://example.com/loop']) await assert.rejects(safeFetch(bad, { request }), MediaLinkError, bad);
+95 | });
+96 |
+97 | test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
+98 |   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
+99 |   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
+100 |   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+101 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(404, '') }), /does not exist or is private/);
+102 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(401, '') }), /does not allow embedding/);
+103 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(500, '') }), /could not confirm/);
+104 |   const image = await verifyLink('https://cdn.example.com/photos/Double-leg_setup.png', { fetcher: reply(200, png, { 'content-type': 'image/png' }) });
+105 |   assert.deepEqual(image, { kind: 'image', url: 'https://cdn.example.com/photos/Double-leg_setup.png', title: 'Double leg setup', credit: '', source_page: '' });
+106 |   assert.equal((await verifyLink('https://cdn.example.com/clip.webm', { fetcher: reply(206, webm, { 'content-range': 'bytes 0-67/68' }) })).kind, 'video');
+107 |   await assert.rejects(verifyLink('https://example.com/page', { fetcher: reply(200, '<html></html>', { 'content-type': 'text/html; charset=utf-8' }) }), /web page, not a picture or video/);
+108 |   await assert.rejects(verifyLink('https://example.com/logo.svg', { fetcher: reply(200, '<svg xmlns="http://www.w3.org/2000/svg"/>', { 'content-type': 'image/svg+xml' }) }), /not a supported picture/);
+109 |   await assert.rejects(verifyLink('https://example.com/missing.png', { fetcher: reply(404, 'no') }), /status 404/);
+110 |   await assert.rejects(verifyLink('https://example.com/huge.png', { fetcher: reply(200, png, { 'content-length': String(100 * 1024 * 1024) }) }), /very large/);
+111 |   for (const bad of ['', '   ', 'not a link', 'http://example.com/a.png', 'x'.repeat(2100)]) await assert.rejects(verifyLink(bad, { fetcher: reply(200, png) }), MediaLinkError, bad);
+112 | });
+113 |
+114 | test('attachment lists accept saved IDs and new links only, with bounded text', () => {
+115 |   const good = validateMediaList([{ id: 3, title: ' Jab ', activity: 'Warm-up — 5 minutes' }, { url: ' https://youtu.be/dQw4w9WgXcQ ', title: '', activity: '', origin: 'suggested', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+116 |   assert.deepEqual(good.media, [{ id: 3, title: 'Jab', activity: 'Warm-up — 5 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'suggested', title: '', activity: '', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+117 |   for (const bad of ['x', {}, [null], [{ id: 0 }], [{ id: 1.5 }], [{ id: 1 }, { id: 1 }], [{ id: 1, url: 'https://a.com/x.png' }], [{ url: '' }], [{ url: 'https://a.com/x.png', origin: 'upload' }], [{ url: 'https://a.com/x.png', kind: 'video' }], [{ url: 'https://a.com/x.png', title: 'x'.repeat(121) }], [{ url: 'https://a.com/x.png', source_page: 'javascript:alert(1)' }], Array.from({ length: 13 }, (_, id) => ({ id: id + 1 }))]) assert.ok(validateMediaList(bad).error, JSON.stringify(bad).slice(0, 60));
+118 |   assert.deepEqual(validateMediaList([]).media, []);
+119 | });
+120 |
 ```
 
-- **Line 101:** A fake search service returning one good and one “broken” Commons picture for picture searches and nothing for video searches.
-- **Line 102:** Starts the three test sections.
-- **Line 103:** The warm-up has no search phrases.
-- **Line 104:** The technique section names a double leg takedown.
-- **Line 105:** The drills section names the same technique.
-- **Line 106:** Closes the array and ends the statement.
-- **Line 107:** Runs the finder for Wrestling with no YouTube key.
-- **Line 108:** At least two items must be found.
-- **Line 109:** Every item is marked suggested and belongs to one of the two sections that asked for media.
-- **Line 110:** No address appears twice across the sections.
-- **Line 111:** The unverifiable “broken” address was dropped.
-- **Line 112:** The warm-up received nothing.
-- **Line 113:** At least one item carries a Commons or catalog credit, proving attribution is kept.
-- **Line 114:** The notes are plain sentences.
-- **Line 115:** Closes the callback body and the function call that received it.
-- **Line 116:** Blank line separates related sections for readability; it performs no operation.
-- **Line 117:** Registers the regression test for a mistake found with the real AI: media must match the technique the section asked for.
-- **Line 118:** A fake verifier that accepts everything.
-- **Line 119:** A fake search service that finds nothing, so only the catalog can contribute.
-- **Line 120:** A section whose instructions mention the jab in passing but whose search phrase is a roundhouse kick.
-- **Line 121:** Expects no media at all: the catalog’s jab video must not be attached to a roundhouse kick section.
-- **Line 122:** The same section asking for a jab.
-- **Line 123:** Now media is found and belongs to that section.
-- **Line 124:** Closes the callback body and the function call that received it.
-- **Line 125:** Blank line separates related sections for readability; it performs no operation.
+- **Line 91:** Fetches /start through the fake network.
+- **Line 92:** Expects the final address to be the redirect target.
+- **Line 93:** Expects exactly two requests, proving the redirect was followed once.
+- **Line 94:** Expects errors for insecure or non-web schemes, an unusual port, embedded credentials, nonsense text, a redirect to http and an endless redirect loop.
+- **Line 95:** Closes the callback body and the function call that received it.
+- **Line 96:** Blank line separates related sections for readability; it performs no operation.
+- **Line 97:** Registers the verifyLink test.
+- **Line 98:** Helper that creates a fake fetcher returning a chosen status, body and headers.
+- **Line 99:** A YouTube link whose fake oEmbed answer is 200 with a title and channel.
+- **Line 100:** Expects the checked result: kind youtube, the clean watch address, the title, the credit naming the channel and the source page.
+- **Line 101:** A 404 must say the video does not exist or is private.
+- **Line 102:** A 401 must say embedding is not allowed.
+- **Line 103:** A 500 must say YouTube cannot confirm the video now.
+- **Line 104:** A PNG link is verified from the file’s bytes.
+- **Line 105:** Expects kind image and a caption made from the file name (“Double leg setup”).
+- **Line 106:** A WebM link answering 206 (partial content) is recognised as a video.
+- **Line 107:** A link that returns an HTML page is refused with the “web page” message.
+- **Line 108:** An SVG picture is refused as unsupported even though the site calls it an image.
+- **Line 109:** A 404 answer is refused and the status is reported.
+- **Line 110:** A file claiming to be 100 MB is refused as very large.
+- **Line 111:** Empty, blank, non-address, insecure and over-long links must be refused with a MediaLinkError.
+- **Line 112:** Closes the callback body and the function call that received it.
+- **Line 113:** Blank line separates related sections for readability; it performs no operation.
+- **Line 114:** Registers the attachment-list validation test.
+- **Line 115:** Validates a good list: one stored attachment with extra spaces in its caption and one new suggested link with spaces around the address.
+- **Line 116:** Expects spaces trimmed and only the allowed fields kept.
+- **Line 117:** Expects errors for many bad lists: not a list, not objects, ids of zero or fractions, duplicate ids, a stored attachment carrying a link, an empty link, an upload origin, a client-supplied kind, an over-long caption, a javascript: source page, and more than 12 attachments.
+- **Line 118:** An empty list is valid.
+- **Line 119:** Closes the callback body and the function call that received it.
+- **Line 120:** Blank line separates related sections for readability; it performs no operation.
 
-### Lines 126–138
+### Lines 121–150
 
 ```text
-126 | test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
-127 |   const seen = [];
-128 |   const fetcher = async (url, options) => {
-129 |     seen.push([url, options.headers['x-goog-api-key']]);
-130 |     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
-131 |     return Response.json({ query: { pages: [] } });
-132 |   };
-133 |   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
-134 |   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
-135 |   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
-136 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
-137 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
-138 | });
+121 | test('activity helpers keep attachments with the right activity when headings change', () => {
+122 |   const media = [{ id: 1, activity: 'Warm-up — 10 minutes' }, { id: 2, activity: 'Drill — 5 minutes' }, { id: 3, activity: '' }];
+123 |   assert.deepEqual(renameActivity(media, 'Warm-up — 10 minutes', 'Warm-up — 12 minutes').map(item => item.activity), ['Warm-up — 12 minutes', 'Drill — 5 minutes', '']);
+124 |   assert.equal(renameActivity(media, '', 'New'), media);
+125 |   assert.deepEqual(unassignedMedia(media, ['Drill — 5 minutes']).map(item => item.id), [1, 3]);
+126 |   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
+127 | });
+128 |
+129 | const commonsReply = pages => async () => Response.json({ query: { pages } });
+130 | const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
+131 |
+132 | test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
+133 |   const results = await commonsCandidates('double leg takedown', commonsReply([page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg.svg', 'image/svg+xml'), page('File:Random_beach.jpg', 'image/jpeg', { ImageDescription: { value: 'Beach' } }), page('File:Clip.ogv', 'video/ogg')]));
+134 |   const images = results.filter(item => item.url.includes('/thumb/'));
+135 |   assert.equal(images.length, 1);
+136 |   assert.equal(images[0].title, 'Double leg takedown');
+137 |   assert.equal(images[0].credit, 'Wikimedia Commons — Jane Coach, CC BY-SA 4.0');
+138 |   assert.match(images[0].source_page, /^https:\/\/commons\.wikimedia\.org\//);
+139 |   await assert.rejects(commonsCandidates('x', async () => new Response('', { status: 500 })));
+140 |   assert.deepEqual(cleanQueries(['  knee   cut  ', 'a', 'x'.repeat(81), 7, 'b'.repeat(5), 'third one']), ['knee cut', 'bbbbb']);
+141 | });
+142 |
+143 | test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
+144 |   const verified = [];
+145 |   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
+146 |   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
+147 |   const sections = [
+148 |     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
+149 |     { name: 'Technique teaching', instructions: 'Teach the double leg takedown.', queries: ['double leg takedown'] },
+150 |     { name: 'Progressive drills', instructions: 'Repeat the double leg takedown.', queries: ['double leg takedown'] },
 ```
 
-- **Line 126:** Registers the YouTube-key test.
-- **Line 127:** Records every request’s address and key header.
-- **Line 128:** A fake search service.
-- **Line 129:** Remembers the address and the x-goog-api-key header of each call.
-- **Line 130:** For YouTube it returns two results: an unrelated “pad work” video and a “knee cut half guard pass” video.
-- **Line 131:** Wikimedia searches return nothing.
-- **Line 132:** Closes the preceding block and ends the statement.
-- **Line 133:** A fake verifier that accepts all addresses as YouTube videos.
-- **Line 134:** Runs the finder with a test key in the environment.
-- **Line 135:** The relevant video is returned.
-- **Line 136:** The irrelevant video is not.
-- **Line 137:** The key was sent in the header and never appeared in the web address.
-- **Line 138:** Closes the callback body and the function call that received it.
+- **Line 121:** Registers the test for the activity helper functions.
+- **Line 122:** Three sample attachments: for a warm-up, for a drill and one for the whole lesson.
+- **Line 123:** Renaming the warm-up heading moves only the warm-up attachment to the new heading.
+- **Line 124:** Renaming from an empty heading returns the very same list, unchanged.
+- **Line 125:** With only the drill heading existing, the warm-up and whole-lesson attachments are unassigned (ids 1 and 3).
+- **Line 126:** The request payload keeps only the id, caption and activity for a stored attachment and the full link fields for a new one, ignoring the extra url on the stored one.
+- **Line 127:** Closes the callback body and the function call that received it.
+- **Line 128:** Blank line separates related sections for readability; it performs no operation.
+- **Line 129:** Helper that builds a fake Wikimedia answer containing the given pages.
+- **Line 130:** Helper that builds one fake Commons file page with picture and description addresses, a file type, an author containing HTML, a licence and a description.
+- **Line 131:** Blank line separates related sections for readability; it performs no operation.
+- **Line 132:** Registers the Commons search test.
+- **Line 133:** Searches with fake pages: a good JPEG, an SVG, an unrelated beach picture and an Ogg video.
+- **Line 134:** Keeps the picture results (their addresses contain /thumb/).
+- **Line 135:** Exactly one picture should remain.
+- **Line 136:** Its title is made from the file name.
+- **Line 137:** Its credit names Wikimedia Commons, the author (HTML stripped) and the licence.
+- **Line 138:** Its source page is a Commons address.
+- **Line 139:** A failing search service (status 500) makes the function reject.
+- **Line 140:** Search-phrase cleaning keeps two valid phrases, tidies spaces, and drops too short, too long, non-text and extra phrases.
+- **Line 141:** Closes the callback body and the function call that received it.
+- **Line 142:** Blank line separates related sections for readability; it performs no operation.
+- **Line 143:** Registers the finder test.
+- **Line 144:** Records the addresses sent to verification.
+- **Line 145:** A fake verifier that rejects any address containing “broken” and otherwise confirms a kind.
+- **Line 146:** A fake search service returning one good and one “broken” Commons picture for picture searches and nothing for video searches.
+- **Line 147:** Starts the three test sections.
+- **Line 148:** The warm-up has no search phrases.
+- **Line 149:** The technique section names a double leg takedown.
+- **Line 150:** The drills section names the same technique.
+
+### Lines 151–180
+
+```text
+151 |   ];
+152 |   const result = await findMedia({ discipline: 'Wrestling', sections }, { fetcher, verify, env: {} });
+153 |   assert.ok(result.media.length >= 2);
+154 |   assert.ok(result.media.every(item => item.origin === 'suggested' && ['Technique teaching', 'Progressive drills'].includes(item.activity)));
+155 |   assert.equal(new Set(result.media.map(item => item.url)).size, result.media.length);
+156 |   assert.ok(result.media.every(item => !item.url.includes('broken')));
+157 |   assert.ok(!result.media.some(item => item.activity === 'Warm-up'));
+158 |   assert.ok(result.media.some(item => item.credit.startsWith('Wikimedia Commons') || item.credit.includes('David Avellan')));
+159 |   assert.ok(result.notes.every(note => typeof note === 'string'));
+160 | });
+161 |
+162 | test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
+163 |   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
+164 |   const fetcher = async () => Response.json({ query: { pages: [] } });
+165 |   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
+166 |   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
+167 |   const asked = await findMedia({ discipline: 'Muay Thai', sections: [{ ...passing, queries: ['jab'] }] }, { fetcher, verify, env: {} });
+168 |   assert.ok(asked.media.length >= 1 && asked.media.every(item => item.activity === 'Technique teaching'));
+169 | });
+170 |
+171 | test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
+172 |   const seen = [];
+173 |   const fetcher = async (url, options) => {
+174 |     seen.push([url, options.headers['x-goog-api-key']]);
+175 |     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
+176 |     return Response.json({ query: { pages: [] } });
+177 |   };
+178 |   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
+179 |   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
+180 |   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
+```
+
+- **Line 151:** Closes the array and ends its declaration.
+- **Line 152:** Runs the finder for Wrestling with no YouTube key.
+- **Line 153:** At least two items must be found.
+- **Line 154:** Every item is marked suggested and belongs to one of the two sections that asked for media.
+- **Line 155:** No address appears twice across the sections.
+- **Line 156:** The unverifiable “broken” address was dropped.
+- **Line 157:** The warm-up received nothing.
+- **Line 158:** At least one item carries a Commons or catalog credit, proving attribution is kept.
+- **Line 159:** The notes are plain sentences.
+- **Line 160:** Closes the callback body and the function call that received it.
+- **Line 161:** Blank line separates related sections for readability; it performs no operation.
+- **Line 162:** Registers the regression test for a mistake found with the real AI: media must match the technique the section asked for.
+- **Line 163:** A fake verifier that accepts everything.
+- **Line 164:** A fake search service that finds nothing, so only the catalog can contribute.
+- **Line 165:** A section whose instructions mention the jab in passing but whose search phrase is a roundhouse kick.
+- **Line 166:** Expects no media at all: the catalog’s jab video must not be attached to a roundhouse kick section.
+- **Line 167:** The same section asking for a jab.
+- **Line 168:** Now media is found and belongs to that section.
+- **Line 169:** Closes the callback body and the function call that received it.
+- **Line 170:** Blank line separates related sections for readability; it performs no operation.
+- **Line 171:** Registers the YouTube-key test.
+- **Line 172:** Records every request’s address and key header.
+- **Line 173:** A fake search service.
+- **Line 174:** Remembers the address and the x-goog-api-key header of each call.
+- **Line 175:** For YouTube it returns two results: an unrelated “pad work” video and a “knee cut half guard pass” video.
+- **Line 176:** Wikimedia searches return nothing.
+- **Line 177:** Closes the preceding block and ends the statement.
+- **Line 178:** A fake verifier that accepts all addresses as YouTube videos.
+- **Line 179:** Runs the finder with a test key in the environment.
+- **Line 180:** The relevant video is returned.
+
+### Lines 181–183
+
+```text
+181 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
+182 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
+183 | });
+```
+
+- **Line 181:** The irrelevant video is not.
+- **Line 182:** The key was sent in the header and never appeared in the web address.
+- **Line 183:** Closes the callback body and the function call that received it.
 
 ## server/media-api.test.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-api.test.js`
 
-Audience support: this file connects the optional class-group field to validation, storage, forms or regression tests. Existing lesson content and ownership remain intact.
+Real HTTP tests with disposable SQLite databases and mocked providers verify media ownership, persistence, quotas and explicit saving. No production data or live provider calls.
 
 ### Lines 1–30
 
@@ -7931,22 +8047,22 @@ Audience support: this file connects the optional class-group field to validatio
 12 | import { png, webm } from './media-fixtures.js';
 13 |
 14 | const ytLink = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-15 | const verifyLink = async url => {
-16 |   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
-17 |   if (url.includes('offline')) throw new Error('private transport detail');
-18 |   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
-19 | };
-20 |
-21 | async function fixture(t, extra = {}) {
-22 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
-23 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
-24 |   const state = { filename: path.join(directory, 'test.sqlite') };
-25 |   state.stop = async () => {
-26 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
-27 |     if (state.database?.open) state.database.close();
-28 |   };
-29 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
-30 |   state.start = async () => {
+15 |
+16 | test('lesson video suggestions require ownership, respect quotas, and attach only through an approved save', async t => {
+17 |   let time = 0, calls = 0;
+18 |   const video = { url: ytLink, kind: 'youtube', title: 'Jab', origin: 'suggested', activity: '' };
+19 |   const state = await fixture(t, { now: () => time, videoFinder: async () => { calls++; return { videos: [video], message: 'Preview first' }; } });
+20 |   const body = { title: 'Jab class', discipline: 'Boxing', drills: 'Jab — 10 minutes\nPractice slowly.' };
+21 |   const lesson = await (await state.json('/api/lessons', 'POST', body)).json();
+22 |   const url = `${state.url}/api/lessons/${lesson.id}/videos`;
+23 |   assert.equal((await fetch(url, { method: 'POST', headers: { 'x-test-user': 'anonymous' } })).status, 401);
+24 |   assert.equal((await fetch(url, { method: 'POST', headers: { 'x-test-user': 'user-b' } })).status, 404);
+25 |   assert.equal((await fetch(url, { method: 'POST', headers: { origin: 'https://evil.example' } })).status, 403);
+26 |   assert.equal(calls, 0);
+27 |   for (let i = 0; i < 3; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+28 |   assert.deepEqual(await state.media(), []);
+29 |   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+30 |   time += 60001;
 ```
 
 - **Line 1:** Imports Node’s test function.
@@ -7963,320 +8079,450 @@ Audience support: this file connects the optional class-group field to validatio
 - **Line 12:** Imports the fake PNG and WebM files.
 - **Line 13:** Blank line separates related sections for readability; it performs no operation.
 - **Line 14:** A sample YouTube watch address used by the fakes.
-- **Line 15:** A fake link verifier that replaces real network checks.
-- **Line 16:** Addresses containing “broken” simulate a link that cannot be used.
-- **Line 17:** Addresses containing “offline” simulate an unexpected failure whose technical message must never reach the user.
-- **Line 18:** Everything else is confirmed: YouTube-looking links as a video, others as a picture.
-- **Line 19:** Closes the preceding block and ends the statement.
-- **Line 20:** Blank line separates related sections for readability; it performs no operation.
-- **Line 21:** Defines the fixture that builds a fresh app for each test; extra options can override fakes.
-- **Line 22:** Creates a temporary folder inside the system temp directory.
-- **Line 23:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
-- **Line 24:** The state object starts with the database file path.
-- **Line 25:** stop closes the server and database.
-- **Line 26:** Closes the HTTP server if it is listening.
-- **Line 27:** Closes the database if it is open.
-- **Line 28:** Closes the preceding block and ends the statement.
-- **Line 29:** Registers cleanup after the test: stop everything and delete the temporary folder.
-- **Line 30:** start opens the database and server; tests call stop and start to simulate a restart.
+- **Line 15:** Blank line separates related sections for readability; it performs no operation.
+- **Line 16:** Registers an integration test for ownership, quotas, explicit saving and restart persistence using a disposable database.
+- **Line 17:** Initializes a fake clock and count of finder calls for deterministic quota assertions.
+- **Line 18:** Defines synthetic verified YouTube metadata; the fixture mocks verification and never plays or searches for this video.
+- **Line 19:** Creates the disposable fixture with an injectable clock and counted fake finder returning one candidate without saving it.
+- **Line 20:** Defines a generic manual lesson used only in the disposable test database.
+- **Line 21:** Creates the disposable lesson through the real API and reads its assigned ID.
+- **Line 22:** Builds the lesson-specific suggestion endpoint from the test server address and lesson ID.
+- **Line 23:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 24:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 25:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 26:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 27:** Sends three successful requests to reach the per-minute allowance.
+- **Line 28:** Unsaved uploads are not listed as lesson attachments.
+- **Line 29:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 30:** Advances the fake clock slightly beyond one minute without waiting in real time.
 
 ### Lines 31–60
 
 ```text
-31 |     state.database = new Database(state.filename);
-32 |     migrate(state.database);
-33 |     state.server = createApp(state.database, { verifyLink, ...testOptions, ...extra }).listen(0, '127.0.0.1');
-34 |     await once(state.server, 'listening');
-35 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
-36 |   };
-37 |   await state.start();
-38 |   state.json = (route, method, body) => fetch(state.url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-39 |   state.upload = (data, type = 'image/png', name = 'Jab-setup.png') => fetch(state.url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name) }, body: data });
-40 |   state.media = async () => (await fetch(state.url + '/api/lesson-media')).json();
-41 |   return state;
-42 | }
-43 |
-44 | test('uploads are checked by content, stored in the database, served with range support and never trusted as pages', async t => {
-45 |   const state = await fixture(t);
-46 |   const response = await state.upload(png);
-47 |   assert.equal(response.status, 201);
-48 |   const saved = await response.json();
-49 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
-50 |   assert.ok(!('data' in saved));
-51 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
-52 |   assert.equal(file.status, 200);
-53 |   assert.equal(file.headers.get('content-type'), 'image/png');
-54 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
-55 |   assert.equal(file.headers.get('cache-control'), 'private, no-cache');
-56 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
-57 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
-58 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
-59 |   assert.equal(partial.status, 206);
-60 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
+31 |   for (let i = 0; i < 2; i++) assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+32 |   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+33 |   time += 86400001;
+34 |   assert.equal((await fetch(url, { method: 'POST' })).status, 200);
+35 |   const { kind, ...attachment } = video;
+36 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [attachment] })).status, 200);
+37 |   assert.equal((await state.media()).length, 1);
+38 |   await state.stop(); await state.start();
+39 |   assert.equal((await state.media()).length, 1);
+40 | });
+41 |
+42 | test('video search failure is safe and still consumes the daily allowance', async t => {
+43 |   let time = 0;
+44 |   const state = await fixture(t, { now: () => time, videoFinder: async () => { throw new Error('SECRET search failure'); } });
+45 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Jab', discipline: 'Boxing' })).json();
+46 |   const url = `${state.url}/api/lessons/${lesson.id}/videos`;
+47 |   for (let i = 0; i < 5; i++) { const response = await fetch(url, { method: 'POST' }); assert.equal(response.status, 502); assert.doesNotMatch(await response.text(), /SECRET/); time += 60001; }
+48 |   assert.equal((await fetch(url, { method: 'POST' })).status, 429);
+49 | });
+50 |
+51 | test('video suggestions enforce one in-flight search and ten attempts per server day', async t => {
+52 |   let time = 0, release;
+53 |   const store = { list: async () => [{ id: 1, title: 'Jab', discipline: 'Boxing' }] };
+54 |   const server = createApp(store, { ...testOptions, auth: { getUser: async request => ({ id: request.headers['x-test-user'] || 'a' }) }, now: () => time, videoFinder: () => new Promise(resolve => { release = resolve; }) }).listen(0, '127.0.0.1');
+55 |   t.after(() => new Promise(resolve => server.close(resolve)));
+56 |   await once(server, 'listening');
+57 |   const post = user => fetch(`http://127.0.0.1:${server.address().port}/api/lessons/1/videos`, { method: 'POST', headers: { 'x-test-user': user } });
+58 |   for (let i = 0; i < 10; i++) {
+59 |     release = null;
+60 |     const pending = post(`coach-${i}`);
 ```
 
-- **Line 31:** Opens (or reopens) the SQLite file.
-- **Line 32:** Applies migrations (a no-op the second time).
-- **Line 33:** Creates the test app with the fake sign-in options (and lets a test override them).
-- **Line 34:** Waits until the server is listening.
-- **Line 35:** Remembers the base address.
-- **Line 36:** Closes the preceding block and ends the statement.
-- **Line 37:** Starts the first time.
-- **Line 38:** Helper that sends JSON to a route.
-- **Line 39:** Helper that uploads raw bytes with a declared type and file name.
-- **Line 40:** Helper that lists saved attachments.
-- **Line 41:** Returns the state to the test.
-- **Line 42:** Closes the preceding block (function, object, or statement body).
-- **Line 43:** Blank line separates related sections for readability; it performs no operation.
-- **Line 44:** Registers the upload test.
-- **Line 45:** Creates the fixture.
-- **Line 46:** Uploads the fake PNG.
-- **Line 47:** Expects status 201 (Created).
-- **Line 48:** Reads the reply.
-- **Line 49:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
-- **Line 50:** The reply must not contain the file bytes.
-- **Line 51:** Downloads the file.
-- **Line 52:** Expects 200.
-- **Line 53:** Expects the verified type.
-- **Line 54:** Expects the nosniff security header.
-- **Line 55:** New check: uploaded files are sent with Cache-Control “private, no-cache”, so browsers must ask the server (which checks the sign-in) before reusing a picture or video, and one coach’s cached files cannot be shown to another on a shared computer.
-- **Line 56:** Expects a Content-Security-Policy containing sandbox.
-- **Line 57:** The downloaded bytes equal the uploaded bytes.
-- **Line 58:** Requests only the first eight bytes.
-- **Line 59:** Expects 206 (Partial Content).
-- **Line 60:** Expects the Content-Range header to describe the slice.
+- **Line 31:** Sends two further successful requests to reach the five-attempt daily allowance.
+- **Line 32:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 33:** Moves the fake clock beyond the rolling 24-hour allowance window.
+- **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 35:** Removes kind from the candidate because the existing save API independently verifies media type; the remaining fields form the approved attachment payload.
+- **Line 36:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 37:** Exactly one attachment exists.
+- **Line 38:** Stops and restarts the server (and database connection).
+- **Line 39:** Exactly one attachment exists.
+- **Line 40:** Closes the callback body and the function call that received it.
+- **Line 41:** Blank line separates related sections for readability; it performs no operation.
+- **Line 42:** Registers a failure test proving safe error responses and quota accounting even when the finder throws.
+- **Line 43:** Starts a fake millisecond clock at zero for repeatable expiry checks.
+- **Line 44:** Creates a fixture whose fake finder throws a synthetic secret-like message, testing that the API never exposes provider details.
+- **Line 45:** Creates a minimal disposable boxing lesson for failure tests and reads its ID.
+- **Line 46:** Builds the lesson-specific suggestion endpoint from the test server address and lesson ID.
+- **Line 47:** Makes five failing searches, checks each 502 response hides private details, and advances one minute between attempts so the daily cap is tested separately.
+- **Line 48:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 49:** Closes the callback body and the function call that received it.
+- **Line 50:** Blank line separates related sections for readability; it performs no operation.
+- **Line 51:** Registers a test for the global one-search concurrency gate and ten-attempt rolling daily cap.
+- **Line 52:** Initializes the fake clock and a variable holding the pending provider's resolver.
+- **Line 53:** Defines a read-only fake store that returns one generic lesson; it has no mutation methods.
+- **Line 54:** Starts the actual app on an ephemeral local port with simulated identities, fake clock and a deliberately pending finder. This fake authentication exists only in the test.
+- **Line 55:** Registers cleanup to close the server after the test; the Promise waits for closure.
+- **Line 56:** Waits for the server to be ready before sending test requests.
+- **Line 57:** Defines a helper posting to the test lesson's suggestion route with a chosen simulated coach identity.
+- **Line 58:** Runs ten sequential requests under different coach identities to exercise the shared server cap.
+- **Line 59:** Clears the stored resolver before starting the next controlled request.
+- **Line 60:** Starts a request for this iteration's unique coach without awaiting completion yet.
 
 ### Lines 61–90
 
 ```text
-61 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
-62 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
-63 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
-64 |   assert.equal(video.kind, 'video');
-65 |   for (const [body, type, status] of [[Buffer.alloc(0), 'image/png', 400], [png, 'text/html', 415], [png, 'video/mp4', 415], [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'image/png', 415], [Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'image/png', 413], [Buffer.concat([webm, Buffer.alloc(21 * 1024 * 1024)]), 'video/webm', 413]]) {
-66 |     const result = await state.upload(body, type);
-67 |     assert.equal(result.status, status, type);
-68 |     assert.equal(typeof (await result.json()).error, 'string');
-69 |   }
-70 |   assert.equal((await fetch(`${state.url}/api/media/99999/file`)).status, 404);
-71 |   assert.deepEqual(await state.media(), []);
-72 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 204);
-73 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
-74 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
-75 | });
-76 |
-77 | test('lessons keep their original fields plus audience while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
-78 |   const state = await fixture(t);
-79 |   const upload = await (await state.upload(png)).json();
-80 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
-81 |   const created = await state.json('/api/lessons', 'POST', body);
-82 |   assert.equal(created.status, 201);
-83 |   const lesson = await created.json();
-84 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'audience']);
-85 |   const attached = await state.media();
-86 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
-87 |   assert.equal(attached[1].url, ytLink);
-88 |   assert.equal(attached[1].credit, 'YouTube — Coach');
-89 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
-90 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
+61 |     while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+62 |     assert.equal((await post('busy-coach')).status, 429);
+63 |     release({ videos: [], message: 'No results' });
+64 |     assert.equal((await pending).status, 200);
+65 |   }
+66 |   assert.equal((await post('another-coach')).status, 429);
+67 |   time += 86400001;
+68 |   release = null;
+69 |   const next = post('another-coach');
+70 |   while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+71 |   release({ videos: [], message: 'No results' });
+72 |   assert.equal((await next).status, 200);
+73 | });
+74 | const verifyLink = async url => {
+75 |   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
+76 |   if (url.includes('offline')) throw new Error('private transport detail');
+77 |   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
+78 | };
+79 |
+80 | async function fixture(t, extra = {}) {
+81 |   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
+82 |   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+83 |   const state = { filename: path.join(directory, 'test.sqlite') };
+84 |   state.stop = async () => {
+85 |     if (state.server?.listening) await new Promise(resolve => state.server.close(resolve));
+86 |     if (state.database?.open) state.database.close();
+87 |   };
+88 |   t.after(async () => { await state.stop(); rmSync(directory, { recursive: true, force: true }); });
+89 |   state.start = async () => {
+90 |     state.database = new Database(state.filename);
 ```
 
-- **Line 61:** The slice bytes equal the first eight bytes.
-- **Line 62:** A range beyond the end of the file gets 416.
-- **Line 63:** Uploads a WebM video.
-- **Line 64:** Expects it to be classed as a video.
-- **Line 65:** Tries six bad uploads: empty file, wrong declared type, a declared type that does not match the contents, SVG text declared as PNG, a PNG over 6 MB and a WebM over 20 MB, with the expected 400, 415 or 413 statuses.
-- **Line 66:** Sends each bad upload.
-- **Line 67:** Checks the status for that case.
-- **Line 68:** Every refusal carries a text message.
-- **Line 69:** Closes the preceding block (function, object, or statement body).
-- **Line 70:** An unknown file id gives 404.
-- **Line 71:** Unsaved uploads are not listed as lesson attachments.
-- **Line 72:** Deleting an unsaved upload returns 204.
-- **Line 73:** Deleting it again gives 404.
-- **Line 74:** Its file is gone.
-- **Line 75:** Closes the callback body and the function call that received it.
-- **Line 76:** Blank line separates related sections for readability; it performs no operation.
-- **Line 77:** Registers the existing media persistence test under a name reflecting the additional public audience field.
-- **Line 78:** Creates the fixture.
-- **Line 79:** Uploads a picture first.
-- **Line 80:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
-- **Line 81:** Creates the lesson.
-- **Line 82:** Expects 201.
-- **Line 83:** Reads the lesson.
-- **Line 84:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 85:** Loads the saved attachments.
-- **Line 86:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
-- **Line 87:** The YouTube address was replaced by the clean verified address.
-- **Line 88:** The YouTube credit came from verification.
-- **Line 89:** The suggested picture kept its supplied credit.
-- **Line 90:** Updates the lesson without a media key and expects success.
+- **Line 61:** Yields in five-millisecond intervals until the fake finder exposes its resolver, allowing the test to check a concurrent request.
+- **Line 62:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 63:** Completes the pending fake search with an empty, friendly result.
+- **Line 64:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 65:** Closes the preceding block (function, object, or statement body).
+- **Line 66:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 67:** Moves the fake clock beyond the rolling 24-hour allowance window.
+- **Line 68:** Clears the stored resolver before starting the next controlled request.
+- **Line 69:** Starts another coach's request after advancing the fake clock beyond the daily window.
+- **Line 70:** Yields in five-millisecond intervals until the fake finder exposes its resolver, allowing the test to check a concurrent request.
+- **Line 71:** Completes the pending fake search with an empty, friendly result.
+- **Line 72:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 73:** Closes the callback body and the function call that received it.
+- **Line 74:** A fake link verifier that replaces real network checks.
+- **Line 75:** Addresses containing “broken” simulate a link that cannot be used.
+- **Line 76:** Addresses containing “offline” simulate an unexpected failure whose technical message must never reach the user.
+- **Line 77:** Everything else is confirmed: YouTube-looking links as a video, others as a picture.
+- **Line 78:** Closes the preceding block and ends the statement.
+- **Line 79:** Blank line separates related sections for readability; it performs no operation.
+- **Line 80:** Defines the fixture that builds a fresh app for each test; extra options can override fakes.
+- **Line 81:** Creates a temporary folder inside the system temp directory.
+- **Line 82:** Safety check: the folder really is directly inside the temp directory, so cleanup can never touch real data.
+- **Line 83:** The state object starts with the database file path.
+- **Line 84:** stop closes the server and database.
+- **Line 85:** Closes the HTTP server if it is listening.
+- **Line 86:** Closes the database if it is open.
+- **Line 87:** Closes the preceding block and ends the statement.
+- **Line 88:** Registers cleanup after the test: stop everything and delete the temporary folder.
+- **Line 89:** start opens the database and server; tests call stop and start to simulate a restart.
+- **Line 90:** Opens (or reopens) the SQLite file.
 
 ### Lines 91–120
 
 ```text
-91 |   assert.equal((await state.media()).length, 3);
-92 |   const [first, second, third] = attached;
-93 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
-94 |   assert.equal(edited.status, 200);
-95 |   assert.deepEqual((await state.media()).map(item => [item.id, item.title, item.position]), [[third.id, 'Moved first', 0], [first.id, 'Photo renamed', 1]]);
-96 |   assert.equal((await fetch(`${state.url}/api/media/${second.id}/file`)).status, 404);
-97 |   await state.stop(); await state.start();
-98 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
-99 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
-100 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
-101 |   assert.deepEqual(await state.media(), []);
-102 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
-103 |   assert.equal((await state.media()).length, 1);
-104 |   assert.equal((await fetch(`${state.url}/api/lessons/${again.id}`, { method: 'DELETE' })).status, 204);
-105 |   assert.deepEqual(await state.media(), []);
-106 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lesson_media').get().n, 0);
-107 | });
-108 |
-109 | test('links that fail verification or attachments that do not exist stop the save and leave data unchanged', async t => {
-110 |   const state = await fixture(t);
-111 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Safe', discipline: 'Boxing' })).json();
-112 |   const orphan = await (await state.upload(png)).json();
-113 |   const broken = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/broken.png', title: 'x' }] });
-114 |   assert.equal(broken.status, 400);
-115 |   assert.match((await broken.json()).error, /example\.com could not be used: .*404/);
-116 |   const offline = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/offline.png' }] });
-117 |   assert.equal(offline.status, 400);
-118 |   const message = (await offline.json()).error;
-119 |   assert.match(message, /could not check the link/);
-120 |   assert.ok(!message.includes('private'));
+91 |     migrate(state.database);
+92 |     state.server = createApp(state.database, { verifyLink, ...testOptions, ...extra }).listen(0, '127.0.0.1');
+93 |     await once(state.server, 'listening');
+94 |     state.url = `http://127.0.0.1:${state.server.address().port}`;
+95 |   };
+96 |   await state.start();
+97 |   state.json = (route, method, body) => fetch(state.url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+98 |   state.upload = (data, type = 'image/png', name = 'Jab-setup.png') => fetch(state.url + '/api/media/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-File-Name': encodeURIComponent(name) }, body: data });
+99 |   state.media = async () => (await fetch(state.url + '/api/lesson-media')).json();
+100 |   return state;
+101 | }
+102 |
+103 | test('uploads are checked by content, stored in the database, served with range support and never trusted as pages', async t => {
+104 |   const state = await fixture(t);
+105 |   const response = await state.upload(png);
+106 |   assert.equal(response.status, 201);
+107 |   const saved = await response.json();
+108 |   assert.deepEqual({ kind: saved.kind, origin: saved.origin, mime: saved.mime, title: saved.title, size_bytes: saved.size_bytes, lesson_id: saved.lesson_id }, { kind: 'image', origin: 'upload', mime: 'image/png', title: 'Jab setup', size_bytes: png.length, lesson_id: null });
+109 |   assert.ok(!('data' in saved));
+110 |   const file = await fetch(`${state.url}/api/media/${saved.id}/file`);
+111 |   assert.equal(file.status, 200);
+112 |   assert.equal(file.headers.get('content-type'), 'image/png');
+113 |   assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+114 |   assert.equal(file.headers.get('cache-control'), 'private, no-cache');
+115 |   assert.match(file.headers.get('content-security-policy'), /sandbox/);
+116 |   assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+117 |   const partial = await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=0-7' } });
+118 |   assert.equal(partial.status, 206);
+119 |   assert.equal(partial.headers.get('content-range'), `bytes 0-7/${png.length}`);
+120 |   assert.deepEqual(Buffer.from(await partial.arrayBuffer()), png.subarray(0, 8));
 ```
 
-- **Line 91:** Leaving media out must keep all three attachments.
-- **Line 92:** Names the three attachments.
-- **Line 93:** Updates with a new list: the third attachment first, the first second, the second dropped.
-- **Line 94:** Expects success.
-- **Line 95:** Expects the new order and edited captions.
-- **Line 96:** The dropped attachment no longer exists.
-- **Line 97:** Stops and restarts the server (and database connection).
-- **Line 98:** The attachments are still there after the restart.
-- **Line 99:** The uploaded file’s bytes are still intact.
-- **Line 100:** Updating with an empty list removes every attachment.
-- **Line 101:** Unsaved uploads are not listed as lesson attachments.
-- **Line 102:** Creates a second lesson with one link.
-- **Line 103:** Exactly one attachment exists.
-- **Line 104:** Deletes that lesson.
-- **Line 105:** Unsaved uploads are not listed as lesson attachments.
-- **Line 106:** Checks the table directly: no rows remain.
-- **Line 107:** Closes the callback body and the function call that received it.
-- **Line 108:** Blank line separates related sections for readability; it performs no operation.
-- **Line 109:** Registers the failure test.
-- **Line 110:** Creates the fixture.
-- **Line 111:** Saves a plain lesson.
-- **Line 112:** Uploads an unattached file.
-- **Line 113:** Tries to create a lesson with a link the fake verifier rejects.
-- **Line 114:** Expects 400.
-- **Line 115:** The message names the host and the reason (404).
-- **Line 116:** Tries a link that fails unexpectedly.
-- **Line 117:** Expects 400.
-- **Line 118:** Reads the message.
-- **Line 119:** It says the link could not be checked.
-- **Line 120:** It must not leak the internal failure text.
+- **Line 91:** Applies migrations (a no-op the second time).
+- **Line 92:** Creates the test app with the fake sign-in options (and lets a test override them).
+- **Line 93:** Waits until the server is listening.
+- **Line 94:** Remembers the base address.
+- **Line 95:** Closes the preceding block and ends the statement.
+- **Line 96:** Starts the first time.
+- **Line 97:** Helper that sends JSON to a route.
+- **Line 98:** Helper that uploads raw bytes with a declared type and file name.
+- **Line 99:** Helper that lists saved attachments.
+- **Line 100:** Returns the state to the test.
+- **Line 101:** Closes the preceding block (function, object, or statement body).
+- **Line 102:** Blank line separates related sections for readability; it performs no operation.
+- **Line 103:** Registers the upload test.
+- **Line 104:** Creates the fixture.
+- **Line 105:** Uploads the fake PNG.
+- **Line 106:** Expects status 201 (Created).
+- **Line 107:** Reads the reply.
+- **Line 108:** Checks the stored details: an image upload with the right type, a caption made from the file name “Jab-setup.png”, the exact size and no lesson yet.
+- **Line 109:** The reply must not contain the file bytes.
+- **Line 110:** Downloads the file.
+- **Line 111:** Expects 200.
+- **Line 112:** Expects the verified type.
+- **Line 113:** Expects the nosniff security header.
+- **Line 114:** New check: uploaded files are sent with Cache-Control “private, no-cache”, so browsers must ask the server (which checks the sign-in) before reusing a picture or video, and one coach’s cached files cannot be shown to another on a shared computer.
+- **Line 115:** Expects a Content-Security-Policy containing sandbox.
+- **Line 116:** The downloaded bytes equal the uploaded bytes.
+- **Line 117:** Requests only the first eight bytes.
+- **Line 118:** Expects 206 (Partial Content).
+- **Line 119:** Expects the Content-Range header to describe the slice.
+- **Line 120:** The slice bytes equal the first eight bytes.
 
 ### Lines 121–150
 
 ```text
-121 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
-122 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
-123 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
-124 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
-125 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
-126 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
-127 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
-128 | });
-129 |
-130 | test('verify and suggest routes validate input, hide failures and limit searches', async t => {
-131 |   let calls = 0;
-132 |   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
-133 |   const state = await fixture(t, { findMedia });
-134 |   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });
-135 |   assert.equal(ok.status, 200);
-136 |   assert.equal((await ok.json()).kind, 'youtube');
-137 |   const broken = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/broken.png' });
-138 |   assert.equal(broken.status, 400);
-139 |   assert.match((await broken.json()).error, /404/);
-140 |   const offline = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/offline.png' });
-141 |   assert.equal(offline.status, 502);
-142 |   assert.ok(!(await offline.json()).error.includes('private'));
-143 |   assert.equal((await state.json('/api/media/verify', 'POST', { url: 5 })).status, 400);
-144 |   const sections = [{ name: 'Technique teaching', instructions: 'Teach.', queries: ['jab'] }];
-145 |   for (const bad of [{}, { discipline: 'Chess', sections }, { discipline: 'Boxing', sections: 'x' }, { discipline: 'Boxing', sections: [{ name: 1, instructions: '' }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: 'x'.repeat(1501) }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: '', queries: ['x', 'y', 'z', 'w'] }] }]) assert.equal((await state.json('/api/media/suggest', 'POST', bad)).status, 400);
-146 |   const found = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections });
-147 |   assert.equal(found.status, 200);
-148 |   assert.equal((await found.json()).media[0].activity, 'Technique teaching');
-149 |   for (let index = 0; index < 5; index++) await (await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).text();
-150 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
+121 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`, { headers: { Range: 'bytes=9999-' } })).status, 416);
+122 |   const video = await (await state.upload(webm, 'video/webm', 'clip.webm')).json();
+123 |   assert.equal(video.kind, 'video');
+124 |   for (const [body, type, status] of [[Buffer.alloc(0), 'image/png', 400], [png, 'text/html', 415], [png, 'video/mp4', 415], [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'image/png', 415], [Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]), 'image/png', 413], [Buffer.concat([webm, Buffer.alloc(21 * 1024 * 1024)]), 'video/webm', 413]]) {
+125 |     const result = await state.upload(body, type);
+126 |     assert.equal(result.status, status, type);
+127 |     assert.equal(typeof (await result.json()).error, 'string');
+128 |   }
+129 |   assert.equal((await fetch(`${state.url}/api/media/99999/file`)).status, 404);
+130 |   assert.deepEqual(await state.media(), []);
+131 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 204);
+132 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}`, { method: 'DELETE' })).status, 404);
+133 |   assert.equal((await fetch(`${state.url}/api/media/${saved.id}/file`)).status, 404);
+134 | });
+135 |
+136 | test('lessons keep their original fields plus audience while attachments save, reorder, edit, survive restart and disappear with the lesson', async t => {
+137 |   const state = await fixture(t);
+138 |   const upload = await (await state.upload(png)).json();
+139 |   const body = { title: 'Media lesson', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nJog\n\nJab — 10 minutes\nSnap', media: [{ id: upload.id, title: 'My photo', activity: 'Jab — 10 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'link', title: '', activity: 'Warm-up — 5 minutes' }, { url: 'https://example.com/pic.png', origin: 'suggested', title: 'Suggested picture', activity: '', credit: 'Wikimedia Commons — Jane', source_page: 'https://commons.wikimedia.org/wiki/File:Pic.png' }] };
+140 |   const created = await state.json('/api/lessons', 'POST', body);
+141 |   assert.equal(created.status, 201);
+142 |   const lesson = await created.json();
+143 |   assert.deepEqual(Object.keys(lesson), ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at', 'audience']);
+144 |   const attached = await state.media();
+145 |   assert.deepEqual(attached.map(item => [item.kind, item.origin, item.title, item.activity, item.position, item.lesson_id]), [['image', 'upload', 'My photo', 'Jab — 10 minutes', 0, lesson.id], ['youtube', 'link', 'Checked video', 'Warm-up — 5 minutes', 1, lesson.id], ['image', 'suggested', 'Suggested picture', '', 2, lesson.id]]);
+146 |   assert.equal(attached[1].url, ytLink);
+147 |   assert.equal(attached[1].credit, 'YouTube — Coach');
+148 |   assert.equal(attached[2].credit, 'Wikimedia Commons — Jane');
+149 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: undefined, title: 'Renamed' })).status, 200);
+150 |   assert.equal((await state.media()).length, 3);
 ```
 
-- **Line 121:** Referring to an attachment id that does not exist gives 400.
-- **Line 122:** Attaches the unattached upload to a new lesson.
-- **Line 123:** Trying to attach the same upload to a different lesson gives 400.
-- **Line 124:** Only the first lesson owns it.
-- **Line 125:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
-- **Line 126:** Only the two intended lessons exist, so failed saves created nothing.
-- **Line 127:** Updating a lesson that does not exist still gives 404.
-- **Line 128:** Closes the callback body and the function call that received it.
-- **Line 129:** Blank line separates related sections for readability; it performs no operation.
-- **Line 130:** Registers the verify and suggest route test.
-- **Line 131:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
-- **Line 132:** A fake finder that returns one suggested video for the first section.
-- **Line 133:** Creates the fixture with that fake finder.
-- **Line 134:** Verifies a YouTube link.
-- **Line 135:** Expects 200.
-- **Line 136:** Expects kind youtube.
-- **Line 137:** Verifies a link the fake rejects.
-- **Line 138:** Expects 400.
-- **Line 139:** The message contains the reason.
-- **Line 140:** Verifies a link that fails unexpectedly.
-- **Line 141:** Expects 502.
-- **Line 142:** No internal detail is revealed.
-- **Line 143:** A request whose url is not text gives 400.
-- **Line 144:** A valid sections list for the suggest route.
-- **Line 145:** Six invalid suggest requests (empty, unknown discipline, sections not a list, a non-text section name, instructions over 1500 characters, four search phrases) each give 400.
-- **Line 146:** A valid suggest request.
-- **Line 147:** Expects 200.
-- **Line 148:** The suggestion belongs to the section that asked.
-- **Line 149:** Makes five more searches (six in total within a minute).
-- **Line 150:** The seventh search is refused with 429.
+- **Line 121:** A range beyond the end of the file gets 416.
+- **Line 122:** Uploads a WebM video.
+- **Line 123:** Expects it to be classed as a video.
+- **Line 124:** Tries six bad uploads: empty file, wrong declared type, a declared type that does not match the contents, SVG text declared as PNG, a PNG over 6 MB and a WebM over 20 MB, with the expected 400, 415 or 413 statuses.
+- **Line 125:** Sends each bad upload.
+- **Line 126:** Checks the status for that case.
+- **Line 127:** Every refusal carries a text message.
+- **Line 128:** Closes the preceding block (function, object, or statement body).
+- **Line 129:** An unknown file id gives 404.
+- **Line 130:** Unsaved uploads are not listed as lesson attachments.
+- **Line 131:** Deleting an unsaved upload returns 204.
+- **Line 132:** Deleting it again gives 404.
+- **Line 133:** Its file is gone.
+- **Line 134:** Closes the callback body and the function call that received it.
+- **Line 135:** Blank line separates related sections for readability; it performs no operation.
+- **Line 136:** Registers the existing media persistence test under a name reflecting the additional public audience field.
+- **Line 137:** Creates the fixture.
+- **Line 138:** Uploads a picture first.
+- **Line 139:** Builds a lesson body with two activities and three attachments: the upload, a YouTube link and a suggested picture with credit.
+- **Line 140:** Creates the lesson.
+- **Line 141:** Expects 201.
+- **Line 142:** Reads the lesson.
+- **Line 143:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 144:** Loads the saved attachments.
+- **Line 145:** Checks their kinds, origins, captions (the server filled in “Checked video”), activities, order and lesson ids.
+- **Line 146:** The YouTube address was replaced by the clean verified address.
+- **Line 147:** The YouTube credit came from verification.
+- **Line 148:** The suggested picture kept its supplied credit.
+- **Line 149:** Updates the lesson without a media key and expects success.
+- **Line 150:** Leaving media out must keep all three attachments.
 
-### Lines 151–164
+### Lines 151–180
 
 ```text
-151 |   assert.equal(calls, 6);
-152 | });
-153 |
-154 | test('suggest failures return a friendly message and old unattached uploads are purged', async t => {
-155 |   const state = await fixture(t, { findMedia: async () => { throw new Error('private search detail'); } });
-156 |   const failed = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'A', instructions: '' }] });
-157 |   assert.equal(failed.status, 502);
-158 |   assert.ok(!(await failed.json()).error.includes('private'));
-159 |   const old = await (await state.upload(png)).json();
-160 |   state.database.prepare("UPDATE lesson_media SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?").run(old.id);
-161 |   const fresh = await (await state.upload(png)).json();
-162 |   assert.equal((await fetch(`${state.url}/api/media/${old.id}/file`)).status, 404);
-163 |   assert.equal((await fetch(`${state.url}/api/media/${fresh.id}/file`)).status, 200);
-164 | });
+151 |   const [first, second, third] = attached;
+152 |   const edited = await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, title: 'Renamed again', media: [{ id: third.id, title: 'Moved first', activity: 'Jab — 10 minutes' }, { id: first.id, title: 'Photo renamed', activity: 'Jab — 10 minutes' }] });
+153 |   assert.equal(edited.status, 200);
+154 |   assert.deepEqual((await state.media()).map(item => [item.id, item.title, item.position]), [[third.id, 'Moved first', 0], [first.id, 'Photo renamed', 1]]);
+155 |   assert.equal((await fetch(`${state.url}/api/media/${second.id}/file`)).status, 404);
+156 |   await state.stop(); await state.start();
+157 |   assert.deepEqual((await state.media()).map(item => item.id), [third.id, first.id]);
+158 |   assert.deepEqual(Buffer.from(await (await fetch(`${state.url}/api/media/${first.id}/file`)).arrayBuffer()), png);
+159 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { ...body, media: [] })).status, 200);
+160 |   assert.deepEqual(await state.media(), []);
+161 |   const again = await (await state.json('/api/lessons', 'POST', { title: 'Second', discipline: 'MMA', media: [{ url: 'https://example.com/a.png', title: 'A' }] })).json();
+162 |   assert.equal((await state.media()).length, 1);
+163 |   assert.equal((await fetch(`${state.url}/api/lessons/${again.id}`, { method: 'DELETE' })).status, 204);
+164 |   assert.deepEqual(await state.media(), []);
+165 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lesson_media').get().n, 0);
+166 | });
+167 |
+168 | test('links that fail verification or attachments that do not exist stop the save and leave data unchanged', async t => {
+169 |   const state = await fixture(t);
+170 |   const lesson = await (await state.json('/api/lessons', 'POST', { title: 'Safe', discipline: 'Boxing' })).json();
+171 |   const orphan = await (await state.upload(png)).json();
+172 |   const broken = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/broken.png', title: 'x' }] });
+173 |   assert.equal(broken.status, 400);
+174 |   assert.match((await broken.json()).error, /example\.com could not be used: .*404/);
+175 |   const offline = await state.json('/api/lessons', 'POST', { title: 'Nope', discipline: 'Boxing', media: [{ url: 'https://example.com/offline.png' }] });
+176 |   assert.equal(offline.status, 400);
+177 |   const message = (await offline.json()).error;
+178 |   assert.match(message, /could not check the link/);
+179 |   assert.ok(!message.includes('private'));
+180 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: 424242 }] })).status, 400);
 ```
 
-- **Line 151:** Only the six allowed searches reached the finder.
-- **Line 152:** Closes the callback body and the function call that received it.
-- **Line 153:** Blank line separates related sections for readability; it performs no operation.
-- **Line 154:** Registers the final test: finder failures and orphan cleanup.
-- **Line 155:** Creates a fixture whose finder throws an internal error.
-- **Line 156:** Asks for suggestions.
-- **Line 157:** Expects 502.
-- **Line 158:** The reply hides the internal detail.
-- **Line 159:** Uploads a file.
-- **Line 160:** Pretends it was uploaded in 2020 by editing its timestamp directly in the database.
-- **Line 161:** Uploads another file; every upload triggers cleanup of old unattached files.
-- **Line 162:** The old upload has been purged.
-- **Line 163:** The new upload remains.
-- **Line 164:** Closes the callback body and the function call that received it.
+- **Line 151:** Names the three attachments.
+- **Line 152:** Updates with a new list: the third attachment first, the first second, the second dropped.
+- **Line 153:** Expects success.
+- **Line 154:** Expects the new order and edited captions.
+- **Line 155:** The dropped attachment no longer exists.
+- **Line 156:** Stops and restarts the server (and database connection).
+- **Line 157:** The attachments are still there after the restart.
+- **Line 158:** The uploaded file’s bytes are still intact.
+- **Line 159:** Updating with an empty list removes every attachment.
+- **Line 160:** Unsaved uploads are not listed as lesson attachments.
+- **Line 161:** Creates a second lesson with one link.
+- **Line 162:** Exactly one attachment exists.
+- **Line 163:** Deletes that lesson.
+- **Line 164:** Unsaved uploads are not listed as lesson attachments.
+- **Line 165:** Checks the table directly: no rows remain.
+- **Line 166:** Closes the callback body and the function call that received it.
+- **Line 167:** Blank line separates related sections for readability; it performs no operation.
+- **Line 168:** Registers the failure test.
+- **Line 169:** Creates the fixture.
+- **Line 170:** Saves a plain lesson.
+- **Line 171:** Uploads an unattached file.
+- **Line 172:** Tries to create a lesson with a link the fake verifier rejects.
+- **Line 173:** Expects 400.
+- **Line 174:** The message names the host and the reason (404).
+- **Line 175:** Tries a link that fails unexpectedly.
+- **Line 176:** Expects 400.
+- **Line 177:** Reads the message.
+- **Line 178:** It says the link could not be checked.
+- **Line 179:** It must not leak the internal failure text.
+- **Line 180:** Referring to an attachment id that does not exist gives 400.
+
+### Lines 181–210
+
+```text
+181 |   const other = await (await state.json('/api/lessons', 'POST', { title: 'Other', discipline: 'MMA', media: [{ id: orphan.id }] })).json();
+182 |   assert.equal((await state.json(`/api/lessons/${lesson.id}`, 'PUT', { title: 'Safe', discipline: 'Boxing', media: [{ id: orphan.id }] })).status, 400);
+183 |   assert.deepEqual((await state.media()).map(item => item.lesson_id), [other.id]);
+184 |   for (const bad of [{ media: 'x' }, { media: [{ url: 'https://example.com/a.png', kind: 'video' }] }, { media: [{ id: 1, url: 'https://example.com/a.png' }] }]) assert.equal((await state.json('/api/lessons', 'POST', { title: 'Bad', discipline: 'Boxing', ...bad })).status, 400);
+185 |   assert.equal(state.database.prepare('SELECT count(*) AS n FROM lessons').get().n, 2);
+186 |   assert.equal((await state.json('/api/lessons/99999', 'PUT', { title: 'Missing', discipline: 'Boxing', media: [] })).status, 404);
+187 | });
+188 |
+189 | test('verify and suggest routes validate input, hide failures and limit searches', async t => {
+190 |   let calls = 0;
+191 |   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
+192 |   const state = await fixture(t, { findMedia });
+193 |   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });
+194 |   assert.equal(ok.status, 200);
+195 |   assert.equal((await ok.json()).kind, 'youtube');
+196 |   const broken = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/broken.png' });
+197 |   assert.equal(broken.status, 400);
+198 |   assert.match((await broken.json()).error, /404/);
+199 |   const offline = await state.json('/api/media/verify', 'POST', { url: 'https://example.com/offline.png' });
+200 |   assert.equal(offline.status, 502);
+201 |   assert.ok(!(await offline.json()).error.includes('private'));
+202 |   assert.equal((await state.json('/api/media/verify', 'POST', { url: 5 })).status, 400);
+203 |   const sections = [{ name: 'Technique teaching', instructions: 'Teach.', queries: ['jab'] }];
+204 |   for (const bad of [{}, { discipline: 'Chess', sections }, { discipline: 'Boxing', sections: 'x' }, { discipline: 'Boxing', sections: [{ name: 1, instructions: '' }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: 'x'.repeat(1501) }] }, { discipline: 'Boxing', sections: [{ name: 'a', instructions: '', queries: ['x', 'y', 'z', 'w'] }] }]) assert.equal((await state.json('/api/media/suggest', 'POST', bad)).status, 400);
+205 |   const found = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections });
+206 |   assert.equal(found.status, 200);
+207 |   assert.equal((await found.json()).media[0].activity, 'Technique teaching');
+208 |   for (let index = 0; index < 5; index++) await (await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).text();
+209 |   assert.equal((await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections })).status, 429);
+210 |   assert.equal(calls, 6);
+```
+
+- **Line 181:** Attaches the unattached upload to a new lesson.
+- **Line 182:** Trying to attach the same upload to a different lesson gives 400.
+- **Line 183:** Only the first lesson owns it.
+- **Line 184:** Three malformed media values (not a list, a client-supplied kind, an id mixed with a link) are all rejected.
+- **Line 185:** Only the two intended lessons exist, so failed saves created nothing.
+- **Line 186:** Updating a lesson that does not exist still gives 404.
+- **Line 187:** Closes the callback body and the function call that received it.
+- **Line 188:** Blank line separates related sections for readability; it performs no operation.
+- **Line 189:** Registers the verify and suggest route test.
+- **Line 190:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
+- **Line 191:** A fake finder that returns one suggested video for the first section.
+- **Line 192:** Creates the fixture with that fake finder.
+- **Line 193:** Verifies a YouTube link.
+- **Line 194:** Expects 200.
+- **Line 195:** Expects kind youtube.
+- **Line 196:** Verifies a link the fake rejects.
+- **Line 197:** Expects 400.
+- **Line 198:** The message contains the reason.
+- **Line 199:** Verifies a link that fails unexpectedly.
+- **Line 200:** Expects 502.
+- **Line 201:** No internal detail is revealed.
+- **Line 202:** A request whose url is not text gives 400.
+- **Line 203:** A valid sections list for the suggest route.
+- **Line 204:** Six invalid suggest requests (empty, unknown discipline, sections not a list, a non-text section name, instructions over 1500 characters, four search phrases) each give 400.
+- **Line 205:** A valid suggest request.
+- **Line 206:** Expects 200.
+- **Line 207:** The suggestion belongs to the section that asked.
+- **Line 208:** Makes five more searches (six in total within a minute).
+- **Line 209:** The seventh search is refused with 429.
+- **Line 210:** Only the six allowed searches reached the finder.
+
+### Lines 211–223
+
+```text
+211 | });
+212 |
+213 | test('suggest failures return a friendly message and old unattached uploads are purged', async t => {
+214 |   const state = await fixture(t, { findMedia: async () => { throw new Error('private search detail'); } });
+215 |   const failed = await state.json('/api/media/suggest', 'POST', { discipline: 'Boxing', sections: [{ name: 'A', instructions: '' }] });
+216 |   assert.equal(failed.status, 502);
+217 |   assert.ok(!(await failed.json()).error.includes('private'));
+218 |   const old = await (await state.upload(png)).json();
+219 |   state.database.prepare("UPDATE lesson_media SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?").run(old.id);
+220 |   const fresh = await (await state.upload(png)).json();
+221 |   assert.equal((await fetch(`${state.url}/api/media/${old.id}/file`)).status, 404);
+222 |   assert.equal((await fetch(`${state.url}/api/media/${fresh.id}/file`)).status, 200);
+223 | });
+```
+
+- **Line 211:** Closes the callback body and the function call that received it.
+- **Line 212:** Blank line separates related sections for readability; it performs no operation.
+- **Line 213:** Registers the final test: finder failures and orphan cleanup.
+- **Line 214:** Creates a fixture whose finder throws an internal error.
+- **Line 215:** Asks for suggestions.
+- **Line 216:** Expects 502.
+- **Line 217:** The reply hides the internal detail.
+- **Line 218:** Uploads a file.
+- **Line 219:** Pretends it was uploaded in 2020 by editing its timestamp directly in the database.
+- **Line 220:** Uploads another file; every upload triggers cleanup of old unattached files.
+- **Line 221:** The old upload has been purged.
+- **Line 222:** The new upload remains.
+- **Line 223:** Closes the callback body and the function call that received it.
 
 ## client/api-proxy.js
 
@@ -12053,3 +12299,195 @@ Signed-in read-only coaching help. This module reuses the Gemini transport, prov
 - **Line 49:** Always clears the busy flag after success or failure.
 - **Line 50:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
 - **Line 51:** Closes this function, conditional block or object; execution continues after the block.
+
+## client/src/VideoSuggestions.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\VideoSuggestions.jsx`
+
+Browser UI for a saved lesson. Searches only display candidates; Add delegates to the existing editor. Existing MediaItem supplies thumbnails, source links and youtube-nocookie playback.
+
+### Lines 1–29
+
+```text
+1 | import React, { useRef, useState } from 'react';
+2 | import MediaItem from './MediaItem.jsx';
+3 | import { mediaLimits, youtubeId } from './media.js';
+4 |
+5 | export default function VideoSuggestions({ lesson, media, onApprove, disabled }) {
+6 |   const [result, setResult] = useState(null);
+7 |   const [busy, setBusy] = useState(false);
+8 |   const [error, setError] = useState('');
+9 |   const running = useRef(false);
+10 |   async function suggest() {
+11 |     if (running.current) return;
+12 |     running.current = true; setBusy(true); setError('');
+13 |     try {
+14 |       const response = await fetch(`/api/lessons/${lesson.id}/videos`, { method: 'POST' });
+15 |       const data = await response.json();
+16 |       if (!response.ok) throw new Error(data.error || 'Video search is unavailable.');
+17 |       setResult(data);
+18 |     } catch (failure) { setError(failure instanceof TypeError ? 'Could not reach video search. Try later.' : failure.message); }
+19 |     finally { running.current = false; setBusy(false); }
+20 |   }
+21 |   return <section aria-label="Video suggestions">
+22 |     <button type="button" className="secondary" disabled={disabled || busy} onClick={suggest}>{busy ? 'Finding videos…' : 'Suggest videos'}</button>
+23 |     {result && <><p role="status">{result.message}</p><ul className="media-list">{result.videos.map(item => {
+24 |       const attached = media.some(entry => youtubeId(entry.url) === youtubeId(item.url));
+25 |       return <li key={item.url}><MediaItem item={item} /><button type="button" disabled={disabled || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{attached ? 'Already attached' : 'Add'}</button></li>;
+26 |     })}</ul><button type="button" className="secondary" onClick={() => setResult(null)}>Close suggestions</button></>}
+27 |     {error && <p className="error" role="alert">{error}</p>}
+28 |   </section>;
+29 | }
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Blank line separates related operations for readability.
+- **Line 5:** Exports the lesson-specific suggestion panel, receiving saved lesson/media, approval callback and disabled state.
+- **Line 6:** Stores the latest suggestions and explanatory message; null means results are hidden.
+- **Line 7:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 8:** Stores a safe user-facing error message, initially empty.
+- **Line 9:** Keeps a synchronous in-flight flag in a ref to prevent duplicate clicks before React rerenders.
+- **Line 10:** Defines the asynchronous search-button handler.
+- **Line 11:** Ignores a second click while the current request is running.
+- **Line 12:** Marks the request active, displays busy state and clears the previous error.
+- **Line 13:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 14:** Posts only the saved lesson ID in the route; the server reads owned lesson fields rather than trusting client-provided text.
+- **Line 15:** Parses the server's JSON response.
+- **Line 16:** Converts unsuccessful responses into the server's safe message or a generic search-unavailable fallback.
+- **Line 17:** Stores the returned candidates for display only; this does not approve or save them.
+- **Line 18:** Displays a connection-friendly message for fetch failures and the safe API message for other errors.
+- **Line 19:** Always releases the synchronous flag and React busy state so another attempt is possible.
+- **Line 20:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 21:** Returns a section labeled for assistive technology as video suggestions.
+- **Line 22:** Renders the non-submit suggestion button, disables it while busy or externally blocked, and changes its caption during the search.
+- **Line 23:** When results exist, announces the explanatory message and maps candidates into the existing responsive media-list layout.
+- **Line 24:** Checks canonical YouTube IDs to determine whether this candidate is already attached to the saved lesson.
+- **Line 25:** Renders the existing thumbnail/player component and an explicit Add button. The button is disabled for attached videos, full lessons or blocked actions; only clicking it calls the approval callback.
+- **Line 26:** Closes the result list and renders a non-submit close button that clears visible suggestions without changing lesson data.
+- **Line 27:** Shows errors in an accessible alert using the existing error styling.
+- **Line 28:** Closes the suggestion section and ends the JSX return statement.
+- **Line 29:** Closes this function, conditional block or object; execution continues after the block.
+
+## server/video-suggestions.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\video-suggestions.js`
+
+Read-only, owner-scoped lesson-video suggestions. Uses recognized technique names, existing curated catalog, YouTube search and safe oEmbed verification. No database mutations or AI calls. Quotas are per process and reset on restart.
+
+### Lines 1–30
+
+```text
+1 | import { catalogCandidates, youtubeCandidates } from './media-finder.js';
+2 | import { verifyLink } from './media-verify.js';
+3 | import { youtubeId } from '../client/src/media.js';
+4 |
+5 | const techniques = ['jab', 'cross', 'hook', 'uppercut', 'footwork', 'slip', 'parry', 'roundhouse', 'teep', 'clinch', 'knee strike', 'elbow strike', 'double leg', 'single leg', 'sprawl', 'pummel', 'breakfall', 'shrimp', 'bridge', 'guard pass', 'knee cut', 'half guard', 'kimura', 'armbar', 'triangle', 'squat', 'lunge', 'deadlift', 'push up', 'pull up', 'plank', 'row', 'balance', 'mobility'];
+6 | export function lessonVideoQuery(lesson) {
+7 |   const text = [lesson.title, lesson.goal, lesson.drills].join(' ').toLowerCase().replace(/[-–—]/g, ' ');
+8 |   const names = techniques.filter(name => new RegExp(`\\b${name}s?\\b`).test(text));
+9 |   const safe = lesson.audience === 'Kids' ? names.filter(name => !['kimura', 'armbar', 'triangle', 'clinch', 'knee strike', 'elbow strike'].includes(name)) : names;
+10 |   if (!safe.length) return null;
+11 |   return { technique: safe.slice(0, 2).join(' '), audience: lesson.audience === 'Kids' ? 'kids non contact' : lesson.audience === 'Adults' ? 'adults' : 'beginners' };
+12 | }
+13 |
+14 | export async function suggestLessonVideos(lesson, { env = process.env, verify = verifyLink, search = youtubeCandidates } = {}) {
+15 |   const query = lessonVideoQuery(lesson);
+16 |   if (!query) return { videos: [], message: 'No recognized technique found. Add a clear technique name such as jab, double-leg, knee-cut or squat, then save and try again. You can also paste a video link in Edit lesson.' };
+17 |   const videos = [];
+18 |   const check = async candidates => {
+19 |     for (const candidate of candidates.slice(0, 5)) {
+20 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
+21 |       try {
+22 |         const info = await verify(candidate.url);
+23 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
+24 |       } catch { /* Unavailable or blocked videos are omitted. */ }
+25 |     }
+26 |   };
+27 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
+28 |   if (lesson.audience !== 'Kids') await check(curated);
+29 |   if (!videos.length && env.YOUTUBE_API_KEY) {
+30 |     await check(await search(`${query.technique} drill ${query.audience}`, lesson.discipline, env.YOUTUBE_API_KEY));
+```
+
+- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Blank line separates related operations for readability.
+- **Line 5:** Lists recognized generic technique names across the six disciplines. This allowlist prevents arbitrary raw lesson text or personal information being sent to search; unsupported names produce a friendly no-results path.
+- **Line 6:** Exports the deterministic query builder, which does not call AI or any external service.
+- **Line 7:** Combines title, goal and drills locally, lowercases them, and normalizes hyphens/dashes to spaces for matching technique names.
+- **Line 8:** Filters the fixed technique list using word-boundary regular expressions with an optional plural s; only the known names are retained.
+- **Line 9:** For Kids, excludes the listed submissions and contact techniques before building search terms; adults retain the recognized list. This is a conservative filter, not a certification of video suitability.
+- **Line 10:** Returns null if no eligible technique remains, preventing an unrelated generic search.
+- **Line 11:** Returns at most two recognized technique names and fixed audience terms: kids non contact, adults or beginners for unspecified audiences.
+- **Line 12:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 13:** Blank line separates related operations for readability.
+- **Line 14:** Exports the finder with injectable environment, link verifier and existing YouTube search function, enabling offline tests.
+- **Line 15:** Builds a safe query description from the saved lesson.
+- **Line 16:** Returns no candidates and a helpful explanation when the technique vocabulary cannot identify a safe match; the coach may edit technique names or paste a verified link manually.
+- **Line 17:** Creates an empty result array for verified video metadata.
+- **Line 18:** Defines an asynchronous helper to check a bounded candidate list.
+- **Line 19:** Checks no more than the first five candidates serially to limit requests and memory.
+- **Line 20:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
+- **Line 21:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 22:** Runs the existing safe link verification, including YouTube oEmbed validation.
+- **Line 23:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
+- **Line 24:** Ignores verification failures so blocked or unavailable videos are not shown as candidates.
+- **Line 25:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 26:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 27:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
+- **Line 28:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
+- **Line 29:** Uses the YouTube fallback only if no catalog video survived verification and the server already has a configured key.
+- **Line 30:** Performs one existing YouTube search with technique, drill and audience context plus discipline, then verifies its returned candidates. The key stays server-side.
+
+### Lines 31–52
+
+```text
+31 |   }
+32 |   return { videos: videos.slice(0, 5), message: videos.length ? 'Preview first: relevance and age suitability need coach review. Add opens the editor; Save changes keeps the video. If playback is blocked, use Watch on YouTube or choose another video.' : 'No playable matching videos found, or YouTube search is unavailable. Try later or paste a link in Edit lesson.' };
+33 | }
+34 |
+35 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now } = {}) {
+36 |   const users = new Map();
+37 |   let attempts = [];
+38 |   let busy = false;
+39 |   app.post('/api/lessons/:id/videos', async (request, response) => {
+40 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
+41 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
+42 |     const time = now();
+43 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 86400000); if (recent.length) users.set(id, recent); else users.delete(id); }
+44 |     const times = users.get(request.user.id) || [];
+45 |     attempts = attempts.filter(start => time - start < 86400000);
+46 |     if (busy || attempts.length >= 10 || times.length >= 5 || times.filter(start => time - start < 60000).length >= 3 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video suggestion limit reached or search is busy. Try later; you can still paste a video link.' });
+47 |     users.set(request.user.id, [...times, time]); attempts.push(time); busy = true;
+48 |     try { response.json(await videoFinder(lesson)); }
+49 |     catch { response.status(502).json({ error: 'Video search is unavailable. Try later or paste a link in Edit lesson.' }); }
+50 |     finally { busy = false; }
+51 |   });
+52 | }
+```
+
+- **Line 31:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 32:** Returns up to five videos with coach-review, explicit Add/Save instructions and blocked-playback guidance, or a friendly empty/search-unavailable message.
+- **Line 33:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 34:** Blank line separates related operations for readability.
+- **Line 35:** Registers a read-only owner-scoped suggestion route with injectable finder and clock for deterministic tests.
+- **Line 36:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
+- **Line 37:** Creates the in-memory list of suggestion attempt timestamps shared by this server process.
+- **Line 38:** Tracks whether this route has an external-provider operation in flight.
+- **Line 39:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
+- **Line 40:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
+- **Line 41:** Returns the same 404 for a missing lesson or one owned by someone else.
+- **Line 42:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 43:** Expires user attempts older than 24 hours and removes inactive entries, bounding retained identity data.
+- **Line 44:** Loads this coach's recent attempts or uses an empty list for a new coach.
+- **Line 45:** Expires global attempts outside the rolling 24-hour window.
+- **Line 46:** Returns a friendly 429 when another search is active, ten server attempts or five user attempts are used, three attempts occur within a minute, or the 128-user memory cap is reached.
+- **Line 47:** Records both user and global attempts before searching and marks the finder busy, so failures also consume allowance.
+- **Line 48:** Returns finder results as JSON without writing lesson or media records.
+- **Line 49:** Masks search-provider exceptions with a friendly 502 response and manual-link alternative.
+- **Line 50:** Always clears the in-flight flag after success or failure.
+- **Line 51:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 52:** Closes this function, conditional block or object; execution continues after the block.

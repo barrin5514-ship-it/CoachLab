@@ -4,7 +4,7 @@ import LessonForm from './LessonForm.jsx';
 import LessonCard from './LessonCard.jsx';
 import AiLessonForm from './AiLessonForm.jsx';
 import { disciplineNavigation, filterLessons } from './lesson-view.js';
-import { fetchMedia } from './media.js';
+import { fetchMedia, withApprovedVideo } from './media.js';
 
 export default function App({ user, onLogOut }) {
   const [lessons, setLessons] = useState([]);
@@ -18,6 +18,7 @@ export default function App({ user, onLogOut }) {
   const [formOpen, setFormOpen] = useState(false);
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
+  const [editingMedia, setEditingMedia] = useState([]);
   const [media, setMedia] = useState([]);
   const [mediaError, setMediaError] = useState('');
   const [mediaReload, setMediaReload] = useState(0);
@@ -60,11 +61,14 @@ export default function App({ user, onLogOut }) {
 
   const mediaFor = id => media.filter(item => item.lesson_id === id);
 
-  async function handleEdit(lesson) {
+  async function handleEdit(lesson, approvedVideo) {
     setNotice(null);
     setOpening(true);
     try {
-      setMedia(await fetchMedia());
+      const fresh = await fetchMedia();
+      const attached = fresh.filter(item => item.lesson_id === lesson.id);
+      setEditingMedia(withApprovedVideo(attached, approvedVideo));
+      setMedia(fresh);
       setMediaError('');
       setEditing(lesson);
       setFormOpen('manual');
@@ -108,7 +112,7 @@ export default function App({ user, onLogOut }) {
       </header>
       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? mediaFor(editing.id) : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
@@ -118,7 +122,7 @@ export default function App({ user, onLogOut }) {
         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-        <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+        <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
       </section>
       <CoachingChat key={user.id} />
     </main>

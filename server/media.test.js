@@ -6,6 +6,51 @@ import { isPublicAddress, publicLookup, safeFetch, verifyLink, MediaLinkError } 
 import { validateMediaList } from './media-validate.js';
 import { png, webm } from './media-fixtures.js';
 import { findMedia, commonsCandidates, cleanQueries } from './media-finder.js';
+import { lessonVideoQuery, suggestLessonVideos } from './video-suggestions.js';
+import { withApprovedVideo } from '../client/src/media.js';
+
+test('lesson video queries use recognized techniques, discipline separately, audience and no raw personal notes', () => {
+  assert.deepEqual(lessonVideoQuery({ title: 'Jab drills for Jane', goal: 'person@example.com', drills: 'Jab — 5 minutes', audience: 'Kids' }), { technique: 'jab', audience: 'kids non contact' });
+  assert.deepEqual(lessonVideoQuery({ title: 'Double-leg takedown', audience: 'Adults' }), { technique: 'double leg', audience: 'adults' });
+  assert.equal(lessonVideoQuery({ title: 'Kimura armbar triangle', audience: 'Kids' }), null);
+  assert.equal(lessonVideoQuery({ title: 'Unrecognized lesson' }), null);
+});
+
+test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
+  let searches = 0;
+  const verify = async url => ({ url, kind: 'youtube', title: 'Verified instruction' });
+  const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Adults' }, { env: { YOUTUBE_API_KEY: 'fake' }, verify, search: async () => { searches++; return []; } });
+  assert.equal(searches, 0);
+  assert.equal(result.videos.length, 1);
+  assert.equal(result.videos[0].kind, 'youtube');
+  assert.match(result.message, /Save changes/);
+});
+
+test('video fallback searches once, passes kids context, filters broken links and bounds results', async () => {
+  let searches = 0;
+  const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
+    env: { YOUTUBE_API_KEY: 'fake' },
+    search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+    verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
+  });
+  assert.equal(searches, 1);
+  assert.equal(result.videos.length, 4);
+  const empty = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: {}, verify: async () => { throw new Error('blocked'); } });
+  assert.deepEqual(empty.videos, []);
+  assert.match(empty.message, /No playable/);
+});
+
+test('video approval creates an editable copy, preserves saved attachments and prevents duplicate additions', () => {
+  const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
+  const video = { url: 'https://www.youtube.com/watch?v=abcdefghij1', title: 'Drill' };
+  const approved = withApprovedVideo(existing, video);
+  assert.equal(existing.length, 1);
+  assert.equal(approved.length, 2);
+  assert.equal(approved[1].origin, 'suggested');
+  assert.equal(withApprovedVideo(approved, video).length, 2);
+  assert.equal(withApprovedVideo(existing).length, 1);
+  assert.throws(() => withApprovedVideo(Array.from({ length: 12 }, () => existing[0]), video), /maximum/);
+});
 
 
 test('file signatures identify supported pictures and videos and reject everything else', () => {

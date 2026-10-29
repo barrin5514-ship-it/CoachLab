@@ -4674,3 +4674,65 @@ Actual verification on 2026-10-28: initial targeted AI suite 13/13 passed. Final
 No genuine application-code mistake was discovered during these checks. The documentation patch introduced trailing blank lines; git diff --check caught them and they were removed before committing. Browser tool documentation initially exceeded output context; documentation was reread before inspection. Remaining manual check after deployment: sign in, open/close the panel on a phone, send a generic coaching question, and refresh to confirm the transcript clears. Mocked tests are distinct from a real Gemini response.
 
 Commit reference: preceding verified commit bf4f58f77699f24f47b3f8e57505cbcbaccce893. This work is intended as one commit, subject "feat: add read-only coaching chat with separate limits". Its resolved hash and actual push result will be reported after commit; a commit cannot contain its own hash.
+
+## 2026-10-28 — Suggest videos for a lesson
+
+Previous entry resolution: coaching chat was committed and pushed as 0a8e67b00f929e93d63c373b463079acb944bba0; local/remote hashes matched and public health returned HTTP 200.
+
+Exact user prompt:
+
+```text
+COACHLAB — "SUGGEST VIDEOS" FOR A LESSON
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is Thursday: keep this small and safe.
+
+GOAL
+On any lesson (manual or AI), a "Suggest videos" button finds videos
+that match that lesson's techniques. The coach picks which to keep.
+Nothing is added without the coach clicking to approve.
+
+RULES
+- Low RAM: one thing at a time, tests serially.
+- One small commit. Push only if tests and build pass.
+- Reuse the existing media features (curated catalog, YouTube search,
+  oEmbed check, youtube-nocookie embeds). No new providers.
+- No database changes unless absolutely required; if required,
+  additive only, and explain why.
+- Never read or print .env values. Don't touch other projects.
+- If anything risks breaking the live site, stop and report instead.
+
+BUILD
+- Build search terms from the lesson's discipline, audience, and
+  technique names (e.g. "boxing jab drill for kids"). No AI call needed.
+- Check the curated catalog first; use YouTube search only if needed.
+- Show up to 5 suggestions with title, thumbnail, and an "Add" button.
+- Added videos attach to the lesson the same way existing media does.
+- Limits: signed-in owners only; max 3 searches per coach per minute
+  and a small daily cap (YouTube search uses a lot of API quota).
+- Handle no results and broken/blocked videos with a friendly message.
+- Mobile-friendly.
+- Tests for auth, limits, search term building, and approval flow.
+
+REPORT BACK (in one code block)
+- Commit hash + one line, push result.
+- Fresh test and build results.
+- How it picks videos and the limits, in plain English.
+```
+
+Assistant outcome summary: added owner-scoped POST /api/lessons/:id/videos, deterministic technique/audience query building, catalog-first verification and at most one existing YouTube search fallback. No AI, new provider, dependency, schema or database changes. Recognition is intentionally limited to common fixed technique labels to avoid transmitting raw notes or personal details. Kids skip existing catalog entries without age-suitability metadata and use kids/non-contact fallback context. No suitability guarantee is claimed. New lesson-card UI shows verified candidates through existing MediaItem (thumbnail, credit, source link, youtube-nocookie playback). Add explicitly stages one candidate in an isolated editor draft; Save changes uses the existing verified attachment API. Cancel does not save. Existing saved media is fetched before editing and preserved; duplicate YouTube IDs and the attachment maximum are checked.
+
+Limits: 3 searches/minute and 5/rolling 24 hours per coach; 10 attempts/rolling 24 hours per server, one in flight. Failures/empty searches count; missing/other-owned lessons never invoke the finder. Counters reset on restart and are per process. Existing activity-media search retains its own limits, so this does not cap all Google project use. No live YouTube or Gemini calls, credential reads, production writes or .env edits occurred.
+
+Changed files: new server/video-suggestions.js and client/src/VideoSuggestions.jsx; modified server/app.js, server/media.test.js, server/media-api.test.js, client/src/App.jsx, client/src/LessonCard.jsx, client/src/media.js, README.md, PROMPT_LOG.md and CODE_WALKTHROUGH.md. All eight affected source/test listings and their line explanations were checked against 957 current lines; JavaScript syntax checks passed.
+
+Actual verification: targeted media tests initially 22 passed, zero failed. After adding global quota/concurrency coverage, full serial npm test passed 97 tests, zero failures/skips (about 42 seconds). Seven new tests cover query privacy/audience, catalog-first reuse, fallback and failed links, immutable approval/duplicates/attachment limits, auth/ownership/origin, explicit save plus disposable SQLite restart persistence, safe failures, per-user/global quotas and expiry/concurrency. Full npm run build passed (install, Prisma Client 7.10.0 generation, TypeScript compilation, Vite 8.3.4 build with 34 modules). Actual JSX server rendering passed, including the Suggest videos control. These are mocked provider and rendering checks, not live search/playback or interactive mobile testing. git diff --check passed before committing; source diffs and staged paths reviewed for private/generated/unrelated files.
+
+Genuine mistakes and corrections: inspection initially requested a nonexistent server/media-api.js; file discovery showed media routes live in server/app.js, which was read instead. During implementation review, the first draft put an approved video into dashboard media state before Save; corrected to separate editingMedia state and an immutable approval helper, so Cancel leaves saved media unchanged. The approval helper test verifies the original array stays unchanged; full regression/build checks passed after that correction. No failed test result is being omitted.
+
+Commit reference: preceding commit 0a8e67b00f929e93d63c373b463079acb944bba0. Single intended commit subject: "feat: suggest verified lesson videos with coach approval". Its hash and actual push outcome will be reported after commit. Remaining manual check after deployment: sign in, use a saved jab lesson, Suggest videos, preview, Add, Save changes, refresh, and check on a phone. Provider availability, regional playback and age suitability can change.
+
+### 2026-10-29 — Continuation
+
+Exact user prompt: `continue`
+
+Assistant response/outcome: resumed final review and upload of the same video-suggestion change. Checked current Git status and the completed test/build output: 97 passing tests and successful production build from this implementation. No executable changes since those checks, so no repeat test run was necessary. Rechecked documentation listings, syntax, diff whitespace and staged paths/secret patterns before the single commit. Push and remote-hash verification follow the commit and are reported in the final response.
