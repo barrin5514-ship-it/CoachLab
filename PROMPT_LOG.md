@@ -4621,3 +4621,56 @@ continue
 - Added repeatable tests: schedules for every duration 15–180; positive/negative one/two-minute repair; unchanged source text and safety; malformed/large-gap rejection; actual Gemini adapter plus HTTP API with mocked transport for 60/90 minutes across all six disciplines; save-format bounds; no automatic save; separate safe errors for long text, missing guidance, large gaps and cutoff.
 - Fresh targeted AI suite: 8 passed, 0 failed. Fresh full npm test: 85 passed, 0 failed, concurrency=1. After explicit completion, full npm run build passed (install, Prisma 7.10.0 generation/TypeScript compile, Vite 32 modules). Four current code/test listings, 345 lines and explanations verified; JavaScript syntax checks passed. No live AI request or .env read. Real Gemini success for the owner's input remains unverified.
 - Updated CODE_WALKTHROUGH.md for all new/modified source and test lines. No implementation/test failures encountered during this fix. Commit subject: fix: stabilize longer AI lessons with bounded timing repair. The containing commit hash and push verification are reported after committing.
+
+## 2026-10-28 — Small coaching chat box
+
+Exact user prompt:
+
+```text
+COACHLAB — SMALL COACHING CHAT BOX
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is Thursday: keep this small and safe.
+
+GOAL
+A small chat box in the bottom corner for signed-in coaches.
+It answers (1) coaching questions and (2) how to use CoachLab.
+It does NOT edit, save, or delete lessons.
+
+RULES
+- Low RAM: one thing at a time, tests serially.
+- One small commit. Push only if tests and build pass.
+- No database changes. Chats are not saved (gone on refresh).
+- Never read or print .env values. Don't touch other projects.
+- If anything risks breaking the live site, stop and report instead.
+
+BUILD
+- Server route (signed-in only) calling the existing Gemini provider.
+- System prompt: friendly coaching assistant for boxing, Muay Thai,
+  BJJ, wrestling, MMA, personal training, and CoachLab app help.
+  Short, plain answers.
+- Guardrails: stay on coaching/app topics; no medical diagnosis
+  (suggest a professional); kids' safety (no hard sparring, no head
+  contact, age-appropriate drills); never ask for or store kids'
+  names or personal info.
+- Limits: max message length, short answers, max output tokens,
+  per-user rate limit, and its own small daily cap separate from
+  lesson drafts so it can't use up lesson generation.
+- UI: small button in the corner that opens a chat panel; works on
+  phone; can be closed; shows a short "AI can be wrong" note.
+- Tests for auth, limits, and topic guardrails.
+
+REPORT BACK (in one code block)
+- Commit hash + one line, push result.
+- Fresh test and build results.
+- How the limits work, in plain English.
+```
+
+Assistant outcome summary: added read-only POST /api/ai/chat behind existing authentication and origin protections, shared bounded Gemini transport, fixed safety/app-help prompt, heuristic guard replies, separate in-memory chat quotas, and a compact React chat panel. No lesson store, tools, database changes, dependencies, real environment edits or live AI calls. The panel keeps temporary pairs in React memory only, displays privacy/accuracy notices, and preserves input on failure. README explains limits and their limitations. The Google project quota is still shared even though application counters are separate; process restarts reset counters. This does not guarantee a reserved Google quota for lesson drafts or perfect topic/privacy detection.
+
+Files created: server/chat.js, client/src/CoachingChat.jsx. Files modified: server/ai-provider.js, server/app.js, server/ai.test.js, client/src/App.jsx, client/src/styles.css, README.md, CODE_WALKTHROUGH.md, PROMPT_LOG.md. Existing history retained. Walkthrough listings and explanations updated for all seven affected source/test files.
+
+Actual verification on 2026-10-28: initial targeted AI suite 13/13 passed. Final serial npm test: 90 passed, zero failed/skipped, approximately 46 seconds, including five chat tests for auth/origin/input, topic/medical/kids/privacy guards, six disciplines, per-user/shared cap expiry, draft allowance independence, concurrency, safe failures, output bounds and mock Gemini payloads. npm run build passed (dependency install, Prisma Client 7.10.0 generation, TypeScript compilation, Vite 8.3.4 production bundle: 33 modules). JSX server rendering of actual app components passed without network/database calls. Numbered source listings/explanations checked against 977 lines across seven files; JavaScript syntax checks passed. git diff --check passed. No live chat generation or signed-in mobile interaction is claimed: the local browser showed the signed-out screen, where chat was absent. No credentials were entered to bypass that limitation.
+
+No genuine application-code mistake was discovered during these checks. The documentation patch introduced trailing blank lines; git diff --check caught them and they were removed before committing. Browser tool documentation initially exceeded output context; documentation was reread before inspection. Remaining manual check after deployment: sign in, open/close the panel on a phone, send a generic coaching question, and refresh to confirm the transcript clears. Mocked tests are distinct from a real Gemini response.
+
+Commit reference: preceding verified commit bf4f58f77699f24f47b3f8e57505cbcbaccce893. This work is intended as one commit, subject "feat: add read-only coaching chat with separate limits". Its resolved hash and actual push result will be reported after commit; a commit cannot contain its own hash.

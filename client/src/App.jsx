@@ -1,3 +1,4 @@
+import CoachingChat from './CoachingChat.jsx';
 import React, { useEffect, useState } from 'react';
 import LessonForm from './LessonForm.jsx';
 import LessonCard from './LessonCard.jsx';
@@ -119,6 +120,7 @@ export default function App({ user, onLogOut }) {
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
       </section>
+      <CoachingChat key={user.id} />
     </main>
   );
 }

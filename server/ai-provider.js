@@ -25,7 +25,11 @@ When objective, techniques or equipment are blank, recommend suitable options. P
 For sections that teach or drill a nameable technique or exercise, add media_queries: up to two short search phrases (2 to 5 words, maximum 80 characters) naming that technique, for example "knee cut half guard pass". Use an empty list for warm-ups, cooldowns and generic activity. Phrases are search terms only: never include web addresses.
 Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
 
-export async function generateDraft(request, { env = process.env, fetcher = fetch, timeout = 45000 } = {}) {
+export function generateDraft(request, options) {
+  return callGemini({ systemInstruction: { parts: [{ text: `${instruction}\nEXACT SECTION SCHEDULE (copy each minutes value; include repetitions, transitions and breaks within it; use solo alternatives for partner time when appropriate): ${JSON.stringify(sectionSchedule(request.duration_minutes))}\nMANDATORY CLASS SAFETY RULES:\n${safetyGuidance(request)}` }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify({ ...request, audience: request.audience ?? 'Unspecified' }) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }, options);
+}
+
+export async function callGemini(payload, { env = process.env, fetcher = fetch, timeout = 45000, maxBytes = 65536 } = {}) {
   const model = env.AI_MODEL || 'gemini-3.5-flash-lite';
   if ((env.AI_PROVIDER || 'gemini') !== 'gemini' || !env.GEMINI_API_KEY || !/^[a-z0-9.-]+$/.test(model)) throw new AiError(503, 'AI generation is not configured. Manual lessons still work.');
   const controller = new AbortController();
@@ -34,7 +38,7 @@ export async function generateDraft(request, { env = process.env, fetcher = fetc
     const response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: `${instruction}\nEXACT SECTION SCHEDULE (copy each minutes value; include repetitions, transitions and breaks within it; use solo alternatives for partner time when appropriate): ${JSON.stringify(sectionSchedule(request.duration_minutes))}\nMANDATORY CLASS SAFETY RULES:\n${safetyGuidance(request)}` }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify({ ...request, audience: request.audience ?? 'Unspecified' }) }] }], generationConfig: { responseMimeType: 'application/json', responseJsonSchema: draftSchema, maxOutputTokens: 8192 } }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) { await response.body?.cancel(); throw new AiError(response.status === 429 ? 429 : 502, 'AI provider unavailable or quota exhausted. Try later; manual lessons still work.'); }
     if (!response.body) throw new AiError(502, 'AI provider returned an empty response.');
@@ -45,7 +49,7 @@ export async function generateDraft(request, { env = process.env, fetcher = fetc
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > 65536) { await reader.cancel(); throw new AiError(502, 'AI response exceeded the size limit.'); }
+      if (bytes > maxBytes) { await reader.cancel(); throw new AiError(502, 'AI response exceeded the size limit.'); }
       chunks.push(Buffer.from(value));
     }
     const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));

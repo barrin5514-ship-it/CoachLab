@@ -1,3 +1,4 @@
+import { answerChat, chatGuard, chatInstruction } from './chat.js';
 import { sectionSchedule, reconcileDraftTiming } from './ai-timing.js';
 import { validateLesson } from './validate-lesson.js';
 import test from 'node:test';
@@ -231,4 +232,98 @@ test('60 and 90 minute AI requests succeed through mocked Gemini and HTTP; inval
     assert.doesNotMatch(error, /private-output/);
     assert.match(error, mode === 'cutoff' ? /did not return a complete lesson/ : mode === 'large-gap' ? /Section times must add up/ : /Each section needs common mistakes/);
   }
+});
+
+async function chatFixture(t, chatProvider) {
+  let time = 0;
+  const auth = { getUser: async req => req.headers['x-test-user'] === 'anonymous' ? null : { id: req.headers['x-test-user'] || 'coach-a' } };
+  const server = createApp({}, { ...testOptions, auth, chatProvider, provider: async () => structuredClone(draft), now: () => time }).listen(0, '127.0.0.1');
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  await once(server, 'listening');
+  const base = `http://127.0.0.1:${server.address().port}`;
+  return {
+    advance: amount => { time += amount; },
+    post: (message = 'How do I save a lesson?', user = 'coach-a', extra = {}) => fetch(base + '/api/ai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-user': user, ...extra.headers }, body: JSON.stringify(extra.body || { message }) }),
+    draft: () => fetch(base + '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }),
+  };
+}
+
+test('chat requires sign-in and origin checks; rejects invalid input and never touches lesson storage', async t => {
+  let calls = 0;
+  const state = await chatFixture(t, async () => { calls++; return 'Use New Lesson, then Save lesson.'; });
+  assert.equal((await state.post(undefined, 'anonymous')).status, 401);
+  assert.equal((await state.post(undefined, 'coach-a', { headers: { origin: 'https://evil.example' } })).status, 403);
+  for (const body of [{ message: '' }, { message: 'x'.repeat(601) }, { message: 3 }, { message: 'lesson', history: [] }]) assert.equal((await state.post(undefined, 'coach-a', { body })).status, 400);
+  assert.equal(calls, 0);
+  const response = await state.post();
+  assert.equal(response.status, 200);
+  assert.match((await response.json()).answer, /New Lesson/);
+  assert.equal(calls, 1);
+});
+
+test('chat guards redirect off-topic, medical, unsafe kids and obvious personal details without Gemini', async t => {
+  let calls = 0;
+  const state = await chatFixture(t, async () => { calls++; return 'Unexpected'; });
+  for (const [message, expected] of [['Predict stock prices', /coaching or using CoachLab/], ['Diagnose knee pain after boxing', /healthcare professional/], ['Can kids practice head contact and chokes?', /No hard sparring, head contact/], ['My student named Alex needs a boxing lesson', /remove names/], ['Coach me at person@example.com', /personal information/]]) {
+    const response = await state.post(message);
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).answer, expected);
+    state.advance(60001);
+  }
+  assert.equal(calls, 0);
+  for (const question of ['Boxing footwork drills?', 'Muay Thai drills?', 'BJJ basics?', 'Wrestling drills?', 'MMA workout?', 'Personal training exercises?', 'How do I edit a lesson?']) assert.equal(chatGuard(question), null);
+});
+
+test('chat per-user and shared daily caps expire independently of lesson draft counters', async t => {
+  let calls = 0;
+  const state = await chatFixture(t, async () => { calls++; return 'Review and save your lesson.'; });
+  for (let i = 0; i < 3; i++) assert.equal((await state.post()).status, 200);
+  assert.equal((await state.post()).status, 429);
+  assert.equal((await state.post(undefined, 'coach-b')).status, 200);
+  state.advance(60001);
+  for (let i = 0; i < 2; i++) assert.equal((await state.post()).status, 200);
+  assert.equal((await state.post()).status, 429);
+  for (let i = 0; i < 4; i++) { state.advance(60001); assert.equal((await state.post(undefined, 'coach-b')).status, 200); }
+  assert.equal(calls, 10);
+  assert.equal((await state.post(undefined, 'coach-c')).status, 429);
+  assert.equal((await state.draft()).status, 200);
+  state.advance(86400001);
+  assert.equal((await state.post()).status, 200);
+});
+
+test('chat failures are safe, count against caps and release the busy flag', async t => {
+  let release;
+  let mode = 'slow';
+  const state = await chatFixture(t, async () => {
+    if (mode === 'slow') return new Promise(resolve => { release = resolve; });
+    if (mode === 'fail') throw new Error('SECRET provider detail');
+    return 'x'.repeat(1201);
+  });
+  const pending = state.post();
+  while (!release) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal((await state.post(undefined, 'coach-b')).status, 429);
+  release('Use the lesson form.');
+  assert.equal((await pending).status, 200);
+  mode = 'fail';
+  const failed = await state.post();
+  assert.equal(failed.status, 502);
+  assert.doesNotMatch(await failed.text(), /SECRET/);
+  mode = 'long';
+  assert.equal((await state.post()).status, 502);
+});
+
+test('chat reuses Gemini with bounded output and fixed coaching/app safety instructions', async () => {
+  const answer = await answerChat('How do I save a lesson?', { env, fetcher: async (url, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(options.headers['x-goog-api-key'], env.GEMINI_API_KEY);
+    assert.equal(body.generationConfig.maxOutputTokens, 512);
+    assert.equal(body.systemInstruction.parts[0].text, chatInstruction);
+    for (const phrase of ['no head contact', 'no hard sparring', 'Never ask for', 'Do not diagnose', 'no tools', 'Politely redirect', 'Each question is independent']) assert.ok(chatInstruction.includes(phrase));
+    assert.equal(body.contents.length, 1);
+    assert.ok(!options.body.includes(env.GEMINI_API_KEY));
+    return Response.json(envelope({ answer: 'Use New Lesson, then Save lesson.' }));
+  } });
+  assert.match(answer, /New Lesson/);
+  await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => new Response('x'.repeat(8193)) }), error => error.status === 502);
+  await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => Response.json(envelope({ answer: 'x'.repeat(1201) })) }), error => error.status === 502);
 });

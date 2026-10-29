@@ -1,3 +1,4 @@
+import { registerChatRoute } from './chat.js';
 import express from 'express';
 import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
 import { validateLesson } from './validate-lesson.js';
@@ -184,6 +185,7 @@ export function createApp(database, options = {}) {
   });
 
   registerAiRoute(app, options);
+  registerChatRoute(app, options);
   if (options.production) serveFrontend(app, options.frontendDirectory);
   app.use((request, response) => {
     response.status(404).json({ error: 'Route not found.' });

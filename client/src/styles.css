@@ -140,3 +140,16 @@ button.link:hover:not(:disabled) { background: none; color: #104b42; }
   .lesson-timeline > li { padding-left: 12px; }
   .lesson-card, .form-panel { padding: 16px; }
 }
+
+.coach-chat { position: fixed; right: 16px; bottom: 16px; z-index: 10; }
+.chat-panel { position: absolute; right: 0; bottom: 60px; width: min(370px, calc(100vw - 32px)); max-height: calc(100dvh - 100px); overflow-y: auto; padding: 16px; background: white; color: #172d3a; border: 1px solid #b8c9cc; border-radius: 12px; box-shadow: 0 6px 24px #172d3a33; }
+.chat-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chat-panel h2 { font-size: 1.2rem; margin: 0; }
+.chat-note { font-size: 0.8rem; margin: 10px 0; }
+.chat-messages { max-height: 200px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-messages > div { border-top: 1px solid #d7e0e4; }
+.chat-panel label { margin: 12px 0 4px; }
+.chat-panel textarea { min-height: 72px; }
+.chat-panel form > button { margin-top: 8px; }
+.chat-panel button { min-height: 44px; }
+body:has(.coach-chat) main { padding-bottom: 100px; }
