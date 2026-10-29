@@ -4796,3 +4796,58 @@ Actual checks: early targeted suite 28/28 passed; initial full suite 98/98 and b
 Genuine corrections: a Windows rg wildcard path was invalid; explicit file reads supplied the needed inspection. The first phrase splitter separated "close the distance" into single words; changed article handling so the tested phrase is "close distance". Review caught missing plural unsafe kids terms and the prior knee-strike exclusion; restored them and added a regression assertion before final verification. No test failures were hidden. The original whitelist restriction was the reported product bug and is now removed.
 
 Single intended commit subject: "fix: search whole lessons and share raised video quotas". Parent is e5946abf861efb615893ebd1da6a0edcc01a6052. The containing hash and actual push result are reported after commit, since a commit cannot contain its own hash.
+
+## 2026-10-29 — Diagnose live video search and retain watch-link fallbacks
+
+Previous entry resolution: 9f62e155705d36e47bc27b57566d03c28414beb7 was pushed; local/remote hashes matched, tree clean, public health HTTP 200.
+
+Exact user prompt:
+
+```text
+COACHLAB — LIVE "SUGGEST VIDEOS" FINDS NOTHING
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is TOMORROW: keep it small and safe.
+
+PROBLEM
+On the live site (Render), Suggest videos always shows:
+"No playable matching videos found or YouTube searches unavailable."
+Test lesson: Muay Thai, Adults, Beginner, title "Using Leg Kicks to
+Close the Distance", goal "inside leg kicks to close distance".
+Render logs show NOTHING when the button is pressed.
+Checked: YouTube Data API v3 is ENABLED in the Google Cloud project
+that holds the key; key is restricted to YouTube Data API v3 only,
+no application restrictions. YOUTUBE_API_KEY is set in Render.
+
+TASKS
+1. Add safe server logging for each step of Suggest videos: key
+   present (true/false only), search terms, YouTube HTTP status and
+   error reason code, number of results, how many passed the
+   oEmbed/playable check. NEVER log the key or full request URLs.
+2. Check likely causes: key not read in production, YouTube error
+   (quota, key invalid, API not enabled), oEmbed checks failing from
+   Render's servers, or filters too strict (embeddable, duration,
+   safe search) removing every result.
+3. If oEmbed checks fail from Render, don't drop all results: show
+   them with a "Watch on YouTube" link instead of hiding them.
+4. Show the coach a clearer message: "YouTube search unavailable"
+   vs. "No matches found."
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass. No database changes. Never print .env values.
+
+REPORT BACK (in one code block)
+- Most likely cause in plain English.
+- Commit hash, push result, test/build results.
+- What I should look for in Render logs after I test again.
+```
+
+Subsequent exact user prompt: `continue`
+
+Assistant outcome summary: reproduced the supplied lesson's phrase order locally: close distance ranked ahead of inside leg kicks, so the old title matcher could reject a correct leg-kick video. The title relevance check now chooses the longest extracted phrase, giving inside leg kicks for this example. This is a confirmed code-level rejection path, not a claim that live Render's provider cause is proven. Kept strict safe search and embeddable=true; there is no duration filter to remove. Added step diagnostics for route entry, key boolean, derived query/match terms, catalog count, HTTP status/allowlisted reason, raw/matched count, and playback success/fallback counts. Provider errors, raw bodies, keys and full request URLs are excluded. Failed playback checks yield canonical link-only YouTube candidates and a clearly labeled Watch on YouTube fallback; Add remains disabled for these, preserving existing attachment verification. Missing key, empty successful search and provider failure now have distinct friendly messages. Quotas and coach approval remain unchanged.
+
+Actual verification: targeted media suites passed 28 tests, zero failures. Complete serial npm test passed 102 tests, zero failures/skips (about 27 seconds). Production npm run build passed after executable changes (install, Prisma 7.10.0 generation and TypeScript compile, Vite 8.3.4: 34 modules). Mocked regressions cover 403 quota reason extraction without secret/raw-URL logging, network failure classification, zero-result counts, exact lesson match phrase, missing key versus no matches, and oEmbed failure retaining link-only results. Existing auth, quota, approval/persistence and full regressions passed. No live YouTube/Gemini call, .env read, production data access, dependency or database change. Browser playback and actual Render failure remain unverified until the owner tests the deployed feature; logs will distinguish the branches.
+
+Files modified: server/video-suggestions.js, server/media-finder.js, client/src/VideoSuggestions.jsx, server/media.test.js, README.md, CODE_WALKTHROUGH.md and this log. Walkthrough updated for all changed source/test lines. Reviewed executable diffs and safe log fields. Genuine prior-agent mistake: the earlier fix still used the highest-ranked generic goal phrase for title filtering; the exact title provided here exposed it, and the new regression verifies inside leg kicks is selected. Also corrected previous behavior that silently discarded failed playback checks and conflated missing configuration with zero matches. No fabricated production diagnosis or test results.
+
+Single intended commit subject: "fix: diagnose video search and retain watch-link fallbacks". Parent 9f62e155705d36e47bc27b57566d03c28414beb7. Containing hash and push outcome are reported after commit. If no request_received appears after deployment, inspect deployment version and authenticated browser network status before concluding the key is wrong.

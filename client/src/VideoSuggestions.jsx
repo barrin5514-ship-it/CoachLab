@@ -22,7 +22,7 @@ export default function VideoSuggestions({ lesson, media, onApprove, disabled })
     <button type="button" className="secondary" disabled={disabled || busy} onClick={suggest}>{busy ? 'Finding videos…' : 'Suggest videos'}</button>
     {result && <><p role="status">{result.message}</p><ul className="media-list">{result.videos.map(item => {
       const attached = media.some(entry => youtubeId(entry.url) === youtubeId(item.url));
-      return <li key={item.url}><MediaItem item={item} /><button type="button" disabled={disabled || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{attached ? 'Already attached' : 'Add'}</button></li>;
+      return <li key={item.url}>{item.link_only ? <><strong>{item.title}</strong><p>Playback could not be verified. This video may be blocked or unavailable.</p><a href={item.url} target="_blank" rel="noopener noreferrer">Watch on YouTube</a></> : <MediaItem item={item} />}<button type="button" disabled={disabled || item.link_only || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{item.link_only ? 'Playback unverified' : attached ? 'Already attached' : 'Add'}</button></li>;
     })}</ul><button type="button" className="secondary" onClick={() => setResult(null)}>Close suggestions</button></>}
     {error && <p className="error" role="alert">{error}</p>}
   </section>;

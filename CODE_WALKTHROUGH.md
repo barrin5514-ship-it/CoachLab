@@ -7294,7 +7294,7 @@ Server-side checking of the media list sent with a lesson. It accepts only two k
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\media-finder.js`
 
-Existing catalog, Wikimedia and YouTube discovery. Optional title-relevance text separates primary technique matching from search context; the reservation callback enforces a shared search quota before HTTP.
+Existing discovery transport with allowlisted HTTP error diagnostics and raw/matched counts. No full URLs, headers, keys or raw provider error text enter logs.
 
 ### Lines 1–30
 
@@ -7384,17 +7384,17 @@ Existing catalog, Wikimedia and YouTube discovery. Optional title-relevance text
 47 |   return found;
 48 | }
 49 |
-50 | export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take()) {
+50 | export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
 51 |   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
 52 |   reserveSearch();
-53 |   const data = await jsonFrom(fetcher, url, { 'x-goog-api-key': key });
-54 |   return (data.items || []).filter(item => item.id?.videoId && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
-55 | }
-56 |
-57 | export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
-58 |   const key = (env.YOUTUBE_API_KEY || '').trim();
-59 |   const perSection = await Promise.all(sections.map(async section => {
-60 |     const queries = cleanQueries(section.queries);
+53 |   let response;
+54 |   try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
+55 |   catch { diagnostic('youtube_http', { status: null, reason: 'network_or_timeout' }); throw new Error('YouTube search unavailable'); }
+56 |   const data = await response.json().catch(() => null);
+57 |   const reasons = new Set(['quotaExceeded', 'dailyLimitExceeded', 'keyInvalid', 'accessNotConfigured', 'forbidden', 'API_KEY_INVALID', 'SERVICE_DISABLED', 'API_KEY_SERVICE_BLOCKED', 'RATE_LIMIT_EXCEEDED']);
+58 |   const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
+59 |   diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
+60 |   if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
 ```
 
 - **Line 31:** Exports commonsCandidates: searches Wikimedia Commons (freely licensed media) for a phrase.
@@ -7416,75 +7416,99 @@ Existing catalog, Wikimedia and YouTube discovery. Optional title-relevance text
 - **Line 47:** Returns the candidates.
 - **Line 48:** Closes the preceding block (function, object, or statement body).
 - **Line 49:** Blank line separates related sections for readability; it performs no operation.
-- **Line 50:** Exports YouTube search with optional relevance text and a reservation callback; direct callers default to the same process-wide quota.
+- **Line 50:** Extends the existing bounded YouTube search function with an optional diagnostic callback, defaulting to silence for other callers.
 - **Line 51:** Builds the YouTube search address: embeddable videos only, strict safe search, five results, for the phrase plus the discipline.
 - **Line 52:** Reserves one search synchronously immediately before HTTP execution; if the quota throws, no request reaches YouTube. Failed HTTP attempts still count.
-- **Line 53:** Runs the search. The key travels in a request header (never in the address) so it does not appear in logs.
-- **Line 54:** Keeps only candidates whose title matches the chosen relevance text, then maps IDs, sanitized titles, credit and source links to the existing bounded candidate format.
-- **Line 55:** Closes the preceding block (function, object, or statement body).
-- **Line 56:** Blank line separates related sections for readability; it performs no operation.
-- **Line 57:** Extends the existing media finder with an optional reservation callback while preserving its verifier, environment and fetch defaults.
-- **Line 58:** Reads the optional YouTube key from the server environment only.
-- **Line 59:** Handles all sections at the same time.
-- **Line 60:** Cleans the section’s search phrases.
+- **Line 53:** Declares the variable that will hold the HTTP response.
+- **Line 54:** Calls YouTube with the key only in a header, requests JSON, and applies an eight-second timeout. The full URL and headers are never passed to diagnostics.
+- **Line 55:** Logs only a fixed network/timeout classification with no HTTP status when the request cannot complete, then throws a safe search-unavailable error.
+- **Line 56:** Parses response JSON, using null for unreadable responses rather than exposing a parsing exception or raw body.
+- **Line 57:** Defines an allowlist of safe provider reason codes; arbitrary provider error text cannot enter logs.
+- **Line 58:** Selects a recognized structured error-detail reason first, then a legacy error reason; the next line still allowlists the selected value.
+- **Line 59:** Logs the numeric HTTP status and either ok, a recognized reason code or unclassified_error. No raw provider message, request URL or credential is logged.
+- **Line 60:** Treats failed HTTP responses and malformed success bodies as unavailable search rather than falsely reporting no matches.
 
-### Lines 61–86
+### Lines 61–90
 
 ```text
-61 |     const candidates = catalogCandidates(discipline, section, queries);
-62 |     for (const query of queries) {
-63 |       const sources = [commonsCandidates(query, fetcher)];
-64 |       if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher, query, reserveSearch));
-65 |       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
-66 |     }
-67 |     candidates.sort((a, b) => a.rank - b.rank);
-68 |     const checked = await Promise.allSettled(candidates.slice(0, 8).map(candidate => verify(candidate.url).then(info => ({ candidate, info }))));
-69 |     return { section, verified: checked.filter(result => result.status === 'fulfilled').map(result => result.value), tried: queries.length > 0 || candidates.length > 0 };
-70 |   }));
-71 |   const used = new Set();
-72 |   const media = [];
-73 |   const notes = [];
-74 |   for (const { section, verified, tried } of perSection) {
-75 |     const picked = { image: 0, video: 0 };
-76 |     for (const { candidate, info } of verified) {
-77 |       const slot = info.kind === 'image' ? 'image' : 'video';
-78 |       if (picked[slot] >= 1 || used.has(info.url) || media.length >= 8) continue;
-79 |       picked[slot] += 1;
-80 |       used.add(info.url);
-81 |       media.push({ origin: 'suggested', kind: info.kind, url: info.url, title: (candidate.title || info.title).slice(0, 120), activity: section.name, credit: candidate.credit || info.credit || '', source_page: candidate.source_page || info.source_page || '' });
-82 |     }
-83 |     if (tried && !picked.image && !picked.video) notes.push(`No verified picture or video was found for ${section.name}.`);
-84 |   }
-85 |   return { media, notes };
-86 | }
+61 |   const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '') && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+62 |   diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
+63 |   return candidates;
+64 | }
+65 |
+66 | export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
+67 |   const key = (env.YOUTUBE_API_KEY || '').trim();
+68 |   const perSection = await Promise.all(sections.map(async section => {
+69 |     const queries = cleanQueries(section.queries);
+70 |     const candidates = catalogCandidates(discipline, section, queries);
+71 |     for (const query of queries) {
+72 |       const sources = [commonsCandidates(query, fetcher)];
+73 |       if (key) sources.push(youtubeCandidates(query, discipline, key, fetcher, query, reserveSearch));
+74 |       for (const result of await Promise.allSettled(sources)) if (result.status === 'fulfilled') candidates.push(...result.value);
+75 |     }
+76 |     candidates.sort((a, b) => a.rank - b.rank);
+77 |     const checked = await Promise.allSettled(candidates.slice(0, 8).map(candidate => verify(candidate.url).then(info => ({ candidate, info }))));
+78 |     return { section, verified: checked.filter(result => result.status === 'fulfilled').map(result => result.value), tried: queries.length > 0 || candidates.length > 0 };
+79 |   }));
+80 |   const used = new Set();
+81 |   const media = [];
+82 |   const notes = [];
+83 |   for (const { section, verified, tried } of perSection) {
+84 |     const picked = { image: 0, video: 0 };
+85 |     for (const { candidate, info } of verified) {
+86 |       const slot = info.kind === 'image' ? 'image' : 'video';
+87 |       if (picked[slot] >= 1 || used.has(info.url) || media.length >= 8) continue;
+88 |       picked[slot] += 1;
+89 |       used.add(info.url);
+90 |       media.push({ origin: 'suggested', kind: info.kind, url: info.url, title: (candidate.title || info.title).slice(0, 120), activity: section.name, credit: candidate.credit || info.credit || '', source_page: candidate.source_page || info.source_page || '' });
 ```
 
-- **Line 61:** Starts with the reviewed catalog candidates.
-- **Line 62:** For each phrase…
-- **Line 63:** …searches Wikimedia Commons…
-- **Line 64:** When a key exists, starts a YouTube candidate search with the caller's reservation callback, ensuring the older route cannot bypass the shared cap.
-- **Line 65:** Adds the results of the sources that worked; a source that failed is ignored without stopping the others.
-- **Line 66:** Closes the preceding block (function, object, or statement body).
-- **Line 67:** Orders candidates by trust: catalog first, then YouTube, then Commons.
-- **Line 68:** Verifies the first eight candidates at the same time with verifyLink; each success keeps the candidate together with what the checker confirmed.
-- **Line 69:** Returns the section with only the candidates that passed verification, and whether anything was tried.
-- **Line 70:** Closes the per-section work.
-- **Line 71:** A set of addresses already chosen, to avoid repeats across sections.
-- **Line 72:** The final list.
-- **Line 73:** Friendly notes about sections with nothing found.
-- **Line 74:** Goes through the sections in order.
-- **Line 75:** Counts picked pictures and videos for this section.
-- **Line 76:** Looks at each verified candidate.
-- **Line 77:** Decides whether it is a picture or a video (YouTube counts as video).
-- **Line 78:** Skips it if the section already has one of that kind, if the address was used already, or if eight items have been chosen.
-- **Line 79:** Counts it.
-- **Line 80:** Remembers its address.
-- **Line 81:** Adds it to the result, labeled “suggested”, with the verified kind and address, a caption, the section it belongs to, the credit and the source page.
-- **Line 82:** Closes the preceding block (function, object, or statement body).
-- **Line 83:** If something was searched but nothing verified, writes a note naming the section.
-- **Line 84:** Closes the preceding block (function, object, or statement body).
-- **Line 85:** Returns the media and the notes.
-- **Line 86:** Closes the preceding block (function, object, or statement body).
+- **Line 61:** Keeps valid eleven-character YouTube IDs whose titles match the selected phrase, then creates sanitized bounded titles, credit and canonical links.
+- **Line 62:** Logs raw and retained result counts and the active filter settings: embeddable videos, strict safe search, no duration filter.
+- **Line 63:** Returns the filtered candidate list to the caller for playback verification.
+- **Line 64:** Closes the preceding block (function, object, or statement body).
+- **Line 65:** Blank line separates related sections for readability; it performs no operation.
+- **Line 66:** Extends the existing media finder with an optional reservation callback while preserving its verifier, environment and fetch defaults.
+- **Line 67:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
+- **Line 68:** Handles all sections at the same time.
+- **Line 69:** Cleans the section’s search phrases.
+- **Line 70:** Starts with the reviewed catalog candidates.
+- **Line 71:** For each phrase…
+- **Line 72:** …searches Wikimedia Commons…
+- **Line 73:** When a key exists, starts a YouTube candidate search with the caller's reservation callback, ensuring the older route cannot bypass the shared cap.
+- **Line 74:** Adds the results of the sources that worked; a source that failed is ignored without stopping the others.
+- **Line 75:** Closes the preceding block (function, object, or statement body).
+- **Line 76:** Orders candidates by trust: catalog first, then YouTube, then Commons.
+- **Line 77:** Verifies the first eight candidates at the same time with verifyLink; each success keeps the candidate together with what the checker confirmed.
+- **Line 78:** Returns the section with only the candidates that passed verification, and whether anything was tried.
+- **Line 79:** Closes the per-section work.
+- **Line 80:** A set of addresses already chosen, to avoid repeats across sections.
+- **Line 81:** The final list.
+- **Line 82:** Friendly notes about sections with nothing found.
+- **Line 83:** Goes through the sections in order.
+- **Line 84:** Counts picked pictures and videos for this section.
+- **Line 85:** Looks at each verified candidate.
+- **Line 86:** Decides whether it is a picture or a video (YouTube counts as video).
+- **Line 87:** Skips it if the section already has one of that kind, if the address was used already, or if eight items have been chosen.
+- **Line 88:** Counts it.
+- **Line 89:** Remembers its address.
+- **Line 90:** Adds it to the result, labeled “suggested”, with the verified kind and address, a caption, the section it belongs to, the credit and the source page.
+
+### Lines 91–95
+
+```text
+91 |     }
+92 |     if (tried && !picked.image && !picked.video) notes.push(`No verified picture or video was found for ${section.name}.`);
+93 |   }
+94 |   return { media, notes };
+95 | }
+```
+
+- **Line 91:** Closes the preceding block (function, object, or statement body).
+- **Line 92:** If something was searched but nothing verified, writes a note naming the section.
+- **Line 93:** Closes the preceding block (function, object, or statement body).
+- **Line 94:** Returns the media and the notes.
+- **Line 95:** Closes the preceding block (function, object, or statement body).
 
 ## server/media-fixtures.js
 
@@ -7631,24 +7655,24 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 10 | import { withApprovedVideo } from '../client/src/media.js';
 11 | import { createYouTubeQuota } from './youtube-quota.js';
 12 |
-13 | test('shared YouTube quota counts actual searches, preserves catalog access and expires after a day', async () => {
-14 |   let time = 0, requests = 0;
-15 |   const quota = createYouTubeQuota(() => time);
-16 |   const fetcher = async () => { requests++; return Response.json({ items: [] }); };
-17 |   for (let i = 0; i < 25; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
-18 |   await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a')), error => error.status === 429);
-19 |   assert.equal(requests, 25);
-20 |   const catalog = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: { YOUTUBE_API_KEY: 'fake' }, reserveSearch: () => quota.take('coach-a'), verify: async url => ({ url, kind: 'youtube', title: 'Jab' }) });
-21 |   assert.equal(catalog.videos.length, 1);
-22 |   assert.equal(requests, 25);
-23 |   for (let i = 25; i < 80; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take(`coach-${i}`));
-24 |   await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('another')), error => error.status === 429);
-25 |   assert.equal(requests, 80);
-26 |   time += 86400001;
-27 |   await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
-28 |   assert.equal(requests, 81);
-29 | });
-30 |
+13 | test('YouTube diagnostics report safe statuses, reasons and result counts without secret error bodies or URLs', async () => {
+14 |   const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
+15 |   await assert.rejects(youtubeCandidates('inside leg kicks', 'Muay Thai', 'SECRET_KEY', async () => Response.json({ error: { message: 'SECRET_KEY https://private.example', errors: [{ reason: 'quotaExceeded' }] } }, { status: 403 }), 'inside leg kicks', () => {}, diagnostic));
+16 |   assert.equal(logs[0].status, 403);
+17 |   assert.equal(logs[0].reason, 'quotaExceeded');
+18 |   await assert.rejects(youtubeCandidates('jab', 'Boxing', 'SECRET_KEY', async () => { throw new Error('SECRET_KEY'); }, 'jab', () => {}, diagnostic));
+19 |   assert.equal(logs.at(-1).reason, 'network_or_timeout');
+20 |   await youtubeCandidates('jab', 'Boxing', 'SECRET_KEY', async () => Response.json({ items: [] }), 'jab', () => {}, diagnostic);
+21 |   assert.equal(logs.at(-1).returned, 0);
+22 |   assert.equal(logs.at(-1).matched, 0);
+23 |   assert.doesNotMatch(JSON.stringify(logs), /SECRET_KEY|https:\/\//);
+24 | });
+25 |
+26 | test('exact live lesson logs key presence and specific match phrase; missing key differs from zero matches', async () => {
+27 |   const lesson = { title: 'Using Leg Kicks to Close the Distance', goal: 'inside leg kicks to close distance', discipline: 'Muay Thai', audience: 'Adults' };
+28 |   const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
+29 |   const missing = await suggestLessonVideos(lesson, { env: {}, diagnostic });
+30 |   assert.match(missing.message, /YouTube search unavailable/);
 ```
 
 - **Line 1:** Imports Node’s built-in test function.
@@ -7663,446 +7687,514 @@ Unit tests use synthetic data and injected HTTP/verifier functions to check medi
 - **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 12:** Blank line separates related sections for readability; it performs no operation.
-- **Line 13:** Registers a unit test at the actual YouTube HTTP boundary for user/global caps, catalog exemption and rolling expiry.
-- **Line 14:** Initializes a fake clock and number of HTTP requests actually attempted by the mock fetcher.
-- **Line 15:** Creates an isolated shared quota using the test's fake clock.
-- **Line 16:** Defines a mock fetcher that increments the request count and returns an empty valid search response.
-- **Line 17:** Runs twenty-five mock HTTP searches for one coach, consuming that coach's allowance through the real reservation boundary.
-- **Line 18:** Requires the coach's next search to reject with status 429 before HTTP execution.
+- **Line 13:** Registers mocked tests proving status/reason/count logging omits secret-bearing provider messages and request URLs.
+- **Line 14:** Captures diagnostic events and their safe fields in a test-only array.
+- **Line 15:** Simulates a 403 quota failure whose raw message contains a fake key and URL, requiring rejection without exposing that message in logs.
+- **Line 16:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 17:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 18:** Simulates a transport exception containing a fake key and checks that only a fixed network/timeout classification is logged.
 - **Line 19:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 20:** Requests a curated jab video for the already capped coach; mocked link verification succeeds without using the exhausted search allowance.
+- **Line 20:** Simulates a successful empty YouTube result to verify zero counts are logged distinctly from provider failure.
 - **Line 21:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 22:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 23:** Uses distinct additional coaches to bring the shared HTTP request total to eighty.
-- **Line 24:** Requires a new coach's next search to be blocked by the shared global cap, despite that coach having unused personal allowance.
-- **Line 25:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 26:** Moves the fake clock beyond the rolling 24-hour allowance window.
-- **Line 27:** After advancing the clock past a rolling day, verifies a previously capped coach may search again.
-- **Line 28:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 29:** Closes the callback body and the function call that received it.
-- **Line 30:** Blank line separates related sections for readability; it performs no operation.
+- **Line 23:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 24:** Closes the callback body and the function call that received it.
+- **Line 25:** Blank line separates related sections for readability; it performs no operation.
+- **Line 26:** Registers the exact live-lesson regression test for specific phrase selection, key presence, empty results and failed playback checks.
+- **Line 27:** Defines the reported Muay Thai lesson exactly, including its title, goal and Adults audience, using no personal information.
+- **Line 28:** Captures diagnostic events and their safe fields in a test-only array.
+- **Line 29:** Runs suggestions with no configured key and a captured diagnostic sink.
+- **Line 30:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 
 ### Lines 31–60
 
 ```text
-31 | test('lesson video queries extract unknown techniques across lesson text and keep audience context', () => {
-32 |   const query = lessonVideoQuery({ title: 'Leg kicks', goal: 'Using inside leg kicks to close the distance on an opponent', discipline: 'Muay Thai', audience: 'Adults' });
-33 |   assert.deepEqual(query.phrases, ['inside leg kicks', 'close distance']);
-34 |   assert.equal(query.technique, 'inside leg kicks close distance');
-35 |   assert.equal(query.audience, 'adults');
-36 |   for (const field of ['title', 'goal', 'techniques', 'drills', 'coaching_notes']) {
-37 |     const result = lessonVideoQuery({ [field]: 'Inside leg kicks', audience: 'Kids' });
-38 |     assert.ok(result.phrases.includes('inside leg kicks'));
-39 |     assert.equal(result.audience, 'kids non contact');
-40 |   }
-41 |   assert.equal(lessonVideoQuery({ title: 'Kimura armbar triangle', audience: 'Kids' }), null);
-42 |   assert.equal(lessonVideoQuery({ title: 'Chokes and knee strike', audience: 'Kids' }), null);
-43 |   assert.equal(lessonVideoQuery({ title: 'the lesson and training' }), null);
-44 |   const privateDetails = lessonVideoQuery({ title: 'Jab', coaching_notes: 'person@example.com https://example.com/private 555-123-4567' });
-45 |   assert.deepEqual(privateDetails.phrases, ['jab']);
-46 |   const long = lessonVideoQuery({ drills: 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau' });
-47 |   assert.ok(long.phrases.length <= 4);
-48 | });
-49 |
-50 | test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
-51 |   let searches = 0;
-52 |   const verify = async url => ({ url, kind: 'youtube', title: 'Verified instruction' });
-53 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Adults' }, { env: { YOUTUBE_API_KEY: 'fake' }, verify, search: async () => { searches++; return []; } });
-54 |   assert.equal(searches, 0);
-55 |   assert.equal(result.videos.length, 1);
-56 |   assert.equal(result.videos[0].kind, 'youtube');
-57 |   assert.match(result.message, /Save changes/);
+31 |   assert.equal(logs[0].key_present, false);
+32 |   assert.equal(logs[0].match_terms, 'inside leg kicks');
+33 |   const empty = await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'SECRET_KEY' }, search: async () => [], diagnostic });
+34 |   assert.match(empty.message, /No matches found/);
+35 |   const fallback = await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'SECRET_KEY' }, search: async () => [{ url: 'https://www.youtube.com/watch?v=abcdefghij0', title: 'Inside leg kicks' }], verify: async () => { throw new Error('Render cannot reach oEmbed SECRET_KEY'); }, diagnostic });
+36 |   assert.equal(fallback.videos[0].link_only, true);
+37 |   assert.equal(logs.at(-1).passed, 0);
+38 |   assert.equal(logs.at(-1).link_only, 1);
+39 |   assert.doesNotMatch(JSON.stringify(logs), /SECRET_KEY|https:\/\//);
+40 | });
+41 |
+42 | test('shared YouTube quota counts actual searches, preserves catalog access and expires after a day', async () => {
+43 |   let time = 0, requests = 0;
+44 |   const quota = createYouTubeQuota(() => time);
+45 |   const fetcher = async () => { requests++; return Response.json({ items: [] }); };
+46 |   for (let i = 0; i < 25; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
+47 |   await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a')), error => error.status === 429);
+48 |   assert.equal(requests, 25);
+49 |   const catalog = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: { YOUTUBE_API_KEY: 'fake' }, reserveSearch: () => quota.take('coach-a'), verify: async url => ({ url, kind: 'youtube', title: 'Jab' }) });
+50 |   assert.equal(catalog.videos.length, 1);
+51 |   assert.equal(requests, 25);
+52 |   for (let i = 25; i < 80; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take(`coach-${i}`));
+53 |   await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('another')), error => error.status === 429);
+54 |   assert.equal(requests, 80);
+55 |   time += 86400001;
+56 |   await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
+57 |   assert.equal(requests, 81);
 58 | });
 59 |
-60 | test('YouTube relevance uses the main technique rather than requiring every goal or audience word in a title', async () => {
+60 | test('lesson video queries extract unknown techniques across lesson text and keep audience context', () => {
 ```
 
-- **Line 31:** Registers tests of unknown technique extraction from all supported lesson fields, audience context, privacy redaction and phrase bounds.
-- **Line 32:** Builds the exact owner-provided Leg kicks example to verify its extracted phrases.
-- **Line 33:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 31:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 32:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 33:** Runs suggestions with a fake key and successful empty search, testing the separate No matches found message.
 - **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 35:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 36:** Loops over title, goal, techniques, drills and coaching notes to check each field contributes to extraction.
-- **Line 37:** Uses a computed property to place the same unknown technique in each field while retaining Kids context.
+- **Line 35:** Returns one synthetic search candidate but makes playback verification fail with a secret-bearing test exception; the result must survive as link-only without logging the exception.
+- **Line 36:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 37:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 38:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 39:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 40:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 41:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 42:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 43:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 44:** Tests that common email, URL and phone patterns in notes do not enter search phrases.
-- **Line 45:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 46:** Supplies many synthetic words to verify no more than four candidate phrases are retained.
-- **Line 47:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 48:** Closes the callback body and the function call that received it.
-- **Line 49:** Blank line separates related sections for readability; it performs no operation.
-- **Line 50:** Registers a mocked finder test that confirms catalog-first behavior and avoids YouTube search quota when a verified catalog video exists.
-- **Line 51:** Initializes a counter for mocked YouTube search calls.
-- **Line 52:** Defines a fake verifier returning a YouTube result without making a network request.
-- **Line 53:** Suggests videos for an adult jab lesson with a fake key, verifier and counted search function; the curated match should make search unnecessary.
+- **Line 40:** Closes the callback body and the function call that received it.
+- **Line 41:** Blank line separates related sections for readability; it performs no operation.
+- **Line 42:** Registers a unit test at the actual YouTube HTTP boundary for user/global caps, catalog exemption and rolling expiry.
+- **Line 43:** Initializes a fake clock and number of HTTP requests actually attempted by the mock fetcher.
+- **Line 44:** Creates an isolated shared quota using the test's fake clock.
+- **Line 45:** Defines a mock fetcher that increments the request count and returns an empty valid search response.
+- **Line 46:** Runs twenty-five mock HTTP searches for one coach, consuming that coach's allowance through the real reservation boundary.
+- **Line 47:** Requires the coach's next search to reject with status 429 before HTTP execution.
+- **Line 48:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 49:** Requests a curated jab video for the already capped coach; mocked link verification succeeds without using the exhausted search allowance.
+- **Line 50:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 51:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 52:** Uses distinct additional coaches to bring the shared HTTP request total to eighty.
+- **Line 53:** Requires a new coach's next search to be blocked by the shared global cap, despite that coach having unused personal allowance.
 - **Line 54:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 55:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 56:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 55:** Moves the fake clock beyond the rolling 24-hour allowance window.
+- **Line 56:** After advancing the clock past a rolling day, verifies a previously capped coach may search again.
 - **Line 57:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 58:** Closes the callback body and the function call that received it.
 - **Line 59:** Blank line separates related sections for readability; it performs no operation.
-- **Line 60:** Registers a mock search test showing that a relevant technique title need not repeat every lesson goal or audience word.
+- **Line 60:** Registers tests of unknown technique extraction from all supported lesson fields, audience context, privacy redaction and phrase bounds.
 
 ### Lines 61–90
 
 ```text
-61 |   const results = await youtubeCandidates('inside leg kicks close distance drill kids non contact', 'Muay Thai', 'fake', async () => Response.json({ items: [{ id: { videoId: 'abcdefghij0' }, snippet: { title: 'Inside leg kicks tutorial', channelTitle: 'Coach' } }, { id: { videoId: 'abcdefghij1' }, snippet: { title: 'Cooking tutorial' } }] }), 'inside leg kicks');
-62 |   assert.equal(results.length, 1);
-63 |   assert.equal(results[0].title, 'Inside leg kicks tutorial');
-64 | });
-65 |
-66 | test('video fallback searches once, passes kids context, filters broken links and bounds results', async () => {
-67 |   let searches = 0;
-68 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
-69 |     env: { YOUTUBE_API_KEY: 'fake' },
-70 |     search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
-71 |     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
-72 |   });
-73 |   assert.equal(searches, 1);
-74 |   assert.equal(result.videos.length, 4);
-75 |   const empty = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: {}, verify: async () => { throw new Error('blocked'); } });
-76 |   assert.deepEqual(empty.videos, []);
-77 |   assert.match(empty.message, /No playable/);
-78 | });
-79 |
-80 | test('video approval creates an editable copy, preserves saved attachments and prevents duplicate additions', () => {
-81 |   const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
-82 |   const video = { url: 'https://www.youtube.com/watch?v=abcdefghij1', title: 'Drill' };
-83 |   const approved = withApprovedVideo(existing, video);
-84 |   assert.equal(existing.length, 1);
-85 |   assert.equal(approved.length, 2);
-86 |   assert.equal(approved[1].origin, 'suggested');
-87 |   assert.equal(withApprovedVideo(approved, video).length, 2);
-88 |   assert.equal(withApprovedVideo(existing).length, 1);
-89 |   assert.throws(() => withApprovedVideo(Array.from({ length: 12 }, () => existing[0]), video), /maximum/);
-90 | });
+61 |   const query = lessonVideoQuery({ title: 'Leg kicks', goal: 'Using inside leg kicks to close the distance on an opponent', discipline: 'Muay Thai', audience: 'Adults' });
+62 |   assert.deepEqual(query.phrases, ['inside leg kicks', 'close distance']);
+63 |   assert.equal(query.technique, 'inside leg kicks close distance');
+64 |   assert.equal(query.audience, 'adults');
+65 |   for (const field of ['title', 'goal', 'techniques', 'drills', 'coaching_notes']) {
+66 |     const result = lessonVideoQuery({ [field]: 'Inside leg kicks', audience: 'Kids' });
+67 |     assert.ok(result.phrases.includes('inside leg kicks'));
+68 |     assert.equal(result.audience, 'kids non contact');
+69 |   }
+70 |   assert.equal(lessonVideoQuery({ title: 'Kimura armbar triangle', audience: 'Kids' }), null);
+71 |   assert.equal(lessonVideoQuery({ title: 'Chokes and knee strike', audience: 'Kids' }), null);
+72 |   assert.equal(lessonVideoQuery({ title: 'the lesson and training' }), null);
+73 |   const privateDetails = lessonVideoQuery({ title: 'Jab', coaching_notes: 'person@example.com https://example.com/private 555-123-4567' });
+74 |   assert.deepEqual(privateDetails.phrases, ['jab']);
+75 |   const long = lessonVideoQuery({ drills: 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau' });
+76 |   assert.ok(long.phrases.length <= 4);
+77 | });
+78 |
+79 | test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
+80 |   let searches = 0;
+81 |   const verify = async url => ({ url, kind: 'youtube', title: 'Verified instruction' });
+82 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Adults' }, { env: { YOUTUBE_API_KEY: 'fake' }, verify, search: async () => { searches++; return []; } });
+83 |   assert.equal(searches, 0);
+84 |   assert.equal(result.videos.length, 1);
+85 |   assert.equal(result.videos[0].kind, 'youtube');
+86 |   assert.match(result.message, /Save changes/);
+87 | });
+88 |
+89 | test('YouTube relevance uses the main technique rather than requiring every goal or audience word in a title', async () => {
+90 |   const results = await youtubeCandidates('inside leg kicks close distance drill kids non contact', 'Muay Thai', 'fake', async () => Response.json({ items: [{ id: { videoId: 'abcdefghij0' }, snippet: { title: 'Inside leg kicks tutorial', channelTitle: 'Coach' } }, { id: { videoId: 'abcdefghij1' }, snippet: { title: 'Cooking tutorial' } }] }), 'inside leg kicks');
 ```
 
-- **Line 61:** Calls the existing YouTube mapper with a fake key and HTTP response containing one matching technique video and one unrelated video; the main phrase controls relevance.
+- **Line 61:** Builds the exact owner-provided Leg kicks example to verify its extracted phrases.
 - **Line 62:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 63:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 64:** Closes the callback body and the function call that received it.
-- **Line 65:** Blank line separates related sections for readability; it performs no operation.
-- **Line 66:** Registers a test for one fallback search, explicit kids context, omission of failed checks and bounded output.
-- **Line 67:** Initializes a counter for mocked YouTube search calls.
-- **Line 68:** Starts a kids jab suggestion with explicitly injected test dependencies.
-- **Line 69:** Supplies a fake API key solely to exercise the configured-search branch; no real key is loaded.
-- **Line 70:** Counts the search, checks the exact safe query and discipline, then generates eight synthetic candidate URLs to test the five-candidate verification bound.
-- **Line 71:** Makes one candidate fail verification with a synthetic private error and returns safe metadata for the others.
-- **Line 72:** Closes the callback body and the function call that received it.
-- **Line 73:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 64:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 65:** Loops over title, goal, techniques, drills and coaching notes to check each field contributes to extraction.
+- **Line 66:** Uses a computed property to place the same unknown technique in each field while retaining Kids context.
+- **Line 67:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 68:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 69:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 70:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 71:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 72:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 73:** Tests that common email, URL and phone patterns in notes do not enter search phrases.
 - **Line 74:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 75:** Simulates an unavailable catalog video with no configured search key to exercise the friendly empty-results path.
+- **Line 75:** Supplies many synthetic words to verify no more than four candidate phrases are retained.
 - **Line 76:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 77:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 78:** Closes the callback body and the function call that received it.
-- **Line 79:** Blank line separates related sections for readability; it performs no operation.
-- **Line 80:** Registers a pure approval test verifying copying, duplicate protection, attachment bounds and no implicit save.
-- **Line 81:** Defines one existing synthetic attachment in the saved-media array.
-- **Line 82:** Defines a different synthetic video available for explicit approval.
-- **Line 83:** Calls the approval helper and retains the new editable array for assertions without modifying the original.
+- **Line 77:** Closes the callback body and the function call that received it.
+- **Line 78:** Blank line separates related sections for readability; it performs no operation.
+- **Line 79:** Registers a mocked finder test that confirms catalog-first behavior and avoids YouTube search quota when a verified catalog video exists.
+- **Line 80:** Initializes a counter for mocked YouTube search calls.
+- **Line 81:** Defines a fake verifier returning a YouTube result without making a network request.
+- **Line 82:** Suggests videos for an adult jab lesson with a fake key, verifier and counted search function; the curated match should make search unnecessary.
+- **Line 83:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 84:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 85:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 86:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 87:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 88:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 89:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
-- **Line 90:** Closes the callback body and the function call that received it.
+- **Line 87:** Closes the callback body and the function call that received it.
+- **Line 88:** Blank line separates related sections for readability; it performs no operation.
+- **Line 89:** Registers a mock search test showing that a relevant technique title need not repeat every lesson goal or audience word.
+- **Line 90:** Calls the existing YouTube mapper with a fake key and HTTP response containing one matching technique video and one unrelated video; the main phrase controls relevance.
 
 ### Lines 91–120
 
 ```text
-91 |
-92 |
-93 | test('file signatures identify supported pictures and videos and reject everything else', () => {
-94 |   assert.deepEqual(sniffMedia(png), { kind: 'image', mime: 'image/png' });
-95 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)])), { kind: 'image', mime: 'image/jpeg' });
-96 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/gif' });
-97 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/webp' });
-98 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(32)])), { kind: 'video', mime: 'video/mp4' });
-99 |   assert.deepEqual(sniffMedia(webm), { kind: 'video', mime: 'video/webm' });
-100 |   assert.equal(sniffMedia(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
-101 |   assert.equal(sniffMedia(Buffer.from('<!doctype html><html></html>')), null);
-102 |   assert.equal(sniffMedia(Buffer.alloc(4)), null);
-103 |   assert.equal(sniffMedia(null), null);
-104 | });
-105 |
-106 | test('YouTube links in every common form resolve to the same 11 character ID', () => {
-107 |   const id = 'dQw4w9WgXcQ';
-108 |   for (const link of [`https://www.youtube.com/watch?v=${id}`, `https://youtube.com/watch?v=${id}&t=30s`, `https://m.youtube.com/watch?v=${id}`, `https://youtu.be/${id}?si=x`, `https://www.youtube.com/embed/${id}`, `https://www.youtube-nocookie.com/embed/${id}`, `https://www.youtube.com/shorts/${id}`, `  https://www.youtube.com/live/${id}  `]) assert.equal(youtubeId(link), id, link);
-109 |   for (const link of ['https://www.youtube.com/watch?v=short', 'https://example.com/watch?v=' + id, 'https://notyoutube.com/embed/' + id, 'javascript:alert(1)', 'not a link', '', null]) assert.equal(youtubeId(link), null, String(link));
-110 | });
-111 |
-112 | test('private, loopback and link-local network addresses are never public', async () => {
-113 |   for (const address of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'not-an-address']) assert.equal(isPublicAddress(address), false, address);
-114 |   for (const address of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(address), true, address);
-115 |   await new Promise(resolve => publicLookup('localhost', {}, error => { assert.ok(error instanceof MediaLinkError); resolve(); }));
-116 | });
-117 |
-118 | test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
-119 |   const calls = [];
-120 |   const request = async (url, options) => {
+91 |   assert.equal(results.length, 1);
+92 |   assert.equal(results[0].title, 'Inside leg kicks tutorial');
+93 | });
+94 |
+95 | test('video fallback searches once, passes kids context, filters broken links and bounds results', async () => {
+96 |   let searches = 0;
+97 |   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
+98 |     env: { YOUTUBE_API_KEY: 'fake' },
+99 |     search: async (query, discipline) => { searches++; assert.equal(query, 'jab drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+100 |     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
+101 |   });
+102 |   assert.equal(searches, 1);
+103 |   assert.equal(result.videos.length, 5);
+104 |   assert.equal(result.videos.filter(item => item.link_only).length, 1);
+105 |   const empty = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: {}, verify: async () => { throw new Error('blocked'); } });
+106 |   assert.equal(empty.videos.length, 1);
+107 |   assert.equal(empty.videos[0].link_only, true);
+108 |   assert.match(empty.message, /unconfirmed playback/);
+109 | });
+110 |
+111 | test('video approval creates an editable copy, preserves saved attachments and prevents duplicate additions', () => {
+112 |   const existing = [{ id: 1, url: 'https://www.youtube.com/watch?v=abcdefghij0' }];
+113 |   const video = { url: 'https://www.youtube.com/watch?v=abcdefghij1', title: 'Drill' };
+114 |   const approved = withApprovedVideo(existing, video);
+115 |   assert.equal(existing.length, 1);
+116 |   assert.equal(approved.length, 2);
+117 |   assert.equal(approved[1].origin, 'suggested');
+118 |   assert.equal(withApprovedVideo(approved, video).length, 2);
+119 |   assert.equal(withApprovedVideo(existing).length, 1);
+120 |   assert.throws(() => withApprovedVideo(Array.from({ length: 12 }, () => existing[0]), video), /maximum/);
 ```
 
-- **Line 91:** Blank line separates related sections for readability; it performs no operation.
-- **Line 92:** Blank line separates related sections for readability; it performs no operation.
-- **Line 93:** Registers the test that real file signatures are recognised and everything else rejected.
-- **Line 94:** A PNG is recognised as an image of type image/png.
-- **Line 95:** A JPEG signature (FF D8 FF E0) plus padding is recognised.
-- **Line 96:** A GIF89a header is recognised.
-- **Line 97:** A RIFF container with WEBP is recognised (\0 is a zero byte).
-- **Line 98:** A file with ftyp at byte 4 is recognised as MP4.
-- **Line 99:** The fake WebM is recognised.
-- **Line 100:** SVG text is rejected, because SVG can contain scripts.
-- **Line 101:** HTML is rejected.
-- **Line 102:** A four-byte buffer is too short and is rejected.
-- **Line 103:** A missing buffer is rejected without an error.
-- **Line 104:** Closes the callback body and the function call that received it.
-- **Line 105:** Blank line separates related sections for readability; it performs no operation.
-- **Line 106:** Registers the YouTube link parsing test.
-- **Line 107:** A sample video id.
-- **Line 108:** Eight common link shapes (watch, with extra parameters, mobile, short youtu.be, embed, privacy-enhanced embed, shorts and live, including surrounding spaces) must all give the same id.
-- **Line 109:** Bad links must give null: wrong-length ids, other websites, look-alike host names, a javascript: address, plain text, an empty string and null.
-- **Line 110:** Closes the callback body and the function call that received it.
-- **Line 111:** Blank line separates related sections for readability; it performs no operation.
-- **Line 112:** Registers the private-address test (asynchronous because one check uses a real lookup of localhost).
-- **Line 113:** Loopback, private, link-local (cloud metadata), reserved, IPv6 private and IPv4-mapped private addresses, plus text that is not an address, must all be reported as not public.
-- **Line 114:** Ordinary public addresses, including ones just outside the private ranges, must be reported as public.
-- **Line 115:** Calls the real lookup function with the name localhost and expects it to be refused with a MediaLinkError (localhost resolves to a private address).
-- **Line 116:** Closes the callback body and the function call that received it.
-- **Line 117:** Blank line separates related sections for readability; it performs no operation.
-- **Line 118:** Registers the safeFetch test.
-- **Line 119:** Records the addresses requested.
-- **Line 120:** A fake request function that stands in for the network.
+- **Line 91:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 92:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 93:** Closes the callback body and the function call that received it.
+- **Line 94:** Blank line separates related sections for readability; it performs no operation.
+- **Line 95:** Registers a test for one fallback search, explicit kids context, omission of failed checks and bounded output.
+- **Line 96:** Initializes a counter for mocked YouTube search calls.
+- **Line 97:** Starts a kids jab suggestion with explicitly injected test dependencies.
+- **Line 98:** Supplies a fake API key solely to exercise the configured-search branch; no real key is loaded.
+- **Line 99:** Counts the search, checks the exact safe query and discipline, then generates eight synthetic candidate URLs to test the five-candidate verification bound.
+- **Line 100:** Makes one candidate fail verification with a synthetic private error and returns safe metadata for the others.
+- **Line 101:** Closes the callback body and the function call that received it.
+- **Line 102:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 103:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 104:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 105:** Simulates an unavailable catalog video with no configured search key to exercise the friendly empty-results path.
+- **Line 106:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 107:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 108:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 109:** Closes the callback body and the function call that received it.
+- **Line 110:** Blank line separates related sections for readability; it performs no operation.
+- **Line 111:** Registers a pure approval test verifying copying, duplicate protection, attachment bounds and no implicit save.
+- **Line 112:** Defines one existing synthetic attachment in the saved-media array.
+- **Line 113:** Defines a different synthetic video available for explicit approval.
+- **Line 114:** Calls the approval helper and retains the new editable array for assertions without modifying the original.
+- **Line 115:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 116:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 117:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 118:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 119:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 120:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 
 ### Lines 121–150
 
 ```text
-121 |     calls.push(url.href);
-122 |     assert.equal(options.method, 'GET');
-123 |     if (url.pathname === '/start') return { status: 302, headers: { location: '/next' }, body: Buffer.alloc(0) };
-124 |     if (url.pathname === '/to-http') return { status: 302, headers: { location: 'http://example.com/plain' }, body: Buffer.alloc(0) };
-125 |     if (url.pathname === '/loop') return { status: 302, headers: { location: '/loop' }, body: Buffer.alloc(0) };
-126 |     return { status: 200, headers: {}, body: Buffer.from('ok') };
-127 |   };
-128 |   const result = await safeFetch('https://example.com/start', { request });
-129 |   assert.equal(result.url, 'https://example.com/next');
-130 |   assert.deepEqual(calls, ['https://example.com/start', 'https://example.com/next']);
-131 |   for (const bad of ['http://example.com/a', 'ftp://example.com/a', 'https://example.com:8443/a', 'https://user:pass@example.com/a', 'nonsense', 'https://example.com/to-http', 'https://example.com/loop']) await assert.rejects(safeFetch(bad, { request }), MediaLinkError, bad);
-132 | });
-133 |
-134 | test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
-135 |   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
-136 |   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
-137 |   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
-138 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(404, '') }), /does not exist or is private/);
-139 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(401, '') }), /does not allow embedding/);
-140 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(500, '') }), /could not confirm/);
-141 |   const image = await verifyLink('https://cdn.example.com/photos/Double-leg_setup.png', { fetcher: reply(200, png, { 'content-type': 'image/png' }) });
-142 |   assert.deepEqual(image, { kind: 'image', url: 'https://cdn.example.com/photos/Double-leg_setup.png', title: 'Double leg setup', credit: '', source_page: '' });
-143 |   assert.equal((await verifyLink('https://cdn.example.com/clip.webm', { fetcher: reply(206, webm, { 'content-range': 'bytes 0-67/68' }) })).kind, 'video');
-144 |   await assert.rejects(verifyLink('https://example.com/page', { fetcher: reply(200, '<html></html>', { 'content-type': 'text/html; charset=utf-8' }) }), /web page, not a picture or video/);
-145 |   await assert.rejects(verifyLink('https://example.com/logo.svg', { fetcher: reply(200, '<svg xmlns="http://www.w3.org/2000/svg"/>', { 'content-type': 'image/svg+xml' }) }), /not a supported picture/);
-146 |   await assert.rejects(verifyLink('https://example.com/missing.png', { fetcher: reply(404, 'no') }), /status 404/);
-147 |   await assert.rejects(verifyLink('https://example.com/huge.png', { fetcher: reply(200, png, { 'content-length': String(100 * 1024 * 1024) }) }), /very large/);
-148 |   for (const bad of ['', '   ', 'not a link', 'http://example.com/a.png', 'x'.repeat(2100)]) await assert.rejects(verifyLink(bad, { fetcher: reply(200, png) }), MediaLinkError, bad);
-149 | });
-150 |
+121 | });
+122 |
+123 |
+124 | test('file signatures identify supported pictures and videos and reject everything else', () => {
+125 |   assert.deepEqual(sniffMedia(png), { kind: 'image', mime: 'image/png' });
+126 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)])), { kind: 'image', mime: 'image/jpeg' });
+127 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/gif' });
+128 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(32)])), { kind: 'image', mime: 'image/webp' });
+129 |   assert.deepEqual(sniffMedia(Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(32)])), { kind: 'video', mime: 'video/mp4' });
+130 |   assert.deepEqual(sniffMedia(webm), { kind: 'video', mime: 'video/webm' });
+131 |   assert.equal(sniffMedia(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
+132 |   assert.equal(sniffMedia(Buffer.from('<!doctype html><html></html>')), null);
+133 |   assert.equal(sniffMedia(Buffer.alloc(4)), null);
+134 |   assert.equal(sniffMedia(null), null);
+135 | });
+136 |
+137 | test('YouTube links in every common form resolve to the same 11 character ID', () => {
+138 |   const id = 'dQw4w9WgXcQ';
+139 |   for (const link of [`https://www.youtube.com/watch?v=${id}`, `https://youtube.com/watch?v=${id}&t=30s`, `https://m.youtube.com/watch?v=${id}`, `https://youtu.be/${id}?si=x`, `https://www.youtube.com/embed/${id}`, `https://www.youtube-nocookie.com/embed/${id}`, `https://www.youtube.com/shorts/${id}`, `  https://www.youtube.com/live/${id}  `]) assert.equal(youtubeId(link), id, link);
+140 |   for (const link of ['https://www.youtube.com/watch?v=short', 'https://example.com/watch?v=' + id, 'https://notyoutube.com/embed/' + id, 'javascript:alert(1)', 'not a link', '', null]) assert.equal(youtubeId(link), null, String(link));
+141 | });
+142 |
+143 | test('private, loopback and link-local network addresses are never public', async () => {
+144 |   for (const address of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'not-an-address']) assert.equal(isPublicAddress(address), false, address);
+145 |   for (const address of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPublicAddress(address), true, address);
+146 |   await new Promise(resolve => publicLookup('localhost', {}, error => { assert.ok(error instanceof MediaLinkError); resolve(); }));
+147 | });
+148 |
+149 | test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
+150 |   const calls = [];
 ```
 
-- **Line 121:** Remembers each requested address.
-- **Line 122:** Checks that a GET request was made.
-- **Line 123:** The /start page redirects to /next.
-- **Line 124:** The /to-http page redirects to an insecure http address.
-- **Line 125:** The /loop page redirects to itself forever.
-- **Line 126:** Every other page answers 200 with a short body.
-- **Line 127:** Closes the preceding block and ends the statement.
-- **Line 128:** Fetches /start through the fake network.
-- **Line 129:** Expects the final address to be the redirect target.
-- **Line 130:** Expects exactly two requests, proving the redirect was followed once.
-- **Line 131:** Expects errors for insecure or non-web schemes, an unusual port, embedded credentials, nonsense text, a redirect to http and an endless redirect loop.
-- **Line 132:** Closes the callback body and the function call that received it.
-- **Line 133:** Blank line separates related sections for readability; it performs no operation.
-- **Line 134:** Registers the verifyLink test.
-- **Line 135:** Helper that creates a fake fetcher returning a chosen status, body and headers.
-- **Line 136:** A YouTube link whose fake oEmbed answer is 200 with a title and channel.
-- **Line 137:** Expects the checked result: kind youtube, the clean watch address, the title, the credit naming the channel and the source page.
-- **Line 138:** A 404 must say the video does not exist or is private.
-- **Line 139:** A 401 must say embedding is not allowed.
-- **Line 140:** A 500 must say YouTube cannot confirm the video now.
-- **Line 141:** A PNG link is verified from the file’s bytes.
-- **Line 142:** Expects kind image and a caption made from the file name (“Double leg setup”).
-- **Line 143:** A WebM link answering 206 (partial content) is recognised as a video.
-- **Line 144:** A link that returns an HTML page is refused with the “web page” message.
-- **Line 145:** An SVG picture is refused as unsupported even though the site calls it an image.
-- **Line 146:** A 404 answer is refused and the status is reported.
-- **Line 147:** A file claiming to be 100 MB is refused as very large.
-- **Line 148:** Empty, blank, non-address, insecure and over-long links must be refused with a MediaLinkError.
-- **Line 149:** Closes the callback body and the function call that received it.
-- **Line 150:** Blank line separates related sections for readability; it performs no operation.
+- **Line 121:** Closes the callback body and the function call that received it.
+- **Line 122:** Blank line separates related sections for readability; it performs no operation.
+- **Line 123:** Blank line separates related sections for readability; it performs no operation.
+- **Line 124:** Registers the test that real file signatures are recognised and everything else rejected.
+- **Line 125:** A PNG is recognised as an image of type image/png.
+- **Line 126:** A JPEG signature (FF D8 FF E0) plus padding is recognised.
+- **Line 127:** A GIF89a header is recognised.
+- **Line 128:** A RIFF container with WEBP is recognised (\0 is a zero byte).
+- **Line 129:** A file with ftyp at byte 4 is recognised as MP4.
+- **Line 130:** The fake WebM is recognised.
+- **Line 131:** SVG text is rejected, because SVG can contain scripts.
+- **Line 132:** HTML is rejected.
+- **Line 133:** A four-byte buffer is too short and is rejected.
+- **Line 134:** A missing buffer is rejected without an error.
+- **Line 135:** Closes the callback body and the function call that received it.
+- **Line 136:** Blank line separates related sections for readability; it performs no operation.
+- **Line 137:** Registers the YouTube link parsing test.
+- **Line 138:** A sample video id.
+- **Line 139:** Eight common link shapes (watch, with extra parameters, mobile, short youtu.be, embed, privacy-enhanced embed, shorts and live, including surrounding spaces) must all give the same id.
+- **Line 140:** Bad links must give null: wrong-length ids, other websites, look-alike host names, a javascript: address, plain text, an empty string and null.
+- **Line 141:** Closes the callback body and the function call that received it.
+- **Line 142:** Blank line separates related sections for readability; it performs no operation.
+- **Line 143:** Registers the private-address test (asynchronous because one check uses a real lookup of localhost).
+- **Line 144:** Loopback, private, link-local (cloud metadata), reserved, IPv6 private and IPv4-mapped private addresses, plus text that is not an address, must all be reported as not public.
+- **Line 145:** Ordinary public addresses, including ones just outside the private ranges, must be reported as public.
+- **Line 146:** Calls the real lookup function with the name localhost and expects it to be refused with a MediaLinkError (localhost resolves to a private address).
+- **Line 147:** Closes the callback body and the function call that received it.
+- **Line 148:** Blank line separates related sections for readability; it performs no operation.
+- **Line 149:** Registers the safeFetch test.
+- **Line 150:** Records the addresses requested.
 
 ### Lines 151–180
 
 ```text
-151 | test('attachment lists accept saved IDs and new links only, with bounded text', () => {
-152 |   const good = validateMediaList([{ id: 3, title: ' Jab ', activity: 'Warm-up — 5 minutes' }, { url: ' https://youtu.be/dQw4w9WgXcQ ', title: '', activity: '', origin: 'suggested', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
-153 |   assert.deepEqual(good.media, [{ id: 3, title: 'Jab', activity: 'Warm-up — 5 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'suggested', title: '', activity: '', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
-154 |   for (const bad of ['x', {}, [null], [{ id: 0 }], [{ id: 1.5 }], [{ id: 1 }, { id: 1 }], [{ id: 1, url: 'https://a.com/x.png' }], [{ url: '' }], [{ url: 'https://a.com/x.png', origin: 'upload' }], [{ url: 'https://a.com/x.png', kind: 'video' }], [{ url: 'https://a.com/x.png', title: 'x'.repeat(121) }], [{ url: 'https://a.com/x.png', source_page: 'javascript:alert(1)' }], Array.from({ length: 13 }, (_, id) => ({ id: id + 1 }))]) assert.ok(validateMediaList(bad).error, JSON.stringify(bad).slice(0, 60));
-155 |   assert.deepEqual(validateMediaList([]).media, []);
-156 | });
-157 |
-158 | test('activity helpers keep attachments with the right activity when headings change', () => {
-159 |   const media = [{ id: 1, activity: 'Warm-up — 10 minutes' }, { id: 2, activity: 'Drill — 5 minutes' }, { id: 3, activity: '' }];
-160 |   assert.deepEqual(renameActivity(media, 'Warm-up — 10 minutes', 'Warm-up — 12 minutes').map(item => item.activity), ['Warm-up — 12 minutes', 'Drill — 5 minutes', '']);
-161 |   assert.equal(renameActivity(media, '', 'New'), media);
-162 |   assert.deepEqual(unassignedMedia(media, ['Drill — 5 minutes']).map(item => item.id), [1, 3]);
-163 |   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
-164 | });
-165 |
-166 | const commonsReply = pages => async () => Response.json({ query: { pages } });
-167 | const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
-168 |
-169 | test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
-170 |   const results = await commonsCandidates('double leg takedown', commonsReply([page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg.svg', 'image/svg+xml'), page('File:Random_beach.jpg', 'image/jpeg', { ImageDescription: { value: 'Beach' } }), page('File:Clip.ogv', 'video/ogg')]));
-171 |   const images = results.filter(item => item.url.includes('/thumb/'));
-172 |   assert.equal(images.length, 1);
-173 |   assert.equal(images[0].title, 'Double leg takedown');
-174 |   assert.equal(images[0].credit, 'Wikimedia Commons — Jane Coach, CC BY-SA 4.0');
-175 |   assert.match(images[0].source_page, /^https:\/\/commons\.wikimedia\.org\//);
-176 |   await assert.rejects(commonsCandidates('x', async () => new Response('', { status: 500 })));
-177 |   assert.deepEqual(cleanQueries(['  knee   cut  ', 'a', 'x'.repeat(81), 7, 'b'.repeat(5), 'third one']), ['knee cut', 'bbbbb']);
-178 | });
-179 |
-180 | test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
+151 |   const request = async (url, options) => {
+152 |     calls.push(url.href);
+153 |     assert.equal(options.method, 'GET');
+154 |     if (url.pathname === '/start') return { status: 302, headers: { location: '/next' }, body: Buffer.alloc(0) };
+155 |     if (url.pathname === '/to-http') return { status: 302, headers: { location: 'http://example.com/plain' }, body: Buffer.alloc(0) };
+156 |     if (url.pathname === '/loop') return { status: 302, headers: { location: '/loop' }, body: Buffer.alloc(0) };
+157 |     return { status: 200, headers: {}, body: Buffer.from('ok') };
+158 |   };
+159 |   const result = await safeFetch('https://example.com/start', { request });
+160 |   assert.equal(result.url, 'https://example.com/next');
+161 |   assert.deepEqual(calls, ['https://example.com/start', 'https://example.com/next']);
+162 |   for (const bad of ['http://example.com/a', 'ftp://example.com/a', 'https://example.com:8443/a', 'https://user:pass@example.com/a', 'nonsense', 'https://example.com/to-http', 'https://example.com/loop']) await assert.rejects(safeFetch(bad, { request }), MediaLinkError, bad);
+163 | });
+164 |
+165 | test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
+166 |   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
+167 |   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
+168 |   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+169 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(404, '') }), /does not exist or is private/);
+170 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(401, '') }), /does not allow embedding/);
+171 |   await assert.rejects(verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(500, '') }), /could not confirm/);
+172 |   const image = await verifyLink('https://cdn.example.com/photos/Double-leg_setup.png', { fetcher: reply(200, png, { 'content-type': 'image/png' }) });
+173 |   assert.deepEqual(image, { kind: 'image', url: 'https://cdn.example.com/photos/Double-leg_setup.png', title: 'Double leg setup', credit: '', source_page: '' });
+174 |   assert.equal((await verifyLink('https://cdn.example.com/clip.webm', { fetcher: reply(206, webm, { 'content-range': 'bytes 0-67/68' }) })).kind, 'video');
+175 |   await assert.rejects(verifyLink('https://example.com/page', { fetcher: reply(200, '<html></html>', { 'content-type': 'text/html; charset=utf-8' }) }), /web page, not a picture or video/);
+176 |   await assert.rejects(verifyLink('https://example.com/logo.svg', { fetcher: reply(200, '<svg xmlns="http://www.w3.org/2000/svg"/>', { 'content-type': 'image/svg+xml' }) }), /not a supported picture/);
+177 |   await assert.rejects(verifyLink('https://example.com/missing.png', { fetcher: reply(404, 'no') }), /status 404/);
+178 |   await assert.rejects(verifyLink('https://example.com/huge.png', { fetcher: reply(200, png, { 'content-length': String(100 * 1024 * 1024) }) }), /very large/);
+179 |   for (const bad of ['', '   ', 'not a link', 'http://example.com/a.png', 'x'.repeat(2100)]) await assert.rejects(verifyLink(bad, { fetcher: reply(200, png) }), MediaLinkError, bad);
+180 | });
 ```
 
-- **Line 151:** Registers the attachment-list validation test.
-- **Line 152:** Validates a good list: one stored attachment with extra spaces in its caption and one new suggested link with spaces around the address.
-- **Line 153:** Expects spaces trimmed and only the allowed fields kept.
-- **Line 154:** Expects errors for many bad lists: not a list, not objects, ids of zero or fractions, duplicate ids, a stored attachment carrying a link, an empty link, an upload origin, a client-supplied kind, an over-long caption, a javascript: source page, and more than 12 attachments.
-- **Line 155:** An empty list is valid.
-- **Line 156:** Closes the callback body and the function call that received it.
-- **Line 157:** Blank line separates related sections for readability; it performs no operation.
-- **Line 158:** Registers the test for the activity helper functions.
-- **Line 159:** Three sample attachments: for a warm-up, for a drill and one for the whole lesson.
-- **Line 160:** Renaming the warm-up heading moves only the warm-up attachment to the new heading.
-- **Line 161:** Renaming from an empty heading returns the very same list, unchanged.
-- **Line 162:** With only the drill heading existing, the warm-up and whole-lesson attachments are unassigned (ids 1 and 3).
-- **Line 163:** The request payload keeps only the id, caption and activity for a stored attachment and the full link fields for a new one, ignoring the extra url on the stored one.
-- **Line 164:** Closes the callback body and the function call that received it.
-- **Line 165:** Blank line separates related sections for readability; it performs no operation.
-- **Line 166:** Helper that builds a fake Wikimedia answer containing the given pages.
-- **Line 167:** Helper that builds one fake Commons file page with picture and description addresses, a file type, an author containing HTML, a licence and a description.
-- **Line 168:** Blank line separates related sections for readability; it performs no operation.
-- **Line 169:** Registers the Commons search test.
-- **Line 170:** Searches with fake pages: a good JPEG, an SVG, an unrelated beach picture and an Ogg video.
-- **Line 171:** Keeps the picture results (their addresses contain /thumb/).
-- **Line 172:** Exactly one picture should remain.
-- **Line 173:** Its title is made from the file name.
-- **Line 174:** Its credit names Wikimedia Commons, the author (HTML stripped) and the licence.
-- **Line 175:** Its source page is a Commons address.
-- **Line 176:** A failing search service (status 500) makes the function reject.
-- **Line 177:** Search-phrase cleaning keeps two valid phrases, tidies spaces, and drops too short, too long, non-text and extra phrases.
-- **Line 178:** Closes the callback body and the function call that received it.
-- **Line 179:** Blank line separates related sections for readability; it performs no operation.
-- **Line 180:** Registers the finder test.
+- **Line 151:** A fake request function that stands in for the network.
+- **Line 152:** Remembers each requested address.
+- **Line 153:** Checks that a GET request was made.
+- **Line 154:** The /start page redirects to /next.
+- **Line 155:** The /to-http page redirects to an insecure http address.
+- **Line 156:** The /loop page redirects to itself forever.
+- **Line 157:** Every other page answers 200 with a short body.
+- **Line 158:** Closes the preceding block and ends the statement.
+- **Line 159:** Fetches /start through the fake network.
+- **Line 160:** Expects the final address to be the redirect target.
+- **Line 161:** Expects exactly two requests, proving the redirect was followed once.
+- **Line 162:** Expects errors for insecure or non-web schemes, an unusual port, embedded credentials, nonsense text, a redirect to http and an endless redirect loop.
+- **Line 163:** Closes the callback body and the function call that received it.
+- **Line 164:** Blank line separates related sections for readability; it performs no operation.
+- **Line 165:** Registers the verifyLink test.
+- **Line 166:** Helper that creates a fake fetcher returning a chosen status, body and headers.
+- **Line 167:** A YouTube link whose fake oEmbed answer is 200 with a title and channel.
+- **Line 168:** Expects the checked result: kind youtube, the clean watch address, the title, the credit naming the channel and the source page.
+- **Line 169:** A 404 must say the video does not exist or is private.
+- **Line 170:** A 401 must say embedding is not allowed.
+- **Line 171:** A 500 must say YouTube cannot confirm the video now.
+- **Line 172:** A PNG link is verified from the file’s bytes.
+- **Line 173:** Expects kind image and a caption made from the file name (“Double leg setup”).
+- **Line 174:** A WebM link answering 206 (partial content) is recognised as a video.
+- **Line 175:** A link that returns an HTML page is refused with the “web page” message.
+- **Line 176:** An SVG picture is refused as unsupported even though the site calls it an image.
+- **Line 177:** A 404 answer is refused and the status is reported.
+- **Line 178:** A file claiming to be 100 MB is refused as very large.
+- **Line 179:** Empty, blank, non-address, insecure and over-long links must be refused with a MediaLinkError.
+- **Line 180:** Closes the callback body and the function call that received it.
 
 ### Lines 181–210
 
 ```text
-181 |   const verified = [];
-182 |   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
-183 |   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
-184 |   const sections = [
-185 |     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
-186 |     { name: 'Technique teaching', instructions: 'Teach the double leg takedown.', queries: ['double leg takedown'] },
-187 |     { name: 'Progressive drills', instructions: 'Repeat the double leg takedown.', queries: ['double leg takedown'] },
-188 |   ];
-189 |   const result = await findMedia({ discipline: 'Wrestling', sections }, { fetcher, verify, env: {} });
-190 |   assert.ok(result.media.length >= 2);
-191 |   assert.ok(result.media.every(item => item.origin === 'suggested' && ['Technique teaching', 'Progressive drills'].includes(item.activity)));
-192 |   assert.equal(new Set(result.media.map(item => item.url)).size, result.media.length);
-193 |   assert.ok(result.media.every(item => !item.url.includes('broken')));
-194 |   assert.ok(!result.media.some(item => item.activity === 'Warm-up'));
-195 |   assert.ok(result.media.some(item => item.credit.startsWith('Wikimedia Commons') || item.credit.includes('David Avellan')));
-196 |   assert.ok(result.notes.every(note => typeof note === 'string'));
-197 | });
-198 |
-199 | test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
-200 |   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
-201 |   const fetcher = async () => Response.json({ query: { pages: [] } });
-202 |   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
-203 |   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
-204 |   const asked = await findMedia({ discipline: 'Muay Thai', sections: [{ ...passing, queries: ['jab'] }] }, { fetcher, verify, env: {} });
-205 |   assert.ok(asked.media.length >= 1 && asked.media.every(item => item.activity === 'Technique teaching'));
-206 | });
-207 |
-208 | test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
-209 |   const seen = [];
-210 |   const fetcher = async (url, options) => {
+181 |
+182 | test('attachment lists accept saved IDs and new links only, with bounded text', () => {
+183 |   const good = validateMediaList([{ id: 3, title: ' Jab ', activity: 'Warm-up — 5 minutes' }, { url: ' https://youtu.be/dQw4w9WgXcQ ', title: '', activity: '', origin: 'suggested', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+184 |   assert.deepEqual(good.media, [{ id: 3, title: 'Jab', activity: 'Warm-up — 5 minutes' }, { url: 'https://youtu.be/dQw4w9WgXcQ', origin: 'suggested', title: '', activity: '', credit: 'YouTube', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }]);
+185 |   for (const bad of ['x', {}, [null], [{ id: 0 }], [{ id: 1.5 }], [{ id: 1 }, { id: 1 }], [{ id: 1, url: 'https://a.com/x.png' }], [{ url: '' }], [{ url: 'https://a.com/x.png', origin: 'upload' }], [{ url: 'https://a.com/x.png', kind: 'video' }], [{ url: 'https://a.com/x.png', title: 'x'.repeat(121) }], [{ url: 'https://a.com/x.png', source_page: 'javascript:alert(1)' }], Array.from({ length: 13 }, (_, id) => ({ id: id + 1 }))]) assert.ok(validateMediaList(bad).error, JSON.stringify(bad).slice(0, 60));
+186 |   assert.deepEqual(validateMediaList([]).media, []);
+187 | });
+188 |
+189 | test('activity helpers keep attachments with the right activity when headings change', () => {
+190 |   const media = [{ id: 1, activity: 'Warm-up — 10 minutes' }, { id: 2, activity: 'Drill — 5 minutes' }, { id: 3, activity: '' }];
+191 |   assert.deepEqual(renameActivity(media, 'Warm-up — 10 minutes', 'Warm-up — 12 minutes').map(item => item.activity), ['Warm-up — 12 minutes', 'Drill — 5 minutes', '']);
+192 |   assert.equal(renameActivity(media, '', 'New'), media);
+193 |   assert.deepEqual(unassignedMedia(media, ['Drill — 5 minutes']).map(item => item.id), [1, 3]);
+194 |   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
+195 | });
+196 |
+197 | const commonsReply = pages => async () => Response.json({ query: { pages } });
+198 | const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
+199 |
+200 | test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
+201 |   const results = await commonsCandidates('double leg takedown', commonsReply([page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg.svg', 'image/svg+xml'), page('File:Random_beach.jpg', 'image/jpeg', { ImageDescription: { value: 'Beach' } }), page('File:Clip.ogv', 'video/ogg')]));
+202 |   const images = results.filter(item => item.url.includes('/thumb/'));
+203 |   assert.equal(images.length, 1);
+204 |   assert.equal(images[0].title, 'Double leg takedown');
+205 |   assert.equal(images[0].credit, 'Wikimedia Commons — Jane Coach, CC BY-SA 4.0');
+206 |   assert.match(images[0].source_page, /^https:\/\/commons\.wikimedia\.org\//);
+207 |   await assert.rejects(commonsCandidates('x', async () => new Response('', { status: 500 })));
+208 |   assert.deepEqual(cleanQueries(['  knee   cut  ', 'a', 'x'.repeat(81), 7, 'b'.repeat(5), 'third one']), ['knee cut', 'bbbbb']);
+209 | });
+210 |
 ```
 
-- **Line 181:** Records the addresses sent to verification.
-- **Line 182:** A fake verifier that rejects any address containing “broken” and otherwise confirms a kind.
-- **Line 183:** A fake search service returning one good and one “broken” Commons picture for picture searches and nothing for video searches.
-- **Line 184:** Starts the three test sections.
-- **Line 185:** The warm-up has no search phrases.
-- **Line 186:** The technique section names a double leg takedown.
-- **Line 187:** The drills section names the same technique.
-- **Line 188:** Closes the array and ends its declaration.
-- **Line 189:** Runs the finder for Wrestling with no YouTube key.
-- **Line 190:** At least two items must be found.
-- **Line 191:** Every item is marked suggested and belongs to one of the two sections that asked for media.
-- **Line 192:** No address appears twice across the sections.
-- **Line 193:** The unverifiable “broken” address was dropped.
-- **Line 194:** The warm-up received nothing.
-- **Line 195:** At least one item carries a Commons or catalog credit, proving attribution is kept.
-- **Line 196:** The notes are plain sentences.
-- **Line 197:** Closes the callback body and the function call that received it.
-- **Line 198:** Blank line separates related sections for readability; it performs no operation.
-- **Line 199:** Registers the regression test for a mistake found with the real AI: media must match the technique the section asked for.
-- **Line 200:** A fake verifier that accepts everything.
-- **Line 201:** A fake search service that finds nothing, so only the catalog can contribute.
-- **Line 202:** A section whose instructions mention the jab in passing but whose search phrase is a roundhouse kick.
-- **Line 203:** Expects no media at all: the catalog’s jab video must not be attached to a roundhouse kick section.
-- **Line 204:** The same section asking for a jab.
-- **Line 205:** Now media is found and belongs to that section.
-- **Line 206:** Closes the callback body and the function call that received it.
-- **Line 207:** Blank line separates related sections for readability; it performs no operation.
-- **Line 208:** Registers the YouTube-key test.
-- **Line 209:** Records every request’s address and key header.
-- **Line 210:** A fake search service.
+- **Line 181:** Blank line separates related sections for readability; it performs no operation.
+- **Line 182:** Registers the attachment-list validation test.
+- **Line 183:** Validates a good list: one stored attachment with extra spaces in its caption and one new suggested link with spaces around the address.
+- **Line 184:** Expects spaces trimmed and only the allowed fields kept.
+- **Line 185:** Expects errors for many bad lists: not a list, not objects, ids of zero or fractions, duplicate ids, a stored attachment carrying a link, an empty link, an upload origin, a client-supplied kind, an over-long caption, a javascript: source page, and more than 12 attachments.
+- **Line 186:** An empty list is valid.
+- **Line 187:** Closes the callback body and the function call that received it.
+- **Line 188:** Blank line separates related sections for readability; it performs no operation.
+- **Line 189:** Registers the test for the activity helper functions.
+- **Line 190:** Three sample attachments: for a warm-up, for a drill and one for the whole lesson.
+- **Line 191:** Renaming the warm-up heading moves only the warm-up attachment to the new heading.
+- **Line 192:** Renaming from an empty heading returns the very same list, unchanged.
+- **Line 193:** With only the drill heading existing, the warm-up and whole-lesson attachments are unassigned (ids 1 and 3).
+- **Line 194:** The request payload keeps only the id, caption and activity for a stored attachment and the full link fields for a new one, ignoring the extra url on the stored one.
+- **Line 195:** Closes the callback body and the function call that received it.
+- **Line 196:** Blank line separates related sections for readability; it performs no operation.
+- **Line 197:** Helper that builds a fake Wikimedia answer containing the given pages.
+- **Line 198:** Helper that builds one fake Commons file page with picture and description addresses, a file type, an author containing HTML, a licence and a description.
+- **Line 199:** Blank line separates related sections for readability; it performs no operation.
+- **Line 200:** Registers the Commons search test.
+- **Line 201:** Searches with fake pages: a good JPEG, an SVG, an unrelated beach picture and an Ogg video.
+- **Line 202:** Keeps the picture results (their addresses contain /thumb/).
+- **Line 203:** Exactly one picture should remain.
+- **Line 204:** Its title is made from the file name.
+- **Line 205:** Its credit names Wikimedia Commons, the author (HTML stripped) and the licence.
+- **Line 206:** Its source page is a Commons address.
+- **Line 207:** A failing search service (status 500) makes the function reject.
+- **Line 208:** Search-phrase cleaning keeps two valid phrases, tidies spaces, and drops too short, too long, non-text and extra phrases.
+- **Line 209:** Closes the callback body and the function call that received it.
+- **Line 210:** Blank line separates related sections for readability; it performs no operation.
 
-### Lines 211–220
+### Lines 211–240
 
 ```text
-211 |     seen.push([url, options.headers['x-goog-api-key']]);
-212 |     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
-213 |     return Response.json({ query: { pages: [] } });
-214 |   };
-215 |   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
-216 |   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
-217 |   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
-218 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
-219 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
-220 | });
+211 | test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
+212 |   const verified = [];
+213 |   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
+214 |   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
+215 |   const sections = [
+216 |     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
+217 |     { name: 'Technique teaching', instructions: 'Teach the double leg takedown.', queries: ['double leg takedown'] },
+218 |     { name: 'Progressive drills', instructions: 'Repeat the double leg takedown.', queries: ['double leg takedown'] },
+219 |   ];
+220 |   const result = await findMedia({ discipline: 'Wrestling', sections }, { fetcher, verify, env: {} });
+221 |   assert.ok(result.media.length >= 2);
+222 |   assert.ok(result.media.every(item => item.origin === 'suggested' && ['Technique teaching', 'Progressive drills'].includes(item.activity)));
+223 |   assert.equal(new Set(result.media.map(item => item.url)).size, result.media.length);
+224 |   assert.ok(result.media.every(item => !item.url.includes('broken')));
+225 |   assert.ok(!result.media.some(item => item.activity === 'Warm-up'));
+226 |   assert.ok(result.media.some(item => item.credit.startsWith('Wikimedia Commons') || item.credit.includes('David Avellan')));
+227 |   assert.ok(result.notes.every(note => typeof note === 'string'));
+228 | });
+229 |
+230 | test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
+231 |   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
+232 |   const fetcher = async () => Response.json({ query: { pages: [] } });
+233 |   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
+234 |   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
+235 |   const asked = await findMedia({ discipline: 'Muay Thai', sections: [{ ...passing, queries: ['jab'] }] }, { fetcher, verify, env: {} });
+236 |   assert.ok(asked.media.length >= 1 && asked.media.every(item => item.activity === 'Technique teaching'));
+237 | });
+238 |
+239 | test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
+240 |   const seen = [];
 ```
 
-- **Line 211:** Remembers the address and the x-goog-api-key header of each call.
-- **Line 212:** For YouTube it returns two results: an unrelated “pad work” video and a “knee cut half guard pass” video.
-- **Line 213:** Wikimedia searches return nothing.
-- **Line 214:** Closes the preceding block and ends the statement.
-- **Line 215:** A fake verifier that accepts all addresses as YouTube videos.
-- **Line 216:** Runs the finder with a test key in the environment.
-- **Line 217:** The relevant video is returned.
-- **Line 218:** The irrelevant video is not.
-- **Line 219:** The key was sent in the header and never appeared in the web address.
-- **Line 220:** Closes the callback body and the function call that received it.
+- **Line 211:** Registers the finder test.
+- **Line 212:** Records the addresses sent to verification.
+- **Line 213:** A fake verifier that rejects any address containing “broken” and otherwise confirms a kind.
+- **Line 214:** A fake search service returning one good and one “broken” Commons picture for picture searches and nothing for video searches.
+- **Line 215:** Starts the three test sections.
+- **Line 216:** The warm-up has no search phrases.
+- **Line 217:** The technique section names a double leg takedown.
+- **Line 218:** The drills section names the same technique.
+- **Line 219:** Closes the array and ends its declaration.
+- **Line 220:** Runs the finder for Wrestling with no YouTube key.
+- **Line 221:** At least two items must be found.
+- **Line 222:** Every item is marked suggested and belongs to one of the two sections that asked for media.
+- **Line 223:** No address appears twice across the sections.
+- **Line 224:** The unverifiable “broken” address was dropped.
+- **Line 225:** The warm-up received nothing.
+- **Line 226:** At least one item carries a Commons or catalog credit, proving attribution is kept.
+- **Line 227:** The notes are plain sentences.
+- **Line 228:** Closes the callback body and the function call that received it.
+- **Line 229:** Blank line separates related sections for readability; it performs no operation.
+- **Line 230:** Registers the regression test for a mistake found with the real AI: media must match the technique the section asked for.
+- **Line 231:** A fake verifier that accepts everything.
+- **Line 232:** A fake search service that finds nothing, so only the catalog can contribute.
+- **Line 233:** A section whose instructions mention the jab in passing but whose search phrase is a roundhouse kick.
+- **Line 234:** Expects no media at all: the catalog’s jab video must not be attached to a roundhouse kick section.
+- **Line 235:** The same section asking for a jab.
+- **Line 236:** Now media is found and belongs to that section.
+- **Line 237:** Closes the callback body and the function call that received it.
+- **Line 238:** Blank line separates related sections for readability; it performs no operation.
+- **Line 239:** Registers the YouTube-key test.
+- **Line 240:** Records every request’s address and key header.
+
+### Lines 241–251
+
+```text
+241 |   const fetcher = async (url, options) => {
+242 |     seen.push([url, options.headers['x-goog-api-key']]);
+243 |     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
+244 |     return Response.json({ query: { pages: [] } });
+245 |   };
+246 |   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
+247 |   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
+248 |   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
+249 |   assert.ok(!result.media.some(item => item.url.endsWith('AAAAAAAAAAA')));
+250 |   assert.ok(seen.some(([url, key]) => url.includes('googleapis.com') && key === 'test-key-value' && !url.includes('test-key-value')));
+251 | });
+```
+
+- **Line 241:** A fake search service.
+- **Line 242:** Remembers the address and the x-goog-api-key header of each call.
+- **Line 243:** For YouTube it returns two results: an unrelated “pad work” video and a “knee cut half guard pass” video.
+- **Line 244:** Wikimedia searches return nothing.
+- **Line 245:** Closes the preceding block and ends the statement.
+- **Line 246:** A fake verifier that accepts all addresses as YouTube videos.
+- **Line 247:** Runs the finder with a test key in the environment.
+- **Line 248:** The relevant video is returned.
+- **Line 249:** The irrelevant video is not.
+- **Line 250:** The key was sent in the header and never appeared in the web address.
+- **Line 251:** Closes the callback body and the function call that received it.
 
 ## server/media-api.test.js
 
@@ -12408,7 +12500,7 @@ Signed-in read-only coaching help using existing Gemini transport and heuristic 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\VideoSuggestions.jsx`
 
-Browser UI for a saved lesson. Searches only display candidates; Add delegates to the existing editor. Existing MediaItem supplies thumbnails, source links and youtube-nocookie playback.
+Displays suggestion candidates, using existing thumbnail/embed media for verified videos and a clearly labeled external Watch on YouTube link for unverified playback. Coach approval is still required for verified attachments.
 
 ### Lines 1–29
 
@@ -12437,7 +12529,7 @@ Browser UI for a saved lesson. Searches only display candidates; Add delegates t
 22 |     <button type="button" className="secondary" disabled={disabled || busy} onClick={suggest}>{busy ? 'Finding videos…' : 'Suggest videos'}</button>
 23 |     {result && <><p role="status">{result.message}</p><ul className="media-list">{result.videos.map(item => {
 24 |       const attached = media.some(entry => youtubeId(entry.url) === youtubeId(item.url));
-25 |       return <li key={item.url}><MediaItem item={item} /><button type="button" disabled={disabled || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{attached ? 'Already attached' : 'Add'}</button></li>;
+25 |       return <li key={item.url}>{item.link_only ? <><strong>{item.title}</strong><p>Playback could not be verified. This video may be blocked or unavailable.</p><a href={item.url} target="_blank" rel="noopener noreferrer">Watch on YouTube</a></> : <MediaItem item={item} />}<button type="button" disabled={disabled || item.link_only || attached || media.length >= mediaLimits.perLesson} onClick={() => onApprove(item)}>{item.link_only ? 'Playback unverified' : attached ? 'Already attached' : 'Add'}</button></li>;
 26 |     })}</ul><button type="button" className="secondary" onClick={() => setResult(null)}>Close suggestions</button></>}
 27 |     {error && <p className="error" role="alert">{error}</p>}
 28 |   </section>;
@@ -12468,7 +12560,7 @@ Browser UI for a saved lesson. Searches only display candidates; Add delegates t
 - **Line 22:** Renders the non-submit suggestion button, disables it while busy or externally blocked, and changes its caption during the search.
 - **Line 23:** When results exist, announces the explanatory message and maps candidates into the existing responsive media-list layout.
 - **Line 24:** Checks canonical YouTube IDs to determine whether this candidate is already attached to the saved lesson.
-- **Line 25:** Renders the existing thumbnail/player component and an explicit Add button. The button is disabled for attached videos, full lessons or blocked actions; only clicking it calls the approval callback.
+- **Line 25:** For link-only candidates, displays a title, unverified-playback warning and a new-tab YouTube link instead of the embed component. Add is disabled for unverified, already-attached, full or externally disabled items. Verified items still use MediaItem and explicit approval; the URL is canonicalized by the server.
 - **Line 26:** Closes the result list and renders a non-submit close button that clears visible suggestions without changing lesson data.
 - **Line 27:** Shows errors in an accessible alert using the existing error styling.
 - **Line 28:** Closes the suggestion section and ends the JSX return statement.
@@ -12478,7 +12570,7 @@ Browser UI for a saved lesson. Searches only display candidates; Add delegates t
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\video-suggestions.js`
 
-Owner-scoped, read-only suggestions extract useful phrases from all lesson fields, preserve catalog-first checks and explicit coach approval, and use the shared YouTube quota only at the HTTP search boundary. The owner accepted per-process restart-reset limits.
+Owner-scoped suggestions with safe step diagnostics, phrase extraction, shared quotas and verified-versus-link-only results. Playback failures remain visible as external links but cannot be attached without existing verification.
 
 ### Lines 1–30
 
@@ -12550,91 +12642,117 @@ Owner-scoped, read-only suggestions extract useful phrases from all lesson field
 
 ```text
 31 |
-32 | export async function suggestLessonVideos(lesson, { env = process.env, verify = verifyLink, search, reserveSearch } = {}) {
-33 |   const query = lessonVideoQuery(lesson);
-34 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
-35 |   const videos = [];
-36 |   const check = async candidates => {
-37 |     for (const candidate of candidates.slice(0, 5)) {
-38 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
-39 |       try {
-40 |         const info = await verify(candidate.url);
-41 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
-42 |       } catch { /* Unavailable or blocked videos are omitted. */ }
-43 |     }
-44 |   };
-45 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
-46 |   if (lesson.audience !== 'Kids') await check(curated);
-47 |   if (!videos.length && env.YOUTUBE_API_KEY) {
-48 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, query.phrases[0], reserveSearch));
-49 |     await check(await find(`${query.technique} drill ${query.audience}`, lesson.discipline, env.YOUTUBE_API_KEY));
-50 |   }
-51 |   return { videos: videos.slice(0, 5), message: videos.length ? 'Preview first: relevance and age suitability need coach review. Add opens the editor; Save changes keeps the video. If playback is blocked, use Watch on YouTube or choose another video.' : 'No playable matching videos found, or YouTube search is unavailable. Try later or paste a link in Edit lesson.' };
-52 | }
-53 |
-54 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
-55 |   const users = new Map();
-56 |   let busy = false;
-57 |   app.post('/api/lessons/:id/videos', async (request, response) => {
-58 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
-59 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
-60 |     const time = now();
+32 | export const videoDiagnostic = (event, fields) => console.info('[CoachLab videos]', event, JSON.stringify(fields));
+33 | export async function suggestLessonVideos(lesson, { env = process.env, verify = verifyLink, search, reserveSearch, diagnostic = videoDiagnostic } = {}) {
+34 |   const query = lessonVideoQuery(lesson);
+35 |   const key = (env.YOUTUBE_API_KEY || '').trim();
+36 |   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
+37 |   diagnostic('start', { key_present: !!key, search_terms: query ? `${query.technique} drill ${query.audience} ${lesson.discipline}` : '', match_terms: matchTerms });
+38 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
+39 |   const videos = [];
+40 |   let checked = 0;
+41 |   const check = async candidates => {
+42 |     for (const candidate of candidates.slice(0, 5)) {
+43 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
+44 |       checked++;
+45 |       try {
+46 |         const info = await verify(candidate.url);
+47 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
+48 |       } catch {
+49 |         const url = `https://www.youtube.com/watch?v=${youtubeId(candidate.url)}`;
+50 |         videos.push({ kind: 'youtube', origin: 'suggested', url, title: candidate.title, activity: '', link_only: true });
+51 |       }
+52 |     }
+53 |   };
+54 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
+55 |   diagnostic('catalog', { candidates: curated.length, skipped_for_kids: lesson.audience === 'Kids' });
+56 |   if (lesson.audience !== 'Kids') await check(curated);
+57 |   if (!videos.some(item => !item.link_only) && key) {
+58 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
+59 |     await check(await find(`${query.technique} drill ${query.audience}`, lesson.discipline, key));
+60 |   }
 ```
 
 - **Line 31:** Blank line separates related operations for readability.
-- **Line 32:** Extends lesson suggestions with a reservation callback alongside optional injected environment, verifier and search function.
-- **Line 33:** Builds a safe query description from the saved lesson.
-- **Line 34:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
-- **Line 35:** Creates an empty result array for verified video metadata.
-- **Line 36:** Defines an asynchronous helper to check a bounded candidate list.
-- **Line 37:** Checks no more than the first five candidates serially to limit requests and memory.
-- **Line 38:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
-- **Line 39:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 40:** Runs the existing safe link verification, including YouTube oEmbed validation.
-- **Line 41:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
-- **Line 42:** Ignores verification failures so blocked or unavailable videos are not shown as candidates.
-- **Line 43:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 44:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 45:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
-- **Line 46:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
-- **Line 47:** Uses the YouTube fallback only if no catalog video survived verification and the server already has a configured key.
-- **Line 48:** Wraps normal YouTube search with the main relevance phrase and the authenticated coach's shared quota reservation; injected tests can supply a search implementation.
-- **Line 49:** Runs the selected search using the compact lesson phrases, drill/audience context and discipline, then verifies candidates with the existing link checker.
-- **Line 50:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 51:** Returns up to five videos with coach-review, explicit Add/Save instructions and blocked-playback guidance, or a friendly empty/search-unavailable message.
+- **Line 32:** Defines the server console diagnostic writer with a consistent prefix, event label and JSON fields. Callers supply only the explicitly selected safe data.
+- **Line 33:** Adds an injectable diagnostic sink to the existing finder, defaulting to the prefixed server logger.
+- **Line 34:** Builds a safe query description from the saved lesson.
+- **Line 35:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
+- **Line 36:** Selects the longest extracted phrase for title matching, preferring inside leg kicks over the higher-ranked but generic close distance in the reported example.
+- **Line 37:** Logs key presence, the derived search terms and selected title-match terms. It does not log the full lesson, provider URL, headers or key value.
+- **Line 38:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
+- **Line 39:** Creates an empty result array for verified video metadata.
+- **Line 40:** Initializes the number of playback checks actually attempted.
+- **Line 41:** Defines an asynchronous helper to check a bounded candidate list.
+- **Line 42:** Checks no more than the first five candidates serially to limit requests and memory.
+- **Line 43:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
+- **Line 44:** Counts each unique valid candidate immediately before trying its playback check.
+- **Line 45:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 46:** Runs the existing safe link verification, including YouTube oEmbed validation.
+- **Line 47:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
+- **Line 48:** Catches failure without including private exception details in public hosting logs.
+- **Line 49:** Reconstructs a canonical public YouTube watch URL from the validated video ID after a playback-check failure.
+- **Line 50:** Keeps failed-check candidates as suggested link-only metadata; the frontend cannot approve these as verified attachments.
+- **Line 51:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 52:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 53:** Blank line separates related operations for readability.
-- **Line 54:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
-- **Line 55:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
-- **Line 56:** Tracks whether this route has an external-provider operation in flight.
-- **Line 57:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
-- **Line 58:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
-- **Line 59:** Returns the same 404 for a missing lesson or one owned by someone else.
-- **Line 60:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 53:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 54:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
+- **Line 55:** Logs catalog candidate count and whether Kids context skipped age-unclassified catalog entries.
+- **Line 56:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
+- **Line 57:** Attempts YouTube fallback when no verified video exists and a key is present; link-only catalog results do not masquerade as verified successes.
+- **Line 58:** Wraps existing YouTube search with the selected specific match phrase, shared quota reservation and safe diagnostic callback; tests can still inject search.
+- **Line 59:** Searches with the derived lesson/audience terms and discipline, then checks returned candidates using the existing verifier.
+- **Line 60:** Closes this function, conditional block or object; execution continues after the block.
 
-### Lines 61–69
+### Lines 61–82
 
 ```text
-61 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
-62 |     const times = users.get(request.user.id) || [];
-63 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
-64 |     users.set(request.user.id, [...times, time]); busy = true;
-65 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
-66 |     catch (error) { response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'Video search is unavailable. Try later or paste a link in Edit lesson.' }); }
-67 |     finally { busy = false; }
-68 |   });
-69 | }
+61 |   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
+62 |   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });
+63 |   return { videos: selected, message: selected.length ? 'Review relevance and age suitability. Videos with unconfirmed playback can be opened with Watch on YouTube but cannot be attached until verified. Add opens the editor; Save changes keeps verified videos.' : key ? 'No matches found. Try a simpler technique description or paste a video link.' : 'YouTube search unavailable: the server has no configured YouTube key. You can still paste a video link.' };
+64 | }
+65 |
+66 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
+67 |   const users = new Map();
+68 |   let busy = false;
+69 |   app.post('/api/lessons/:id/videos', async (request, response) => {
+70 |     videoDiagnostic('request_received', {});
+71 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
+72 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
+73 |     const time = now();
+74 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
+75 |     const times = users.get(request.user.id) || [];
+76 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
+77 |     users.set(request.user.id, [...times, time]); busy = true;
+78 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
+79 |     catch (error) { videoDiagnostic('request_failed', { reason: error instanceof YouTubeQuotaError ? 'local_quota' : 'search_unavailable' }); response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'YouTube search unavailable. Try later or paste a link in Edit lesson.' }); }
+80 |     finally { busy = false; }
+81 |   });
+82 | }
 ```
 
-- **Line 61:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
-- **Line 62:** Loads this coach's recent attempts or uses an empty list for a new coach.
-- **Line 63:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
-- **Line 64:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
-- **Line 65:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
-- **Line 66:** Returns a specific safe 429 for quota exhaustion, or a generic 502 for provider failures; no private error details or keys are exposed.
-- **Line 67:** Always clears the in-flight flag after success or failure.
-- **Line 68:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 69:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 61:** Sorts verified videos before link-only candidates and caps the displayed list at five.
+- **Line 62:** Logs attempted playback checks, successful checks, link-only fallbacks and displayed result count, without candidate URLs or raw errors.
+- **Line 63:** Returns clear review instructions for candidates, No matches found for a successful empty search, or YouTube search unavailable when no key is configured. Unverified playback cannot bypass attachment verification.
+- **Line 64:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 65:** Blank line separates related operations for readability.
+- **Line 66:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
+- **Line 67:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
+- **Line 68:** Tracks whether this route has an external-provider operation in flight.
+- **Line 69:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
+- **Line 70:** Logs that an authenticated request reached this route without recording user IDs, lesson IDs or request data.
+- **Line 71:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
+- **Line 72:** Returns the same 404 for a missing lesson or one owned by someone else.
+- **Line 73:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 74:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
+- **Line 75:** Loads this coach's recent attempts or uses an empty list for a new coach.
+- **Line 76:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
+- **Line 77:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
+- **Line 78:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
+- **Line 79:** Logs a fixed local_quota or search_unavailable reason, then returns the existing safe 429 quota message or a clearer YouTube-unavailable 502 message.
+- **Line 80:** Always clears the in-flight flag after success or failure.
+- **Line 81:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 82:** Closes this function, conditional block or object; execution continues after the block.
 
 ## server/youtube-quota.js
 

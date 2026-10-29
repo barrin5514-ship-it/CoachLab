@@ -47,11 +47,20 @@ export async function commonsCandidates(query, fetcher = fetch) {
   return found;
 }
 
-export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take()) {
+export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=5&q=${encodeURIComponent(`${query} ${discipline}`)}`;
   reserveSearch();
-  const data = await jsonFrom(fetcher, url, { 'x-goog-api-key': key });
-  return (data.items || []).filter(item => item.id?.videoId && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+  let response;
+  try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
+  catch { diagnostic('youtube_http', { status: null, reason: 'network_or_timeout' }); throw new Error('YouTube search unavailable'); }
+  const data = await response.json().catch(() => null);
+  const reasons = new Set(['quotaExceeded', 'dailyLimitExceeded', 'keyInvalid', 'accessNotConfigured', 'forbidden', 'API_KEY_INVALID', 'SERVICE_DISABLED', 'API_KEY_SERVICE_BLOCKED', 'RATE_LIMIT_EXCEEDED']);
+  const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
+  diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
+  if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
+  const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '') && relevant(matchQuery, item.snippet?.title || '', 0.5)).map(item => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
+  diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
+  return candidates;
 }
 
 export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {

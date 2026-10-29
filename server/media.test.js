@@ -10,6 +10,35 @@ import { lessonVideoQuery, suggestLessonVideos } from './video-suggestions.js';
 import { withApprovedVideo } from '../client/src/media.js';
 import { createYouTubeQuota } from './youtube-quota.js';
 
+test('YouTube diagnostics report safe statuses, reasons and result counts without secret error bodies or URLs', async () => {
+  const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
+  await assert.rejects(youtubeCandidates('inside leg kicks', 'Muay Thai', 'SECRET_KEY', async () => Response.json({ error: { message: 'SECRET_KEY https://private.example', errors: [{ reason: 'quotaExceeded' }] } }, { status: 403 }), 'inside leg kicks', () => {}, diagnostic));
+  assert.equal(logs[0].status, 403);
+  assert.equal(logs[0].reason, 'quotaExceeded');
+  await assert.rejects(youtubeCandidates('jab', 'Boxing', 'SECRET_KEY', async () => { throw new Error('SECRET_KEY'); }, 'jab', () => {}, diagnostic));
+  assert.equal(logs.at(-1).reason, 'network_or_timeout');
+  await youtubeCandidates('jab', 'Boxing', 'SECRET_KEY', async () => Response.json({ items: [] }), 'jab', () => {}, diagnostic);
+  assert.equal(logs.at(-1).returned, 0);
+  assert.equal(logs.at(-1).matched, 0);
+  assert.doesNotMatch(JSON.stringify(logs), /SECRET_KEY|https:\/\//);
+});
+
+test('exact live lesson logs key presence and specific match phrase; missing key differs from zero matches', async () => {
+  const lesson = { title: 'Using Leg Kicks to Close the Distance', goal: 'inside leg kicks to close distance', discipline: 'Muay Thai', audience: 'Adults' };
+  const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
+  const missing = await suggestLessonVideos(lesson, { env: {}, diagnostic });
+  assert.match(missing.message, /YouTube search unavailable/);
+  assert.equal(logs[0].key_present, false);
+  assert.equal(logs[0].match_terms, 'inside leg kicks');
+  const empty = await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'SECRET_KEY' }, search: async () => [], diagnostic });
+  assert.match(empty.message, /No matches found/);
+  const fallback = await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'SECRET_KEY' }, search: async () => [{ url: 'https://www.youtube.com/watch?v=abcdefghij0', title: 'Inside leg kicks' }], verify: async () => { throw new Error('Render cannot reach oEmbed SECRET_KEY'); }, diagnostic });
+  assert.equal(fallback.videos[0].link_only, true);
+  assert.equal(logs.at(-1).passed, 0);
+  assert.equal(logs.at(-1).link_only, 1);
+  assert.doesNotMatch(JSON.stringify(logs), /SECRET_KEY|https:\/\//);
+});
+
 test('shared YouTube quota counts actual searches, preserves catalog access and expires after a day', async () => {
   let time = 0, requests = 0;
   const quota = createYouTubeQuota(() => time);
@@ -71,10 +100,12 @@ test('video fallback searches once, passes kids context, filters broken links an
     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
   });
   assert.equal(searches, 1);
-  assert.equal(result.videos.length, 4);
+  assert.equal(result.videos.length, 5);
+  assert.equal(result.videos.filter(item => item.link_only).length, 1);
   const empty = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing' }, { env: {}, verify: async () => { throw new Error('blocked'); } });
-  assert.deepEqual(empty.videos, []);
-  assert.match(empty.message, /No playable/);
+  assert.equal(empty.videos.length, 1);
+  assert.equal(empty.videos[0].link_only, true);
+  assert.match(empty.message, /unconfirmed playback/);
 });
 
 test('video approval creates an editable copy, preserves saved attachments and prevents duplicate additions', () => {
