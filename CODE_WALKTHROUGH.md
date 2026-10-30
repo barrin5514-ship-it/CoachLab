@@ -888,7 +888,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 209:** CSS rule .coach-shell .draft-section: border: 1px solid #b8c9c1; border-left: 4px solid #26704c; border-radius: 8px; padding: 20px; margin: 20px 0; background: #f8faf8;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 210:** CSS rule .coach-shell .draft-section h3: color: #194d35;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 
-### Lines 211–234
+### Lines 211–235
 
 ```text
 211 | .coach-shell .lesson-timeline > li { background: #f8faf8; border-color: #26704c; margin-bottom: 16px; }
@@ -915,6 +915,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 232 | .coach-shell > .hero .account-line { overflow-wrap: anywhere; }
 233 | .coach-shell > .hero .actions { flex-wrap: wrap; }
 234 | @media (max-width: 600px) { .coach-shell > .hero { padding: 22px 16px; align-items: stretch; } .coach-shell > .hero .actions button { min-height: 48px; flex: 1 1 160px; } }
+235 | .discipline-tile[data-photo="bjj"] img { object-position: 65% 50%; }
 ```
 
 - **Line 211:** CSS rule .coach-shell .lesson-timeline > li: background: #f8faf8; border-color: #26704c; margin-bottom: 16px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
@@ -941,6 +942,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 232:** CSS selector .coach-shell > .hero .account-line: overflow-wrap: anywhere;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 233:** CSS selector .coach-shell > .hero .actions: flex-wrap: wrap;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 234:** CSS selector @media (max-width: 600px): .coach-shell > .hero  padding: 22px 16px; align-items: stretch;  .coach-shell > .hero .actions button  min-height: 48px; flex: 1 1 160px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 235:** Targets only the BJJ dashboard image. Horizontal alignment increases from the default 50% to 65%, moving a cover image that is wider than its frame left by 15% of the overflow; vertical alignment remains centered at 50%. Other photos and page banners are unaffected.
 
 ## client/vite.config.js
 

@@ -5204,3 +5204,30 @@ Verification: serial npm test 116/116 passed, zero failures/skips (28.7 seconds)
 Genuine tool issues: an overly broad rg over ignored temporary documentation data produced noisy truncated output; narrowed subsequent reads. Searching the WinGet package folder reported access denied; the existing ffmpeg link in WinGet/Links worked without changing permissions. No application defect was introduced by those read-only searches.
 
 Review/commit reference: "style: frame athlete photos and add owner hero banner". The single commit hash and actual push/health results are reported after verification; a commit cannot embed its own hash. No live AI calls or additional tests for this reversible styling-only change were added.
+
+## 2026-10-30 — BJJ dashboard photo nudge
+
+Exact user prompt:
+
+~~~text
+COACHLAB — BJJ PHOTO NUDGE (styling only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+The Brazilian Jiu-Jitsu dashboard card photo needs to shift
+slightly left so the athletes are better centered in the frame.
+Adjust only that image's object-position (small change, about
+10–15%). Don't touch any other photo, the hero, or the title.
+
+RULES
+- Styling only. Tests serially. One small commit.
+- Push only if tests and build pass. Never print .env values.
+
+REPORT BACK (one code block): commit hash, push result,
+test/build results, and the new BJJ position.
+~~~
+
+Outcome: clean synchronized starting commit a123b7c. Added exactly one CSS rule targeting only the BJJ dashboard card: object-position 65% 50%, increasing horizontal alignment by 15 percentage points from center. For the cover image's horizontal overflow this moves the picture left; vertical alignment is unchanged. No other photos, hero, title, behavior, API or database edits. Updated this prompt log and the exact CSS walkthrough listing/explanation as required by AGENTS.md.
+
+Actual verification: serial npm test 116 passed, zero failures/skips (24.8 seconds); production npm run build passed including Prisma generation, TypeScript and Vite (40 modules). Walkthrough line numbers/source comparison passed. Diff reviewed: one CSS addition plus documentation. No new tests for this reversible one-line styling change, no environment values read, no live AI calls. No new browser verification claimed; browser use was disabled during the preceding task. No genuine implementation mistakes encountered.
+
+Containing commit subject: "style: nudge BJJ dashboard photo left". Its resolved hash and push result are reported after commit. A commit cannot include its own hash.
