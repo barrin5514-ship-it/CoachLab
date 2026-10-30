@@ -5143,3 +5143,64 @@ Added SafetyNotes.jsx using native details/summary. Manual and AI forms show one
 Fresh verification: npm test serially passed 116/116, zero failures/skips (53.3 seconds). Added assertions to the actual React server-rendering test for expanded/collapsed safety disclosures, existing safety text, manual/AI review notices and guidance. Production npm run build passed with Prisma generation, TypeScript and Vite (40 modules). Source listing/explanation numbering and JavaScript syntax checks passed. All seven owner WebP photos remain below 200000 bytes; existing tests verify file sizes and Fitness mappings. Browser visual verification remains unresolved: prior step recorded local browser use disabled in Work settings; no bypass attempted and no browser or phone-success claim is made. Source review and rendered component tests are not interactive browser tests.
 
 Files in this step: client/src/SafetyNotes.jsx, AiLessonForm.jsx, LessonForm.jsx, LessonCard.jsx, styles.css, server/fitness.test.js, CODE_WALKTHROUGH.md and this log. No new implementation mistakes observed in this step. Commit reference: containing commit "style: polish lesson planner and preserve safety review". Push only after passing tests/build and staged review; final response records actual synchronization and public-health result.
+
+## 2026-10-30 — Photo framing, wordmark and hero banner
+
+Exact owner prompt:
+
+~~~text
+COACHLAB — PHOTO CROPPING + TITLE STYLE + HERO BANNER (styling only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is today: small and safe.
+
+PROBLEM 1 — PHOTOS
+On the dashboard cards, the athletes' heads are cut off at the top
+on Boxing, Wrestling, MMA and Personal Training. Classes is
+slightly off too. Muay Thai and BJJ look good; leave them alone.
+
+FIX: Set object-position per image (e.g. "center top" or a %
+value) so each athlete's head and upper body are fully in frame,
+and the card title text doesn't cover their face. Check at
+desktop and phone widths. Don't stretch or distort images. If a
+crop can't be fixed with positioning, re-export that WebP from the
+original owner photo at a better crop (keep under ~200 KB).
+
+PROBLEM 2 — TITLE
+The page already shows "CoachLab" in plain white at the top.
+Restyle it only: bold white "COACH" + emerald-green "LAB", with a
+small tagline "Plan • Teach • Train" under it. Keep the existing
+"Plan your next session..." line. Text in HTML/CSS, not an image.
+Readable on phones.
+
+PROBLEM 3 — HERO BANNER
+A new hero banner image was added to:
+C:\Users\barri\OneDrive\Pictures\Screenshots\coachlab redesign photos
+It should be named hero.png. If not, use the newest image in that
+folder and tell me its name. Convert it to WebP (under ~200 KB),
+and use it as the background of the dashboard header behind the
+COACH LAB title. Add a dark gradient overlay so the white title
+and buttons stay readable. Lazy-load is NOT needed for this one
+(it's at the top). Keep a dark gradient fallback if it fails.
+Make sure "+ New Lesson", "AI lesson draft", the signed-in line
+and Log out still work and are easy to see on phone and desktop.
+
+RULES
+- Styling only. No logic, API or database changes.
+- Low RAM: tests serially. One small commit. Push only if tests
+  and build pass. Never print .env values. Don't touch other projects.
+
+REPORT BACK (in one code block)
+- Commit hash, push result, test/build results.
+- The position chosen for each photo, in plain English.
+- The hero image filename used and its final size.
+~~~
+
+Outcome: began from clean synchronized 00c588d. Inspected the owner directory and actual five WebP photos. No hero.png exists; selected the newest PNG, Cinematic Boxing Gym Training.png. FFmpeg converted it serially to client/public/images/hero.webp, 1600 by 900, quality 78, 83,600 bytes. Original files and existing seven WebPs unchanged. No external or generated imagery used.
+
+Changed only presentational App.jsx markup, a data-photo styling attribute in DisciplineCards.jsx, styles.css, the new hero asset and teaching documentation. The five affected tiles use a proportional 4:3 photo area with captions below, avoiding face overlap: Boxing 85% horizontal/top; Wrestling right/top; MMA right/top; Personal Training 90% horizontal/top; Classes right/top. Muay Thai and BJJ receive no new crop/caption selectors. Hero uses a dark gradient over the owner image plus a dark base fallback, with wrapping actions/account text and phone padding. COACH/LAB are HTML text with an accessible CoachLab name; original subtitle and all click handlers remain unchanged. No API, database, state logic, credentials or environment changes.
+
+Verification: serial npm test 116/116 passed, zero failures/skips (28.7 seconds). Production npm run build passed including Prisma generation/TypeScript and Vite (40 modules). Exact walkthrough listings and JS syntax checked. Inspected a five-photo crop preview generated with the same 720-by-540 source windows and object-position offsets; heads/upper bodies remain in frame and captions are below the photo. The fixed 4:3 crop is geometrically identical at desktop and phone card widths; responsive CSS reviewed for wrapping, 48px buttons and preserved aspect ratio. This is NOT a browser screenshot or interaction test. A fresh cua inventory reported "Local browser use is disabled in Work settings"; did not bypass the restriction. Interactive desktop/phone verification remains outstanding.
+
+Genuine tool issues: an overly broad rg over ignored temporary documentation data produced noisy truncated output; narrowed subsequent reads. Searching the WinGet package folder reported access denied; the existing ffmpeg link in WinGet/Links worked without changing permissions. No application defect was introduced by those read-only searches.
+
+Review/commit reference: "style: frame athlete photos and add owner hero banner". The single commit hash and actual push/health results are reported after verification; a commit cannot embed its own hash. No live AI calls or additional tests for this reversible styling-only change were added.

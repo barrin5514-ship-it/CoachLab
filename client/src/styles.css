@@ -213,3 +213,22 @@ body:has(.coach-shell) { background: #071215; }
 .coach-shell .form-panel .actions { padding-top: 12px; }
 .coach-shell .media-list img, .coach-shell .media-list iframe { border-radius: 6px; }
 @media (max-width: 600px) { .coach-shell .draft-section { padding: 14px; } .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select { font-size: 16px; } .coach-shell .form-panel .actions button { flex: 1 1 140px; min-height: 48px; } }
+
+/* Keep the five affected portraits above their captions; the other two crops stay unchanged. */
+.discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) { display: flex; flex-direction: column; justify-content: flex-start; }
+.discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img { position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
+.discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after { display: none; }
+.discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy { padding: 16px 18px 20px; }
+.discipline-tile[data-photo="boxing"] img { object-position: 85% top; }
+.discipline-tile[data-photo="wrestling"] img { object-position: right top; }
+.discipline-tile[data-photo="mma"] img { object-position: right top; }
+.discipline-tile[data-photo="personal-training"] img { object-position: 90% top; }
+.discipline-tile[data-photo="classes"] img { object-position: right top; }
+/* The gradient and base color remain readable when the owner hero photo cannot load. */
+.coach-shell > .hero { padding: 32px; border: 1px solid #34504d; border-radius: 12px; background-color: #071215; background-image: linear-gradient(90deg, #041010ed, #0410109e), url('/images/hero.webp'); background-size: cover; background-position: center; flex-wrap: wrap; }
+.coach-shell .coach-wordmark { color: #fff; font-family: 'Arial Narrow', Impact, sans-serif; font-weight: 900; font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.05; }
+.coach-shell .coach-wordmark span { color: #58dfa4; }
+.coach-shell .coach-tagline { margin: 8px 0 20px; font-size: 0.95rem; color: #eef6f4; }
+.coach-shell > .hero .account-line { overflow-wrap: anywhere; }
+.coach-shell > .hero .actions { flex-wrap: wrap; }
+@media (max-width: 600px) { .coach-shell > .hero { padding: 22px 16px; align-items: stretch; } .coach-shell > .hero .actions button { min-height: 48px; flex: 1 1 160px; } }

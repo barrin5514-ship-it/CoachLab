@@ -123,7 +123,7 @@ export default function App({ user, onLogOut }) {
     <main className="coach-shell">
       <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
       <header className="hero">
-        <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+        <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
       <DisciplineHeader discipline={discipline} classType={classType} />

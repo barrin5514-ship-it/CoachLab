@@ -92,7 +92,7 @@ Mounts the login gate and application into the page.
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
+Photo framing and header styling: uses only owner assets, preserves current controls and changes presentation without database, API or state-flow changes.
 
 ### Lines 1–30
 
@@ -366,7 +366,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 123 |     <main className="coach-shell">
 124 |       <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
 125 |       <header className="hero">
-126 |         <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+126 |         <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
 127 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
 128 |       </header>
 129 |       <DisciplineHeader discipline={discipline} classType={classType} />
@@ -396,7 +396,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 - **Line 123:** Applies the dark dashboard shell without changing signed-in access.
 - **Line 124:** Shows working navigation; disables navigation during editing so unsaved work is not replaced.
 - **Line 125:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 126:** Shows the app title, coaching subtitle and existing account/logout action.
+- **Line 126:** Renders the same CoachLab heading as white COACH and green LAB HTML text, preserves its accessible name, adds the short tagline, and keeps the original session text and logout handler.
 - **Line 127:** The New Lesson and AI draft buttons now clear the message with null.
 - **Line 128:** Closes the header.
 - **Line 129:** Displays the selected discipline header from the shared mapping.
@@ -424,7 +424,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\styles.css`
 
-Lesson planner presentation: keeps coaching content and existing actions while making review notes collapsible and editing surfaces readable. Tests render actual components; stored data and provider rules are unchanged.
+Photo framing and header styling: uses only owner assets, preserves current controls and changes presentation without database, API or state-flow changes.
 
 ### Lines 1–30
 
@@ -888,7 +888,7 @@ Lesson planner presentation: keeps coaching content and existing actions while m
 - **Line 209:** CSS rule .coach-shell .draft-section: border: 1px solid #b8c9c1; border-left: 4px solid #26704c; border-radius: 8px; padding: 20px; margin: 20px 0; background: #f8faf8;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 210:** CSS rule .coach-shell .draft-section h3: color: #194d35;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 
-### Lines 211–215
+### Lines 211–234
 
 ```text
 211 | .coach-shell .lesson-timeline > li { background: #f8faf8; border-color: #26704c; margin-bottom: 16px; }
@@ -896,6 +896,25 @@ Lesson planner presentation: keeps coaching content and existing actions while m
 213 | .coach-shell .form-panel .actions { padding-top: 12px; }
 214 | .coach-shell .media-list img, .coach-shell .media-list iframe { border-radius: 6px; }
 215 | @media (max-width: 600px) { .coach-shell .draft-section { padding: 14px; } .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select { font-size: 16px; } .coach-shell .form-panel .actions button { flex: 1 1 140px; min-height: 48px; } }
+216 |
+217 | /* Keep the five affected portraits above their captions; the other two crops stay unchanged. */
+218 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) { display: flex; flex-direction: column; justify-content: flex-start; }
+219 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img { position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
+220 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after { display: none; }
+221 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy { padding: 16px 18px 20px; }
+222 | .discipline-tile[data-photo="boxing"] img { object-position: 85% top; }
+223 | .discipline-tile[data-photo="wrestling"] img { object-position: right top; }
+224 | .discipline-tile[data-photo="mma"] img { object-position: right top; }
+225 | .discipline-tile[data-photo="personal-training"] img { object-position: 90% top; }
+226 | .discipline-tile[data-photo="classes"] img { object-position: right top; }
+227 | /* The gradient and base color remain readable when the owner hero photo cannot load. */
+228 | .coach-shell > .hero { padding: 32px; border: 1px solid #34504d; border-radius: 12px; background-color: #071215; background-image: linear-gradient(90deg, #041010ed, #0410109e), url('/images/hero.webp'); background-size: cover; background-position: center; flex-wrap: wrap; }
+229 | .coach-shell .coach-wordmark { color: #fff; font-family: 'Arial Narrow', Impact, sans-serif; font-weight: 900; font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.05; }
+230 | .coach-shell .coach-wordmark span { color: #58dfa4; }
+231 | .coach-shell .coach-tagline { margin: 8px 0 20px; font-size: 0.95rem; color: #eef6f4; }
+232 | .coach-shell > .hero .account-line { overflow-wrap: anywhere; }
+233 | .coach-shell > .hero .actions { flex-wrap: wrap; }
+234 | @media (max-width: 600px) { .coach-shell > .hero { padding: 22px 16px; align-items: stretch; } .coach-shell > .hero .actions button { min-height: 48px; flex: 1 1 160px; } }
 ```
 
 - **Line 211:** CSS rule .coach-shell .lesson-timeline > li: background: #f8faf8; border-color: #26704c; margin-bottom: 16px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
@@ -903,6 +922,25 @@ Lesson planner presentation: keeps coaching content and existing actions while m
 - **Line 213:** CSS rule .coach-shell .form-panel .actions: padding-top: 12px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 214:** CSS rule .coach-shell .media-list img, .coach-shell .media-list iframe: border-radius: 6px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 215:** CSS rule @media (max-width: 600px): .coach-shell .draft-section  padding: 14px;  .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select  font-size: 16px;  .coach-shell .form-panel .actions button  flex: 1 1 140px; min-height: 48px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
+- **Line 216:** Blank line separating related statements; it has no runtime effect.
+- **Line 217:** Comment explaining the crop or hero fallback styling; it does not execute.
+- **Line 218:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]): display: flex; flex-direction: column; justify-content: flex-start;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 219:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img: position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 220:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after: display: none;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 221:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy: padding: 16px 18px 20px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 222:** CSS selector .discipline-tile[data-photo="boxing"] img: object-position: 85% top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 223:** CSS selector .discipline-tile[data-photo="wrestling"] img: object-position: right top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 224:** CSS selector .discipline-tile[data-photo="mma"] img: object-position: right top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 225:** CSS selector .discipline-tile[data-photo="personal-training"] img: object-position: 90% top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 226:** CSS selector .discipline-tile[data-photo="classes"] img: object-position: right top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 227:** Comment explaining the crop or hero fallback styling; it does not execute.
+- **Line 228:** CSS selector .coach-shell > .hero: padding: 32px; border: 1px solid #34504d; border-radius: 12px; background-color: #071215; background-image: linear-gradient(90deg, #041010ed, #0410109e), url('/images/hero.webp'); background-size: cover; background-position: center; flex-wrap: wrap;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 229:** CSS selector .coach-shell .coach-wordmark: color: #fff; font-family: 'Arial Narrow', Impact, sans-serif; font-weight: 900; font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.05;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 230:** CSS selector .coach-shell .coach-wordmark span: color: #58dfa4;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 231:** CSS selector .coach-shell .coach-tagline: margin: 8px 0 20px; font-size: 0.95rem; color: #eef6f4;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 232:** CSS selector .coach-shell > .hero .account-line: overflow-wrap: anywhere;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 233:** CSS selector .coach-shell > .hero .actions: flex-wrap: wrap;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 234:** CSS selector @media (max-width: 600px): .coach-shell > .hero  padding: 22px 16px; align-items: stretch;  .coach-shell > .hero .actions button  min-height: 48px; flex: 1 1 160px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 
 ## client/vite.config.js
 
@@ -14844,7 +14882,7 @@ Lesson planner presentation: keeps coaching content and existing actions while m
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\DisciplineCards.jsx`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
+Photo framing and header styling: uses only owner assets, preserves current controls and changes presentation without database, API or state-flow changes.
 
 ### Lines 1–12
 
@@ -14859,7 +14897,7 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 8 | }
 9 | // Cards only navigate; they never create or change a lesson.
 10 | export default function DisciplineCards({ onSelect, disabled }) {
-11 |   return <section className="discipline-cards" aria-label="Choose your discipline">{disciplineCards.map(card => <button type="button" className="discipline-tile" key={card.title} disabled={disabled} onClick={() => onSelect(card)}><DisciplinePhoto image={card.image} /><span className="tile-copy"><strong>{card.title}</strong><span>{card.description}</span></span></button>)}</section>;
+11 |   return <section className="discipline-cards" aria-label="Choose your discipline">{disciplineCards.map(card => <button type="button" className="discipline-tile" data-photo={card.image} key={card.title} disabled={disabled} onClick={() => onSelect(card)}><DisciplinePhoto image={card.image} /><span className="tile-copy"><strong>{card.title}</strong><span>{card.description}</span></span></button>)}</section>;
 12 | }
 ```
 
@@ -14873,7 +14911,7 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 8:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 9:** Comment: Cards only navigate; they never create or change a lesson.
 - **Line 10:** Accepts selection and disabled props; the parent owns navigation state.
-- **Line 11:** Renders accessible buttons from the card map with owner photos and descriptions; clicking calls the selection callback, not a save.
+- **Line 11:** Adds a presentation-only data-photo attribute for individual CSS crops; existing images, labels, disabled state and selection callback are unchanged.
 - **Line 12:** Closes this function, conditional block or object; execution continues after the block.
 
 ## client/src/discipline-pages.js
