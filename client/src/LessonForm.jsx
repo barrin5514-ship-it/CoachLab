@@ -12,8 +12,8 @@ const initial = { ...emptyFitness, audience: 'Unspecified', title: '', disciplin
 const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 
 // Uses the same form for new lessons and explicit updates to an existing ID.
-export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-  const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
+export default function LessonForm({ onSaved, onCancel, defaults = {}, lesson, media: savedMedia = [] }) {
+  const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : { ...initial, ...defaults });
   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');

@@ -93,3 +93,15 @@ test('discipline cards map Fitness shortcuts without introducing new disciplines
   assert.deepEqual(filterLessons(rows, 'All', 'Fitness', 'Group classes'), [rows[1]]);
   assert.deepEqual(filterLessons(rows, 'All', 'Personal Training'), [rows[2]]);
 });
+
+// New-form defaults follow navigation without rewriting stored legacy records.
+test('discipline page defaults preserve Fitness and legacy navigation', async () => {
+  const { disciplineDefaults, disciplinePage } = await import('../client/src/discipline-pages.js');
+  assert.deepEqual(disciplineDefaults('All', 'All'), {});
+  assert.deepEqual(disciplineDefaults('MMA', 'All'), { discipline: 'MMA' });
+  assert.equal(disciplineDefaults('Fitness', 'Personal training').class_type, 'Personal training');
+  assert.equal(disciplineDefaults('Fitness', 'Group classes').class_format, 'Group class');
+  assert.equal(disciplineDefaults('Fitness', 'Group classes').class_type, '');
+  assert.equal(disciplinePage('Fitness', 'Group classes').image, 'classes');
+  assert.equal(disciplinePage('Personal Training', 'All').discipline, 'Personal Training');
+});

@@ -10,8 +10,8 @@ import { emptyFitness } from './fitness.js';
 
 const initial = { ...emptyFitness, audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
 // Separates generation from approval so AI output cannot save itself.
-export default function AiLessonForm({ onSaved, onCancel }) {
-  const [request, setRequest] = useState(initial);
+export default function AiLessonForm({ onSaved, onCancel, defaults = {} }) {
+  const [request, setRequest] = useState(() => ({ ...initial, ...defaults }));
   const [draft, setDraft] = useState(null);
   const [approved, setApproved] = useState(false);
   const [media, setMediaList] = useState([]);

@@ -182,3 +182,19 @@ body:has(.coach-shell) { background: #071215; }
 .coach-shell :focus-visible { outline: 3px solid #db9c22; outline-offset: 4px; }
 @media (max-width: 1000px) { .discipline-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .coach-shell { padding: 20px 14px; } .discipline-cards { grid-template-columns: 1fr; gap: 12px; } .discipline-tile { min-height: 190px; } .tile-copy { padding-top: 110px; } }
+
+/* Sidebar links are actual filters, with a compact wrapping layout on phones. */
+.coach-shell { position: relative; padding-left: 242px; }
+.coach-sidebar { position: absolute; left: 24px; top: 32px; width: 190px; }
+.sidebar-brand { display: block; font: 700 2rem 'Arial Narrow', Impact, sans-serif; margin-bottom: 24px; }
+.coach-sidebar nav { display: flex; flex-direction: column; gap: 8px; }
+.coach-sidebar button.secondary { background: transparent; color: #d7e9e3; border-color: transparent; text-align: left; padding: 10px; }
+.coach-sidebar button.secondary:hover:not(:disabled), .coach-sidebar button[aria-pressed="true"] { background: #164b39; border-color: #4e9f7b; color: #fff; }
+.discipline-header { position: relative; isolation: isolate; overflow: hidden; min-height: 230px; background: linear-gradient(120deg, #183b37, #071215); border-radius: 12px; margin-bottom: 28px; display: flex; align-items: flex-end; }
+.discipline-header img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; z-index: -2; }
+.discipline-header::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #041010f2, #04101050); z-index: -1; }
+.discipline-header > div { padding: 28px; max-width: 65ch; }
+.discipline-header h2 { font: 700 clamp(2rem, 5vw, 3.5rem)/1.1 'Arial Narrow', Impact, sans-serif; margin: 0 0 12px; }
+.discipline-header p { margin: 0; }
+@media (max-width: 1000px) { .coach-shell { padding-left: 24px; } .coach-sidebar { position: static; width: auto; margin-bottom: 24px; } .coach-sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 4px; } .sidebar-brand { display: none; } .coach-sidebar button.secondary { font-size: 0.85rem; } }
+@media (max-width: 600px) { .coach-shell { padding-left: 14px; } .discipline-header { min-height: 180px; } .discipline-header > div { padding: 20px; } }

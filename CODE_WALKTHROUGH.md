@@ -92,333 +92,339 @@ Mounts the login gate and application into the page.
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
 ### Lines 1–30
 
 ```text
 1 | // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
 2 | import { fitnessClassTypes } from './fitness.js';
-3 | import DisciplineCards from './DisciplineCards.jsx';
-4 | import CoachingChat from './CoachingChat.jsx';
-5 | import React, { useEffect, useState } from 'react';
-6 | import LessonForm from './LessonForm.jsx';
-7 | import LessonCard from './LessonCard.jsx';
-8 | import AiLessonForm from './AiLessonForm.jsx';
-9 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
-10 | import { fetchMedia, withApprovedVideos } from './media.js';
-11 |
-12 | // Keeps lessons and media together while one editor is open.
-13 | export default function App({ user, onLogOut }) {
-14 |   const [lessons, setLessons] = useState([]);
-15 |   const [audience, setAudience] = useState('All');
-16 |   const [discipline, setDiscipline] = useState('All');
-17 |   const [classType, setClassType] = useState('All');
-18 |   const visibleLessons = filterLessons(lessons, audience, discipline, classType);
-19 |   const [loading, setLoading] = useState(true);
-20 |   const [error, setError] = useState('');
-21 |   const [notice, setNotice] = useState(null);
-22 |   const [opening, setOpening] = useState(false);
-23 |   const [formOpen, setFormOpen] = useState(false);
-24 |   const [reload, setReload] = useState(0);
-25 |   const [editing, setEditing] = useState(null);
-26 |   const [editingMedia, setEditingMedia] = useState([]);
-27 |   const [media, setMedia] = useState([]);
-28 |   const [mediaError, setMediaError] = useState('');
-29 |   const [mediaReload, setMediaReload] = useState(0);
-30 |
+3 | import DisciplineHeader, { DisciplineNavigation } from './DisciplineHeader.jsx';
+4 | import { disciplineDefaults } from './discipline-pages.js';
+5 | import DisciplineCards from './DisciplineCards.jsx';
+6 | import CoachingChat from './CoachingChat.jsx';
+7 | import React, { useEffect, useState } from 'react';
+8 | import LessonForm from './LessonForm.jsx';
+9 | import LessonCard from './LessonCard.jsx';
+10 | import AiLessonForm from './AiLessonForm.jsx';
+11 | import { filterLessons } from './lesson-view.js';
+12 | import { fetchMedia, withApprovedVideos } from './media.js';
+13 |
+14 | // Keeps lessons and media together while one editor is open.
+15 | export default function App({ user, onLogOut }) {
+16 |   const [lessons, setLessons] = useState([]);
+17 |   const [audience, setAudience] = useState('All');
+18 |   const [discipline, setDiscipline] = useState('All');
+19 |   const [classType, setClassType] = useState('All');
+20 |   const visibleLessons = filterLessons(lessons, audience, discipline, classType);
+21 |   const [loading, setLoading] = useState(true);
+22 |   const [error, setError] = useState('');
+23 |   const [notice, setNotice] = useState(null);
+24 |   const [opening, setOpening] = useState(false);
+25 |   const [formOpen, setFormOpen] = useState(false);
+26 |   const [reload, setReload] = useState(0);
+27 |   const [editing, setEditing] = useState(null);
+28 |   const [editingMedia, setEditingMedia] = useState([]);
+29 |   const [media, setMedia] = useState([]);
+30 |   const [mediaError, setMediaError] = useState('');
 ```
 
 - **Line 1:** Human-readable comment: Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments. This explanation does not execute.
 - **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 5:** Imports React for JSX plus effect and state hooks from the installed React package.
-- **Line 6:** Imports the neighboring form component as LessonForm.
-- **Line 7:** Imports the neighboring card component as LessonCard.
-- **Line 8:** Imports the new browser component for requesting, reviewing and approving an AI draft.
-- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 11:** Blank line separates related sections; it performs no operation.
-- **Line 12:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
-- **Line 13:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
-- **Line 14:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 15:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
-- **Line 16:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
-- **Line 17:** Keeps the Fitness dashboard class-type filter in React state, initially showing every class type.
-- **Line 18:** Combines audience, discipline and class-type filters to derive visible cards without changing stored lessons.
-- **Line 19:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 20:** Stores a safe user-facing error message, initially empty.
-- **Line 21:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
-- **Line 22:** True while a lesson is being opened for editing and its attachments are being fetched.
-- **Line 23:** Stores whether the form is mounted; false initially hides it.
-- **Line 24:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 25:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 26:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
-- **Line 27:** State for every saved attachment returned by the server.
-- **Line 28:** State for an error message when attachments could not be loaded.
-- **Line 29:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 30:** Blank line separates related sections; it performs no operation.
+- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports React for JSX plus effect and state hooks from the installed React package.
+- **Line 8:** Imports the neighboring form component as LessonForm.
+- **Line 9:** Imports the neighboring card component as LessonCard.
+- **Line 10:** Imports the new browser component for requesting, reviewing and approving an AI draft.
+- **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 13:** Blank line separates related sections; it performs no operation.
+- **Line 14:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
+- **Line 15:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
+- **Line 16:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 17:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
+- **Line 18:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
+- **Line 19:** Keeps the Fitness dashboard class-type filter in React state, initially showing every class type.
+- **Line 20:** Combines audience, discipline and class-type filters to derive visible cards without changing stored lessons.
+- **Line 21:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 22:** Stores a safe user-facing error message, initially empty.
+- **Line 23:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 24:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 25:** Stores whether the form is mounted; false initially hides it.
+- **Line 26:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 27:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 28:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
+- **Line 29:** State for every saved attachment returned by the server.
+- **Line 30:** State for an error message when attachments could not be loaded.
 
 ### Lines 31–60
 
 ```text
-31 |   useEffect(() => {
-32 |     const controller = new AbortController();
-33 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
-34 |     async function loadLessons() {
-35 |       setLoading(true);
-36 |       setError('');
-37 |       try {
-38 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-39 |         if (!response.ok) throw new Error('Unable to load lessons.');
-40 |         const data = await response.json();
-41 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-42 |         setLessons(data);
-43 |       } catch (failure) {
-44 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-45 |       } finally {
-46 |         if (!controller.signal.aborted) setLoading(false);
-47 |       }
-48 |     }
-49 |     loadLessons();
-50 |     return () => controller.abort();
-51 |   }, [reload]);
-52 |
-53 |   useEffect(() => {
-54 |     const controller = new AbortController();
-55 |     // Loads attachments separately so a media error does not hide the lesson text.
-56 |     async function loadMedia() {
-57 |       try {
-58 |         const data = await fetchMedia(controller.signal);
-59 |         setMedia(data);
-60 |         setMediaError('');
+31 |   const [mediaReload, setMediaReload] = useState(0);
+32 |
+33 |   useEffect(() => {
+34 |     const controller = new AbortController();
+35 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
+36 |     async function loadLessons() {
+37 |       setLoading(true);
+38 |       setError('');
+39 |       try {
+40 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+41 |         if (!response.ok) throw new Error('Unable to load lessons.');
+42 |         const data = await response.json();
+43 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+44 |         setLessons(data);
+45 |       } catch (failure) {
+46 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+47 |       } finally {
+48 |         if (!controller.signal.aborted) setLoading(false);
+49 |       }
+50 |     }
+51 |     loadLessons();
+52 |     return () => controller.abort();
+53 |   }, [reload]);
+54 |
+55 |   useEffect(() => {
+56 |     const controller = new AbortController();
+57 |     // Loads attachments separately so a media error does not hide the lesson text.
+58 |     async function loadMedia() {
+59 |       try {
+60 |         const data = await fetchMedia(controller.signal);
 ```
 
-- **Line 31:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 32:** Creates a browser cancellation controller for this request.
-- **Line 33:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
-- **Line 34:** Declares an async helper, allowing await inside its braces.
-- **Line 35:** Marks the list request as running.
-- **Line 36:** Clears the previous list error before retrying.
-- **Line 37:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 38:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 39:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 40:** Parses the server's JSON response.
-- **Line 41:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 42:** Stores the backend records, triggering a render.
-- **Line 43:** Catches request, response or cancellation failures.
-- **Line 44:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 45:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 46:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 47:** Closes the App function.
-- **Line 48:** Closes the App function.
-- **Line 49:** Starts the helper; its own try/catch handles its failures.
-- **Line 50:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 51:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 52:** Blank line separates related sections; it performs no operation.
-- **Line 53:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 54:** Creates a browser cancellation controller for this request.
-- **Line 55:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
-- **Line 56:** Declares the loader for attachments inside the effect.
-- **Line 57:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 58:** The attachment loader now uses fetchMedia, with the abort signal.
-- **Line 59:** Stores the attachments.
-- **Line 60:** Clears any earlier media error.
+- **Line 31:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 32:** Blank line separates related sections; it performs no operation.
+- **Line 33:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 34:** Creates a browser cancellation controller for this request.
+- **Line 35:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
+- **Line 36:** Declares an async helper, allowing await inside its braces.
+- **Line 37:** Marks the list request as running.
+- **Line 38:** Clears the previous list error before retrying.
+- **Line 39:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 40:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 41:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 42:** Parses the server's JSON response.
+- **Line 43:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 44:** Stores the backend records, triggering a render.
+- **Line 45:** Catches request, response or cancellation failures.
+- **Line 46:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 47:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 48:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 49:** Closes the App function.
+- **Line 50:** Closes the App function.
+- **Line 51:** Starts the helper; its own try/catch handles its failures.
+- **Line 52:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 53:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 54:** Blank line separates related sections; it performs no operation.
+- **Line 55:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 56:** Creates a browser cancellation controller for this request.
+- **Line 57:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
+- **Line 58:** Declares the loader for attachments inside the effect.
+- **Line 59:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 60:** The attachment loader now uses fetchMedia, with the abort signal.
 
 ### Lines 61–90
 
 ```text
-61 |       } catch (failure) {
-62 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-63 |       }
-64 |     }
-65 |     loadMedia();
-66 |     return () => controller.abort();
-67 |   }, [reload, mediaReload]);
-68 |
-69 |   // Selects attachments for one lesson instead of showing another lesson's media.
-70 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
-71 |
-72 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
-73 |   async function handleEdit(lesson, approvedVideos = []) {
-74 |     setNotice(null);
-75 |     setOpening(true);
-76 |     try {
-77 |       const fresh = await fetchMedia();
-78 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
-79 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
-80 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
-81 |       setMedia(fresh);
-82 |       setMediaError('');
-83 |       setEditing(lesson);
-84 |       setFormOpen('manual');
-85 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-86 |       return true;
-87 |     } catch {
-88 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-89 |       return false;
-90 |     } finally { setOpening(false); }
+61 |         setMedia(data);
+62 |         setMediaError('');
+63 |       } catch (failure) {
+64 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+65 |       }
+66 |     }
+67 |     loadMedia();
+68 |     return () => controller.abort();
+69 |   }, [reload, mediaReload]);
+70 |
+71 |   // Selects attachments for one lesson instead of showing another lesson's media.
+72 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+73 |
+74 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
+75 |   async function handleEdit(lesson, approvedVideos = []) {
+76 |     setNotice(null);
+77 |     setOpening(true);
+78 |     try {
+79 |       const fresh = await fetchMedia();
+80 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
+81 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
+82 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
+83 |       setMedia(fresh);
+84 |       setMediaError('');
+85 |       setEditing(lesson);
+86 |       setFormOpen('manual');
+87 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+88 |       return true;
+89 |     } catch {
+90 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
 ```
 
-- **Line 61:** Catches request, response or cancellation failures.
-- **Line 62:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 63:** Closes the App function.
-- **Line 64:** Closes the App function.
-- **Line 65:** Starts the load.
-- **Line 66:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 67:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 68:** Blank line separates related sections; it performs no operation.
-- **Line 69:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
-- **Line 70:** Helper that returns only the attachments of one lesson.
-- **Line 71:** Blank line separates related sections; it performs no operation.
-- **Line 72:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
-- **Line 73:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
-- **Line 74:** Clears any old message.
-- **Line 75:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 76:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 77:** Asks the server what attachments are really stored now.
-- **Line 78:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
-- **Line 79:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
-- **Line 80:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
-- **Line 81:** Replaces the page’s attachment list with that fresh copy.
-- **Line 82:** Clears any earlier media error.
-- **Line 83:** Remembers which lesson is being edited.
-- **Line 84:** Opens the manual form.
-- **Line 85:** Scrolls to the top where the form appears, as before.
-- **Line 86:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
-- **Line 87:** Catches failure without including private exception details in public hosting logs.
-- **Line 88:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 89:** Reports failure to the selection panel so it can keep results and checked videos for retry.
-- **Line 90:** Always ends the opening state.
+- **Line 61:** Stores the attachments.
+- **Line 62:** Clears any earlier media error.
+- **Line 63:** Catches request, response or cancellation failures.
+- **Line 64:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 65:** Closes the App function.
+- **Line 66:** Closes the App function.
+- **Line 67:** Starts the load.
+- **Line 68:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 69:** Ends the effect; it re-runs when either reload counter changes.
+- **Line 70:** Blank line separates related sections; it performs no operation.
+- **Line 71:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
+- **Line 72:** Helper that returns only the attachments of one lesson.
+- **Line 73:** Blank line separates related sections; it performs no operation.
+- **Line 74:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
+- **Line 75:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
+- **Line 76:** Clears any old message.
+- **Line 77:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 78:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 79:** Asks the server what attachments are really stored now.
+- **Line 80:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
+- **Line 81:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
+- **Line 82:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
+- **Line 83:** Replaces the page’s attachment list with that fresh copy.
+- **Line 84:** Clears any earlier media error.
+- **Line 85:** Remembers which lesson is being edited.
+- **Line 86:** Opens the manual form.
+- **Line 87:** Scrolls to the top where the form appears, as before.
+- **Line 88:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
+- **Line 89:** Catches failure without including private exception details in public hosting logs.
+- **Line 90:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
 
 ### Lines 91–120
 
 ```text
-91 |   }
-92 |
-93 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
-94 |   async function handleSaved(lesson, sent) {
-95 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-96 |     setAudience('All');
-97 |     setDiscipline('All'); setClassType('All');
-98 |     setFormOpen(false);
-99 |     setEditing(null);
-100 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-101 |     let text = `Saved “${lesson.title}”.`;
-102 |     let tone = 'success';
-103 |     try {
-104 |       const fresh = await fetchMedia();
-105 |       setMedia(fresh);
-106 |       setMediaError('');
-107 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-108 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-109 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-110 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-111 |     } catch {
-112 |       tone = 'warning';
-113 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-114 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-115 |     }
-116 |     setNotice({ tone, text });
-117 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-118 |   }
-119 |
-120 |   return (
+91 |       return false;
+92 |     } finally { setOpening(false); }
+93 |   }
+94 |
+95 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
+96 |   async function handleSaved(lesson, sent) {
+97 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+98 |     setAudience('All');
+99 |     setDiscipline('All'); setClassType('All');
+100 |     setFormOpen(false);
+101 |     setEditing(null);
+102 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+103 |     let text = `Saved “${lesson.title}”.`;
+104 |     let tone = 'success';
+105 |     try {
+106 |       const fresh = await fetchMedia();
+107 |       setMedia(fresh);
+108 |       setMediaError('');
+109 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+110 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+111 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+112 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+113 |     } catch {
+114 |       tone = 'warning';
+115 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+116 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+117 |     }
+118 |     setNotice({ tone, text });
+119 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+120 |   }
 ```
 
-- **Line 91:** Closes the App function.
-- **Line 92:** Blank line separates related sections; it performs no operation.
-- **Line 93:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
-- **Line 94:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 95:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 96:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 97:** Resets both filters after a save so the newly saved lesson remains visible.
-- **Line 98:** Closes the form; unmounting it discards its input state after success.
-- **Line 99:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 100:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 101:** Starts the final message text.
-- **Line 102:** Starts as a success tone.
-- **Line 103:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 104:** Asks the server what attachments are really stored now.
-- **Line 105:** Replaces the page’s attachment list with that fresh copy.
-- **Line 106:** Clears any earlier media error.
-- **Line 107:** Counts the stored attachments of this lesson.
-- **Line 108:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 109:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 110:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 111:** Catches failure without including private exception details in public hosting logs.
-- **Line 112:** …uses a warning tone,
-- **Line 113:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 114:** …and shows the retry banner.
-- **Line 115:** Closes the App function.
-- **Line 116:** Shows the final message.
-- **Line 117:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 118:** Closes the App function.
-- **Line 119:** Blank line separates related sections; it performs no operation.
-- **Line 120:** Begins returning a parenthesized JSX tree.
+- **Line 91:** Reports failure to the selection panel so it can keep results and checked videos for retry.
+- **Line 92:** Always ends the opening state.
+- **Line 93:** Closes the App function.
+- **Line 94:** Blank line separates related sections; it performs no operation.
+- **Line 95:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
+- **Line 96:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 97:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 98:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 99:** Resets both filters after a save so the newly saved lesson remains visible.
+- **Line 100:** Closes the form; unmounting it discards its input state after success.
+- **Line 101:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 102:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 103:** Starts the final message text.
+- **Line 104:** Starts as a success tone.
+- **Line 105:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 106:** Asks the server what attachments are really stored now.
+- **Line 107:** Replaces the page’s attachment list with that fresh copy.
+- **Line 108:** Clears any earlier media error.
+- **Line 109:** Counts the stored attachments of this lesson.
+- **Line 110:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 111:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 112:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 113:** Catches failure without including private exception details in public hosting logs.
+- **Line 114:** …uses a warning tone,
+- **Line 115:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 116:** …and shows the retry banner.
+- **Line 117:** Closes the App function.
+- **Line 118:** Shows the final message.
+- **Line 119:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 120:** Closes the App function.
 
-### Lines 121–145
+### Lines 121–148
 
 ```text
-121 |     <main className="coach-shell">
-122 |       <header className="hero">
-123 |         <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-124 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-125 |       </header>
-126 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => { setDiscipline(value); setClassType('All'); }}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
-127 |       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
-128 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-129 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-130 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-131 |       <section aria-labelledby="lessons-heading">
-132 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
-133 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-134 |         {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', 'Group classes', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
-135 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
-136 |         {loading && <p role="status">Loading lesson plans…</p>}
-137 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-138 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-139 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-140 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-141 |       </section>
-142 |       <CoachingChat key={user.id} />
-143 |     </main>
-144 |   );
-145 | }
+121 |
+122 |   return (
+123 |     <main className="coach-shell">
+124 |       <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
+125 |       <header className="hero">
+126 |         <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+127 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+128 |       </header>
+129 |       <DisciplineHeader discipline={discipline} classType={classType} />
+130 |       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
+131 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+132 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} defaults={disciplineDefaults(discipline, classType)} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+133 |       {formOpen === 'ai' && <AiLessonForm defaults={disciplineDefaults(discipline, classType)} onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+134 |       <section aria-labelledby="lessons-heading">
+135 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
+136 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+137 |         {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', 'Group classes', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
+138 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+139 |         {loading && <p role="status">Loading lesson plans…</p>}
+140 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+141 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+142 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+143 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+144 |       </section>
+145 |       <CoachingChat key={user.id} />
+146 |     </main>
+147 |   );
+148 | }
 ```
 
-- **Line 121:** Applies the dark dashboard shell without changing signed-in access.
-- **Line 122:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 123:** Shows the app title, coaching subtitle and existing account/logout action.
-- **Line 124:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 125:** Closes the header.
-- **Line 126:** Renders the discipline buttons, including Fitness and legacy Personal Training; switching tabs resets the class filter.
-- **Line 127:** Shows photo navigation only on the dashboard when no editor is open; selection updates the existing discipline and class filters.
-- **Line 128:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 129:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
-- **Line 130:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 131:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 132:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
-- **Line 133:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 134:** Offers the combined Group classes filter beside individual Fitness types and optional metadata choices.
-- **Line 135:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
-- **Line 136:** Conditionally shows loading text as a live status paragraph.
-- **Line 137:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 138:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 139:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 140:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
-- **Line 141:** Closes the lesson section.
-- **Line 142:** Renders chat only within the signed-in app; changing the user ID resets its React state.
-- **Line 143:** Closes main.
-- **Line 144:** Closes the parenthesized return statement with a semicolon.
-- **Line 145:** Closes the App function.
+- **Line 121:** Blank line separates related sections; it performs no operation.
+- **Line 122:** Begins returning a parenthesized JSX tree.
+- **Line 123:** Applies the dark dashboard shell without changing signed-in access.
+- **Line 124:** Shows working navigation; disables navigation during editing so unsaved work is not replaced.
+- **Line 125:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 126:** Shows the app title, coaching subtitle and existing account/logout action.
+- **Line 127:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 128:** Closes the header.
+- **Line 129:** Displays the selected discipline header from the shared mapping.
+- **Line 130:** Shows photo navigation only on the dashboard when no editor is open; selection updates the existing discipline and class filters.
+- **Line 131:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 132:** Passes navigation defaults to new manual forms; saved lesson data and current media remain authoritative when editing.
+- **Line 133:** Passes selected discipline and Fitness class defaults into the new AI form.
+- **Line 134:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 135:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
+- **Line 136:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 137:** Offers the combined Group classes filter beside individual Fitness types and optional metadata choices.
+- **Line 138:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 139:** Conditionally shows loading text as a live status paragraph.
+- **Line 140:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 141:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 142:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 143:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
+- **Line 144:** Closes the lesson section.
+- **Line 145:** Renders chat only within the signed-in app; changing the user ID resets its React state.
+- **Line 146:** Closes main.
+- **Line 147:** Closes the parenthesized return statement with a semicolon.
+- **Line 148:** Closes the App function.
 
 ## client/src/styles.css
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\styles.css`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
 ### Lines 1–30
 
@@ -795,7 +801,7 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 158:** Uses a flex row, centered checkbox, readable spacing and a minimum 44-pixel clickable label for phone use.
 - **Line 159:** Keeps checkbox width natural and removes input margins so global text-field styling does not stretch it.
 - **Line 160:** Blank line separating related statements; it has no runtime effect.
-- **Line 161:** Comment: The owner's dark gym photography anchors the dashboard; editing panels stay light. 
+- **Line 161:** Comment: The owner's dark gym photography anchors the dashboard; editing panels stay light.
 - **Line 162:** CSS rule for body:has(.coach-shell): background: #071215;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 163:** CSS rule for .coach-shell: max-width: 1440px; color: #eef6f4; padding: 32px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 164:** CSS rule for .coach-shell .hero: border-color: #34504d; align-items: flex-end;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
@@ -816,19 +822,51 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 179:** CSS rule for .tile-copy strong: font: 700 1.6rem/1.1 'Arial Narrow', Impact, sans-serif;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 180:** CSS rule for .tile-copy > span: font-size: 0.86rem; font-weight: 400; line-height: 1.4;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 
-### Lines 181–184
+### Lines 181–200
 
 ```text
 181 | .discipline-tile:hover:not(:disabled) { border-color: #81e5b3; background: #183b37; }
 182 | .coach-shell :focus-visible { outline: 3px solid #db9c22; outline-offset: 4px; }
 183 | @media (max-width: 1000px) { .discipline-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 184 | @media (max-width: 600px) { .coach-shell { padding: 20px 14px; } .discipline-cards { grid-template-columns: 1fr; gap: 12px; } .discipline-tile { min-height: 190px; } .tile-copy { padding-top: 110px; } }
+185 |
+186 | /* Sidebar links are actual filters, with a compact wrapping layout on phones. */
+187 | .coach-shell { position: relative; padding-left: 242px; }
+188 | .coach-sidebar { position: absolute; left: 24px; top: 32px; width: 190px; }
+189 | .sidebar-brand { display: block; font: 700 2rem 'Arial Narrow', Impact, sans-serif; margin-bottom: 24px; }
+190 | .coach-sidebar nav { display: flex; flex-direction: column; gap: 8px; }
+191 | .coach-sidebar button.secondary { background: transparent; color: #d7e9e3; border-color: transparent; text-align: left; padding: 10px; }
+192 | .coach-sidebar button.secondary:hover:not(:disabled), .coach-sidebar button[aria-pressed="true"] { background: #164b39; border-color: #4e9f7b; color: #fff; }
+193 | .discipline-header { position: relative; isolation: isolate; overflow: hidden; min-height: 230px; background: linear-gradient(120deg, #183b37, #071215); border-radius: 12px; margin-bottom: 28px; display: flex; align-items: flex-end; }
+194 | .discipline-header img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; z-index: -2; }
+195 | .discipline-header::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #041010f2, #04101050); z-index: -1; }
+196 | .discipline-header > div { padding: 28px; max-width: 65ch; }
+197 | .discipline-header h2 { font: 700 clamp(2rem, 5vw, 3.5rem)/1.1 'Arial Narrow', Impact, sans-serif; margin: 0 0 12px; }
+198 | .discipline-header p { margin: 0; }
+199 | @media (max-width: 1000px) { .coach-shell { padding-left: 24px; } .coach-sidebar { position: static; width: auto; margin-bottom: 24px; } .coach-sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 4px; } .sidebar-brand { display: none; } .coach-sidebar button.secondary { font-size: 0.85rem; } }
+200 | @media (max-width: 600px) { .coach-shell { padding-left: 14px; } .discipline-header { min-height: 180px; } .discipline-header > div { padding: 20px; } }
 ```
 
 - **Line 181:** CSS rule for .discipline-tile:hover:not(:disabled): border-color: #81e5b3; background: #183b37;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 182:** CSS rule for .coach-shell :focus-visible: outline: 3px solid #db9c22; outline-offset: 4px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 183:** CSS rule for @media (max-width: 1000px): .discipline-cards  grid-template-columns: repeat(2, minmax(0, 1fr));. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 184:** CSS rule for @media (max-width: 600px): .coach-shell  padding: 20px 14px;  .discipline-cards  grid-template-columns: 1fr; gap: 12px;  .discipline-tile  min-height: 190px;  .tile-copy  padding-top: 110px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
+- **Line 185:** Blank line separating related statements; it has no runtime effect.
+- **Line 186:** Comment: Sidebar links are actual filters, with a compact wrapping layout on phones.
+- **Line 187:** CSS for .coach-shell : position: relative; padding-left: 242px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 188:** CSS for .coach-sidebar : position: absolute; left: 24px; top: 32px; width: 190px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 189:** CSS for .sidebar-brand : display: block; font: 700 2rem 'Arial Narrow', Impact, sans-serif; margin-bottom: 24px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 190:** CSS for .coach-sidebar nav : display: flex; flex-direction: column; gap: 8px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 191:** CSS for .coach-sidebar button.secondary : background: transparent; color: #d7e9e3; border-color: transparent; text-align: left; padding: 10px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 192:** CSS for .coach-sidebar button.secondary:hover:not(:disabled), .coach-sidebar button[aria-pressed="true"] : background: #164b39; border-color: #4e9f7b; color: #fff; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 193:** CSS for .discipline-header : position: relative; isolation: isolate; overflow: hidden; min-height: 230px; background: linear-gradient(120deg, #183b37, #071215); border-radius: 12px; margin-bottom: 28px; display: flex; align-items: flex-end; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 194:** CSS for .discipline-header img : position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; z-index: -2; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 195:** CSS for .discipline-header::after : content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #041010f2, #04101050); z-index: -1; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 196:** CSS for .discipline-header > div : padding: 28px; max-width: 65ch; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 197:** CSS for .discipline-header h2 : font: 700 clamp(2rem, 5vw, 3.5rem)/1.1 'Arial Narrow', Impact, sans-serif; margin: 0 0 12px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 198:** CSS for .discipline-header p : margin: 0; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 199:** CSS for @media (max-width: 1000px) : .coach-shell  padding-left: 24px;  .coach-sidebar  position: static; width: auto; margin-bottom: 24px;  .coach-sidebar nav  flex-direction: row; flex-wrap: wrap; gap: 4px;  .sidebar-brand  display: none;  .coach-sidebar button.secondary  font-size: 0.85rem; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
+- **Line 200:** CSS for @media (max-width: 600px) : .coach-shell  padding-left: 14px;  .discipline-header  min-height: 180px;  .discipline-header > div  padding: 20px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
 
 ## client/vite.config.js
 
@@ -2714,7 +2752,7 @@ Checks api behavior with controlled fixtures; read each test name for its expect
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonForm.jsx`
 
-Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
 ### Lines 1–30
 
@@ -2733,8 +2771,8 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 12 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 13 |
 14 | // Uses the same form for new lessons and explicit updates to an existing ID.
-15 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-16 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
+15 | export default function LessonForm({ onSaved, onCancel, defaults = {}, lesson, media: savedMedia = [] }) {
+16 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : { ...initial, ...defaults });
 17 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
 18 |   const [saving, setSaving] = useState(false);
 19 |   const [error, setError] = useState('');
@@ -2765,8 +2803,8 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 12:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
 - **Line 13:** Blank line separates related sections for readability; it performs no operation.
 - **Line 14:** Human-readable comment: Uses the same form for new lessons and explicit updates to an existing ID. This explanation does not execute.
-- **Line 15:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
-- **Line 16:** Initializes controlled form state from the existing lesson or defaults. Object.fromEntries rebuilds only known fields; ?? supplies the default for missing or null values.
+- **Line 15:** Accepts optional defaults while retaining existing lesson, media and save/cancel props.
+- **Line 16:** Initializes edit values from stored lesson fields; only new lessons merge navigation defaults.
 - **Line 17:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
 - **Line 18:** Initializes the saving flag to false.
 - **Line 19:** Stores a safe user-facing error message, initially empty.
@@ -3506,7 +3544,7 @@ AI step-format repair: this file participates in prompt construction, conservati
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\AiLessonForm.jsx`
 
-Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
 ### Lines 1–30
 
@@ -3523,8 +3561,8 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 10 |
 11 | const initial = { ...emptyFitness, audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
 12 | // Separates generation from approval so AI output cannot save itself.
-13 | export default function AiLessonForm({ onSaved, onCancel }) {
-14 |   const [request, setRequest] = useState(initial);
+13 | export default function AiLessonForm({ onSaved, onCancel, defaults = {} }) {
+14 |   const [request, setRequest] = useState(() => ({ ...initial, ...defaults }));
 15 |   const [draft, setDraft] = useState(null);
 16 |   const [approved, setApproved] = useState(false);
 17 |   const [media, setMediaList] = useState([]);
@@ -3555,8 +3593,8 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 10:** Blank line separates related sections; it performs no operation.
 - **Line 11:** Initializes blank optional Fitness fields alongside the existing form defaults; no class details are required for legacy lessons.
 - **Line 12:** Human-readable comment: Separates generation from approval so AI output cannot save itself. This explanation does not execute.
-- **Line 13:** Exports the component and unpacks the parent callbacks onSaved and onCancel from props.
-- **Line 14:** Creates request state and its setter from the initial class details.
+- **Line 13:** Adds optional navigation defaults to the existing AI form props.
+- **Line 14:** Initializes new AI requests by merging selected discipline defaults over the existing safe defaults.
 - **Line 15:** Creates draft state, initially null because generation has not happened.
 - **Line 16:** Creates the approval checkbox state, initially false.
 - **Line 17:** State: the draft’s attachments (suggested by CoachLab or added by the coach).
@@ -6412,7 +6450,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-ui.test.js`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
 ### Lines 1–30
 
@@ -6612,7 +6650,7 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 89:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 90:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 
-### Lines 91–95
+### Lines 91–107
 
 ```text
 91 |   const { filterLessons } = await import('../client/src/lesson-view.js');
@@ -6620,6 +6658,18 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 93 |   assert.deepEqual(filterLessons(rows, 'All', 'Fitness', 'Group classes'), [rows[1]]);
 94 |   assert.deepEqual(filterLessons(rows, 'All', 'Personal Training'), [rows[2]]);
 95 | });
+96 |
+97 | // New-form defaults follow navigation without rewriting stored legacy records.
+98 | test('discipline page defaults preserve Fitness and legacy navigation', async () => {
+99 |   const { disciplineDefaults, disciplinePage } = await import('../client/src/discipline-pages.js');
+100 |   assert.deepEqual(disciplineDefaults('All', 'All'), {});
+101 |   assert.deepEqual(disciplineDefaults('MMA', 'All'), { discipline: 'MMA' });
+102 |   assert.equal(disciplineDefaults('Fitness', 'Personal training').class_type, 'Personal training');
+103 |   assert.equal(disciplineDefaults('Fitness', 'Group classes').class_format, 'Group class');
+104 |   assert.equal(disciplineDefaults('Fitness', 'Group classes').class_type, '');
+105 |   assert.equal(disciplinePage('Fitness', 'Group classes').image, 'classes');
+106 |   assert.equal(disciplinePage('Personal Training', 'All').discipline, 'Personal Training');
+107 | });
 ```
 
 - **Line 91:** Loads the same filter used by the dashboard.
@@ -6627,6 +6677,18 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 93:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 94:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
 - **Line 95:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 96:** Blank line separating related statements; it has no runtime effect.
+- **Line 97:** Comment: New-form defaults follow navigation without rewriting stored legacy records.
+- **Line 98:** Checks page mappings and new-form defaults, including legacy values.
+- **Line 99:** Imports the actual navigation helpers for assertions.
+- **Line 100:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 101:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 102:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 103:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 104:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 105:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 106:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 107:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/postgres-api.test.js
 
@@ -14750,9 +14812,9 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\discipline-pages.js`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
 
-### Lines 1–10
+### Lines 1–24
 
 ```text
 1 | // Maps only the owner's supplied photographs to existing discipline filters.
@@ -14765,6 +14827,20 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 8 |   { title: 'Personal Training', discipline: 'Fitness', classType: 'Personal training', image: 'personal-training', description: 'Strength, conditioning and individual coaching' },
 9 |   { title: 'Classes', discipline: 'Fitness', classType: 'Group classes', image: 'classes', description: 'Cardio, dance, strength and group fitness' },
 10 | ];
+11 | // Uses the same photo/filter mapping for page headings and new-form defaults.
+12 | export function disciplinePage(discipline, classType) {
+13 |   if (discipline === 'All') return null;
+14 |   if (discipline === 'Personal Training') return { ...disciplineCards[5], title: 'Personal Training (legacy)', discipline };
+15 |   if (discipline === 'Fitness') return { ...disciplineCards[classType === 'Personal training' ? 5 : 6], title: classType === 'All' ? 'Fitness' : classType === 'Group classes' ? 'Classes' : classType };
+16 |   return disciplineCards.find(card => card.discipline === discipline) || { title: discipline, discipline };
+17 | }
+18 | // Prefill only new lessons; existing lessons always supply their own stored values.
+19 | export function disciplineDefaults(discipline, classType) {
+20 |   if (discipline === 'All') return {};
+21 |   if (discipline === 'Personal Training') return { discipline: 'Fitness', class_type: 'Personal training', class_format: 'One-on-one' };
+22 |   if (discipline !== 'Fitness') return { discipline };
+23 |   return { discipline, class_type: ['All', 'Group classes', 'Unspecified'].includes(classType) ? '' : classType, class_format: classType === 'Personal training' ? 'One-on-one' : classType === 'Group classes' ? 'Group class' : '' };
+24 | }
 ```
 
 - **Line 1:** Comment: Maps only the owner's supplied photographs to existing discipline filters.
@@ -14777,3 +14853,55 @@ Photo dashboard: this file connects the owner’s supplied imagery and existing 
 - **Line 8:** Defines this card’s visible title, existing discipline filter, optional Fitness class filter, matching local image filename and coaching description.
 - **Line 9:** Defines this card’s visible title, existing discipline filter, optional Fitness class filter, matching local image filename and coaching description.
 - **Line 10:** Closes the array and ends its declaration.
+- **Line 11:** Comment: Uses the same photo/filter mapping for page headings and new-form defaults.
+- **Line 12:** Resolves a page heading and photo from existing filters.
+- **Line 13:** The dashboard has no individual discipline header.
+- **Line 14:** Uses the trainer photo while keeping the legacy discipline and clearly labeling its page.
+- **Line 15:** Selects the personal-training or group photo and gives the page the current Fitness type/filter title.
+- **Line 16:** Uses a matching known card or a text-only fallback for an unknown selection.
+- **Line 17:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 18:** Comment: Prefill only new lessons; existing lessons always supply their own stored values.
+- **Line 19:** Builds defaults for new plans without modifying records.
+- **Line 20:** Leaves the existing form defaults alone on the dashboard.
+- **Line 21:** New lessons opened from legacy navigation use Fitness Personal training, without rewriting old lessons.
+- **Line 22:** Prefills the existing martial-arts discipline only.
+- **Line 23:** Omits aggregate filter names from saved data and chooses the appropriate personal/group format.
+- **Line 24:** Closes this function, conditional block or object; execution continues after the block.
+
+## client/src/DisciplineHeader.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\DisciplineHeader.jsx`
+
+Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
+
+### Lines 1–13
+
+```text
+1 | // Provides working discipline navigation and a matching local-photo header.
+2 | import React from 'react';
+3 | import { disciplineCards, disciplinePage } from './discipline-pages.js';
+4 | import { DisciplinePhoto } from './DisciplineCards.jsx';
+5 | export function DisciplineNavigation({ discipline, classType, onSelect, disabled }) {
+6 |   const destinations = [{ title: 'Dashboard', discipline: 'All' }, ...disciplineCards, { title: 'All Fitness', discipline: 'Fitness' }, { title: 'Legacy Personal Training', discipline: 'Personal Training' }];
+7 |   return <aside className="coach-sidebar"><strong className="sidebar-brand">CoachLab</strong><nav aria-label="Disciplines">{destinations.map(card => <button type="button" className="secondary" key={card.title} disabled={disabled} aria-pressed={discipline === card.discipline && classType === (card.classType || 'All')} onClick={() => onSelect(card)}>{card.title}</button>)}</nav></aside>;
+8 | }
+9 | export default function DisciplineHeader({ discipline, classType }) {
+10 |   const page = disciplinePage(discipline, classType);
+11 |   if (!page) return null;
+12 |   return <section className="discipline-header" aria-label={page.title + ' lesson plans'}><DisciplinePhoto key={page.image} image={page.image} /><div><h2>{page.title}</h2><p>{page.description || 'Your saved lessons and coaching plans'}</p></div></section>;
+13 | }
+```
+
+- **Line 1:** Comment: Provides working discipline navigation and a matching local-photo header.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Defines the sidebar with current selection, callback and editing lock props.
+- **Line 6:** Builds Dashboard, seven photo-card destinations, All Fitness and legacy lesson navigation.
+- **Line 7:** Renders real filter buttons with pressed-state accessibility and a disabled state during editing.
+- **Line 8:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 9:** Defines the page photo/title component using current filters.
+- **Line 10:** Looks up the selected page using the shared pure helper.
+- **Line 11:** Renders nothing for the dashboard.
+- **Line 12:** Renders the local photo with a key that resets its error state when images change, plus the page title and description.
+- **Line 13:** Closes this function, conditional block or object; execution continues after the block.

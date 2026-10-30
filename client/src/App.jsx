@@ -1,12 +1,14 @@
 // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
 import { fitnessClassTypes } from './fitness.js';
+import DisciplineHeader, { DisciplineNavigation } from './DisciplineHeader.jsx';
+import { disciplineDefaults } from './discipline-pages.js';
 import DisciplineCards from './DisciplineCards.jsx';
 import CoachingChat from './CoachingChat.jsx';
 import React, { useEffect, useState } from 'react';
 import LessonForm from './LessonForm.jsx';
 import LessonCard from './LessonCard.jsx';
 import AiLessonForm from './AiLessonForm.jsx';
-import { disciplineNavigation, filterLessons } from './lesson-view.js';
+import { filterLessons } from './lesson-view.js';
 import { fetchMedia, withApprovedVideos } from './media.js';
 
 // Keeps lessons and media together while one editor is open.
@@ -119,15 +121,16 @@ export default function App({ user, onLogOut }) {
 
   return (
     <main className="coach-shell">
+      <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
       <header className="hero">
         <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
-      <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => { setDiscipline(value); setClassType('All'); }}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+      <DisciplineHeader discipline={discipline} classType={classType} />
       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-      {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+      {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} defaults={disciplineDefaults(discipline, classType)} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+      {formOpen === 'ai' && <AiLessonForm defaults={disciplineDefaults(discipline, classType)} onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
