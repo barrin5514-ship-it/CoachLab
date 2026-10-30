@@ -92,339 +92,355 @@ Mounts the login gate and application into the page.
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Photo framing and header styling: uses only owner assets, preserves current controls and changes presentation without database, API or state-flow changes.
+Classes integration: connects the existing lesson workflow to coach-owned class setup and assignments while preserving prior behavior.
 
 ### Lines 1–30
 
 ```text
 1 | // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
-2 | import { fitnessClassTypes } from './fitness.js';
-3 | import DisciplineHeader, { DisciplineNavigation } from './DisciplineHeader.jsx';
-4 | import { disciplineDefaults } from './discipline-pages.js';
-5 | import DisciplineCards from './DisciplineCards.jsx';
-6 | import CoachingChat from './CoachingChat.jsx';
-7 | import React, { useEffect, useState } from 'react';
-8 | import LessonForm from './LessonForm.jsx';
-9 | import LessonCard from './LessonCard.jsx';
-10 | import AiLessonForm from './AiLessonForm.jsx';
-11 | import { filterLessons } from './lesson-view.js';
-12 | import { fetchMedia, withApprovedVideos } from './media.js';
-13 |
-14 | // Keeps lessons and media together while one editor is open.
-15 | export default function App({ user, onLogOut }) {
-16 |   const [lessons, setLessons] = useState([]);
-17 |   const [audience, setAudience] = useState('All');
-18 |   const [discipline, setDiscipline] = useState('All');
-19 |   const [classType, setClassType] = useState('All');
-20 |   const visibleLessons = filterLessons(lessons, audience, discipline, classType);
-21 |   const [loading, setLoading] = useState(true);
-22 |   const [error, setError] = useState('');
-23 |   const [notice, setNotice] = useState(null);
-24 |   const [opening, setOpening] = useState(false);
-25 |   const [formOpen, setFormOpen] = useState(false);
-26 |   const [reload, setReload] = useState(0);
-27 |   const [editing, setEditing] = useState(null);
-28 |   const [editingMedia, setEditingMedia] = useState([]);
-29 |   const [media, setMedia] = useState([]);
-30 |   const [mediaError, setMediaError] = useState('');
+2 | import ClassesPage from './ClassesPage.jsx';
+3 | import { fitnessClassTypes } from './fitness.js';
+4 | import DisciplineHeader, { DisciplineNavigation } from './DisciplineHeader.jsx';
+5 | import { disciplineDefaults } from './discipline-pages.js';
+6 | import DisciplineCards from './DisciplineCards.jsx';
+7 | import CoachingChat from './CoachingChat.jsx';
+8 | import React, { useEffect, useState } from 'react';
+9 | import LessonForm from './LessonForm.jsx';
+10 | import LessonCard from './LessonCard.jsx';
+11 | import AiLessonForm from './AiLessonForm.jsx';
+12 | import { filterLessons } from './lesson-view.js';
+13 | import { fetchMedia, withApprovedVideos } from './media.js';
+14 |
+15 | // Keeps lessons and media together while one editor is open.
+16 | export default function App({ user, onLogOut }) {
+17 |   const [classesOpen, setClassesOpen] = useState(false);
+18 |   const [lessons, setLessons] = useState([]);
+19 |   const [audience, setAudience] = useState('All');
+20 |   const [discipline, setDiscipline] = useState('All');
+21 |   const [classType, setClassType] = useState('All');
+22 |   const visibleLessons = filterLessons(lessons, audience, discipline, classType);
+23 |   const [loading, setLoading] = useState(true);
+24 |   const [error, setError] = useState('');
+25 |   const [notice, setNotice] = useState(null);
+26 |   const [opening, setOpening] = useState(false);
+27 |   const [formOpen, setFormOpen] = useState(false);
+28 |   const [reload, setReload] = useState(0);
+29 |   const [editing, setEditing] = useState(null);
+30 |   const [editingMedia, setEditingMedia] = useState([]);
 ```
 
 - **Line 1:** Human-readable comment: Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments. This explanation does not execute.
-- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 2:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
 - **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 7:** Imports React for JSX plus effect and state hooks from the installed React package.
-- **Line 8:** Imports the neighboring form component as LessonForm.
-- **Line 9:** Imports the neighboring card component as LessonCard.
-- **Line 10:** Imports the new browser component for requesting, reviewing and approving an AI draft.
-- **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 8:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 9:** Imports the neighboring form component as LessonForm.
+- **Line 10:** Imports the neighboring card component as LessonCard.
+- **Line 11:** Imports the new browser component for requesting, reviewing and approving an AI draft.
 - **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 13:** Blank line separates related sections; it performs no operation.
-- **Line 14:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
-- **Line 15:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
-- **Line 16:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 17:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
-- **Line 18:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
-- **Line 19:** Keeps the Fitness dashboard class-type filter in React state, initially showing every class type.
-- **Line 20:** Combines audience, discipline and class-type filters to derive visible cards without changing stored lessons.
-- **Line 21:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 22:** Stores a safe user-facing error message, initially empty.
-- **Line 23:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
-- **Line 24:** True while a lesson is being opened for editing and its attachments are being fetched.
-- **Line 25:** Stores whether the form is mounted; false initially hides it.
-- **Line 26:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 27:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 28:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
-- **Line 29:** State for every saved attachment returned by the server.
-- **Line 30:** State for an error message when attachments could not be loaded.
+- **Line 13:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 14:** Blank line separates related sections; it performs no operation.
+- **Line 15:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
+- **Line 16:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
+- **Line 17:** Tracks which page is visible without changing lesson data.
+- **Line 18:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 19:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
+- **Line 20:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
+- **Line 21:** Keeps the Fitness dashboard class-type filter in React state, initially showing every class type.
+- **Line 22:** Combines audience, discipline and class-type filters to derive visible cards without changing stored lessons.
+- **Line 23:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 24:** Stores a safe user-facing error message, initially empty.
+- **Line 25:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 26:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 27:** Stores whether the form is mounted; false initially hides it.
+- **Line 28:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 29:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 30:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
 
 ### Lines 31–60
 
 ```text
-31 |   const [mediaReload, setMediaReload] = useState(0);
-32 |
-33 |   useEffect(() => {
-34 |     const controller = new AbortController();
-35 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
-36 |     async function loadLessons() {
-37 |       setLoading(true);
-38 |       setError('');
-39 |       try {
-40 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-41 |         if (!response.ok) throw new Error('Unable to load lessons.');
-42 |         const data = await response.json();
-43 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-44 |         setLessons(data);
-45 |       } catch (failure) {
-46 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-47 |       } finally {
-48 |         if (!controller.signal.aborted) setLoading(false);
-49 |       }
-50 |     }
-51 |     loadLessons();
-52 |     return () => controller.abort();
-53 |   }, [reload]);
-54 |
-55 |   useEffect(() => {
-56 |     const controller = new AbortController();
-57 |     // Loads attachments separately so a media error does not hide the lesson text.
-58 |     async function loadMedia() {
-59 |       try {
-60 |         const data = await fetchMedia(controller.signal);
+31 |   const [media, setMedia] = useState([]);
+32 |   const [mediaError, setMediaError] = useState('');
+33 |   const [mediaReload, setMediaReload] = useState(0);
+34 |
+35 |   useEffect(() => {
+36 |     const controller = new AbortController();
+37 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
+38 |     async function loadLessons() {
+39 |       setLoading(true);
+40 |       setError('');
+41 |       try {
+42 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+43 |         if (!response.ok) throw new Error('Unable to load lessons.');
+44 |         const data = await response.json();
+45 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+46 |         setLessons(data);
+47 |       } catch (failure) {
+48 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+49 |       } finally {
+50 |         if (!controller.signal.aborted) setLoading(false);
+51 |       }
+52 |     }
+53 |     loadLessons();
+54 |     return () => controller.abort();
+55 |   }, [reload]);
+56 |
+57 |   useEffect(() => {
+58 |     const controller = new AbortController();
+59 |     // Loads attachments separately so a media error does not hide the lesson text.
+60 |     async function loadMedia() {
 ```
 
-- **Line 31:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 32:** Blank line separates related sections; it performs no operation.
-- **Line 33:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 34:** Creates a browser cancellation controller for this request.
-- **Line 35:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
-- **Line 36:** Declares an async helper, allowing await inside its braces.
-- **Line 37:** Marks the list request as running.
-- **Line 38:** Clears the previous list error before retrying.
-- **Line 39:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 40:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 41:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 42:** Parses the server's JSON response.
-- **Line 43:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 44:** Stores the backend records, triggering a render.
-- **Line 45:** Catches request, response or cancellation failures.
-- **Line 46:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 47:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 48:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 49:** Closes the App function.
-- **Line 50:** Closes the App function.
-- **Line 51:** Starts the helper; its own try/catch handles its failures.
-- **Line 52:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 53:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 54:** Blank line separates related sections; it performs no operation.
-- **Line 55:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 56:** Creates a browser cancellation controller for this request.
-- **Line 57:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
-- **Line 58:** Declares the loader for attachments inside the effect.
-- **Line 59:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 60:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 31:** State for every saved attachment returned by the server.
+- **Line 32:** State for an error message when attachments could not be loaded.
+- **Line 33:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 34:** Blank line separates related sections; it performs no operation.
+- **Line 35:** Starts the ladder-loading effect; the dependency list below reruns it only when class discipline or audience changes, and cleanup cancels stale requests.
+- **Line 36:** Creates a browser cancellation controller for this request.
+- **Line 37:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
+- **Line 38:** Declares an async helper, allowing await inside its braces.
+- **Line 39:** Marks the list request as running.
+- **Line 40:** Clears the previous list error before retrying.
+- **Line 41:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 42:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 43:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 44:** Parses the server's JSON response.
+- **Line 45:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 46:** Stores the backend records, triggering a render.
+- **Line 47:** Catches request, response or cancellation failures.
+- **Line 48:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 49:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 50:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 51:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 52:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 53:** Starts the helper; its own try/catch handles its failures.
+- **Line 54:** Cancels pending work when this effect ends or the component unmounts.
+- **Line 55:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 56:** Blank line separates related sections; it performs no operation.
+- **Line 57:** Starts the ladder-loading effect; the dependency list below reruns it only when class discipline or audience changes, and cleanup cancels stale requests.
+- **Line 58:** Creates a browser cancellation controller for this request.
+- **Line 59:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
+- **Line 60:** Declares the loader for attachments inside the effect.
 
 ### Lines 61–90
 
 ```text
-61 |         setMedia(data);
-62 |         setMediaError('');
-63 |       } catch (failure) {
-64 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-65 |       }
-66 |     }
-67 |     loadMedia();
-68 |     return () => controller.abort();
-69 |   }, [reload, mediaReload]);
-70 |
-71 |   // Selects attachments for one lesson instead of showing another lesson's media.
-72 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
-73 |
-74 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
-75 |   async function handleEdit(lesson, approvedVideos = []) {
-76 |     setNotice(null);
-77 |     setOpening(true);
-78 |     try {
-79 |       const fresh = await fetchMedia();
-80 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
-81 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
-82 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
-83 |       setMedia(fresh);
-84 |       setMediaError('');
-85 |       setEditing(lesson);
-86 |       setFormOpen('manual');
-87 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-88 |       return true;
-89 |     } catch {
-90 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+61 |       try {
+62 |         const data = await fetchMedia(controller.signal);
+63 |         setMedia(data);
+64 |         setMediaError('');
+65 |       } catch (failure) {
+66 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+67 |       }
+68 |     }
+69 |     loadMedia();
+70 |     return () => controller.abort();
+71 |   }, [reload, mediaReload]);
+72 |
+73 |   // Selects attachments for one lesson instead of showing another lesson's media.
+74 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+75 |
+76 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
+77 |   async function handleEdit(lesson, approvedVideos = []) {
+78 |     setNotice(null);
+79 |     setOpening(true);
+80 |     try {
+81 |       const fresh = await fetchMedia();
+82 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
+83 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
+84 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
+85 |       setMedia(fresh);
+86 |       setMediaError('');
+87 |       setEditing(lesson);
+88 |       setFormOpen('manual');
+89 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+90 |       return true;
 ```
 
-- **Line 61:** Stores the attachments.
-- **Line 62:** Clears any earlier media error.
-- **Line 63:** Catches request, response or cancellation failures.
-- **Line 64:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 65:** Closes the App function.
-- **Line 66:** Closes the App function.
-- **Line 67:** Starts the load.
-- **Line 68:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 69:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 70:** Blank line separates related sections; it performs no operation.
-- **Line 71:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
-- **Line 72:** Helper that returns only the attachments of one lesson.
-- **Line 73:** Blank line separates related sections; it performs no operation.
-- **Line 74:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
-- **Line 75:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
-- **Line 76:** Clears any old message.
-- **Line 77:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 78:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 79:** Asks the server what attachments are really stored now.
-- **Line 80:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
-- **Line 81:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
-- **Line 82:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
-- **Line 83:** Replaces the page’s attachment list with that fresh copy.
-- **Line 84:** Clears any earlier media error.
-- **Line 85:** Remembers which lesson is being edited.
-- **Line 86:** Opens the manual form.
-- **Line 87:** Scrolls to the top where the form appears, as before.
-- **Line 88:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
-- **Line 89:** Catches failure without including private exception details in public hosting logs.
-- **Line 90:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 61:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 62:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 63:** Stores the attachments.
+- **Line 64:** Clears any earlier media error.
+- **Line 65:** Catches request, response or cancellation failures.
+- **Line 66:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 67:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 68:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 69:** Starts the load.
+- **Line 70:** Cancels pending work when this effect ends or the component unmounts.
+- **Line 71:** Ends the effect; it re-runs when either reload counter changes.
+- **Line 72:** Blank line separates related sections; it performs no operation.
+- **Line 73:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
+- **Line 74:** Helper that returns only the attachments of one lesson.
+- **Line 75:** Blank line separates related sections; it performs no operation.
+- **Line 76:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
+- **Line 77:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
+- **Line 78:** Clears any old message.
+- **Line 79:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 80:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 81:** Asks the server what attachments are really stored now.
+- **Line 82:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
+- **Line 83:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
+- **Line 84:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
+- **Line 85:** Replaces the page’s attachment list with that fresh copy.
+- **Line 86:** Clears any earlier media error.
+- **Line 87:** Remembers which lesson is being edited.
+- **Line 88:** Opens the manual form.
+- **Line 89:** Scrolls to the top where the form appears, as before.
+- **Line 90:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
 
 ### Lines 91–120
 
 ```text
-91 |       return false;
-92 |     } finally { setOpening(false); }
-93 |   }
-94 |
-95 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
-96 |   async function handleSaved(lesson, sent) {
-97 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-98 |     setAudience('All');
-99 |     setDiscipline('All'); setClassType('All');
-100 |     setFormOpen(false);
-101 |     setEditing(null);
-102 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-103 |     let text = `Saved “${lesson.title}”.`;
-104 |     let tone = 'success';
-105 |     try {
-106 |       const fresh = await fetchMedia();
-107 |       setMedia(fresh);
-108 |       setMediaError('');
-109 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-110 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-111 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-112 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-113 |     } catch {
-114 |       tone = 'warning';
-115 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-116 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-117 |     }
-118 |     setNotice({ tone, text });
-119 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-120 |   }
+91 |     } catch {
+92 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+93 |       return false;
+94 |     } finally { setOpening(false); }
+95 |   }
+96 |
+97 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
+98 |   async function handleSaved(lesson, sent) {
+99 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+100 |     setAudience('All');
+101 |     setDiscipline('All'); setClassType('All');
+102 |     setFormOpen(false);
+103 |     setEditing(null);
+104 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+105 |     let text = `Saved “${lesson.title}”.`;
+106 |     let tone = 'success';
+107 |     try {
+108 |       const fresh = await fetchMedia();
+109 |       setMedia(fresh);
+110 |       setMediaError('');
+111 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+112 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+113 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+114 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+115 |     } catch {
+116 |       tone = 'warning';
+117 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+118 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+119 |     }
+120 |     setNotice({ tone, text });
 ```
 
-- **Line 91:** Reports failure to the selection panel so it can keep results and checked videos for retry.
-- **Line 92:** Always ends the opening state.
-- **Line 93:** Closes the App function.
-- **Line 94:** Blank line separates related sections; it performs no operation.
-- **Line 95:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
-- **Line 96:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 97:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 98:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 99:** Resets both filters after a save so the newly saved lesson remains visible.
-- **Line 100:** Closes the form; unmounting it discards its input state after success.
-- **Line 101:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 102:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 103:** Starts the final message text.
-- **Line 104:** Starts as a success tone.
-- **Line 105:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 106:** Asks the server what attachments are really stored now.
-- **Line 107:** Replaces the page’s attachment list with that fresh copy.
-- **Line 108:** Clears any earlier media error.
-- **Line 109:** Counts the stored attachments of this lesson.
-- **Line 110:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 111:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 112:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 113:** Catches failure without including private exception details in public hosting logs.
-- **Line 114:** …uses a warning tone,
-- **Line 115:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 116:** …and shows the retry banner.
-- **Line 117:** Closes the App function.
-- **Line 118:** Shows the final message.
-- **Line 119:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 120:** Closes the App function.
+- **Line 91:** Catches failure without including private exception details in public hosting logs.
+- **Line 92:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 93:** Reports failure to the selection panel so it can keep results and checked videos for retry.
+- **Line 94:** Always ends the opening state.
+- **Line 95:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 96:** Blank line separates related sections; it performs no operation.
+- **Line 97:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
+- **Line 98:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 99:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 100:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 101:** Resets both filters after a save so the newly saved lesson remains visible.
+- **Line 102:** Closes the form; unmounting it discards its input state after success.
+- **Line 103:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 104:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 105:** Starts the final message text.
+- **Line 106:** Starts as a success tone.
+- **Line 107:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 108:** Asks the server what attachments are really stored now.
+- **Line 109:** Replaces the page’s attachment list with that fresh copy.
+- **Line 110:** Clears any earlier media error.
+- **Line 111:** Counts the stored attachments of this lesson.
+- **Line 112:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 113:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 114:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 115:** Catches failure without including private exception details in public hosting logs.
+- **Line 116:** …uses a warning tone,
+- **Line 117:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 118:** …and shows the retry banner.
+- **Line 119:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 120:** Shows the final message.
 
-### Lines 121–148
+### Lines 121–150
 
 ```text
-121 |
-122 |   return (
-123 |     <main className="coach-shell">
-124 |       <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
-125 |       <header className="hero">
-126 |         <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-127 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-128 |       </header>
-129 |       <DisciplineHeader discipline={discipline} classType={classType} />
-130 |       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
-131 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-132 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} defaults={disciplineDefaults(discipline, classType)} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-133 |       {formOpen === 'ai' && <AiLessonForm defaults={disciplineDefaults(discipline, classType)} onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-134 |       <section aria-labelledby="lessons-heading">
-135 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
-136 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-137 |         {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', 'Group classes', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
-138 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
-139 |         {loading && <p role="status">Loading lesson plans…</p>}
-140 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-141 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-142 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-143 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-144 |       </section>
-145 |       <CoachingChat key={user.id} />
-146 |     </main>
-147 |   );
-148 | }
+121 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+122 |   }
+123 |
+124 |   return (
+125 |     <main className="coach-shell">
+126 |       <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setClassesOpen(false); setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
+127 |       <button type="button" className="secondary classes-nav" disabled={!!formOpen} aria-pressed={classesOpen} onClick={() => setClassesOpen(current => !current)}>{classesOpen ? 'Back to lessons' : 'Classes'}</button>
+128 |       <header className="hero">
+129 |         <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+130 |         {!classesOpen && <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>}
+131 |       </header>
+132 |       {classesOpen ? <ClassesPage lessons={lessons} lessonsLoading={loading} lessonsError={error} /> : <>
+133 |       <DisciplineHeader discipline={discipline} classType={classType} />
+134 |       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
+135 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+136 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} defaults={disciplineDefaults(discipline, classType)} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+137 |       {formOpen === 'ai' && <AiLessonForm defaults={disciplineDefaults(discipline, classType)} onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+138 |       <section aria-labelledby="lessons-heading">
+139 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
+140 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+141 |         {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', 'Group classes', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
+142 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+143 |         {loading && <p role="status">Loading lesson plans…</p>}
+144 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+145 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+146 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+147 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+148 |       </section>
+149 |       </>}
+150 |       <CoachingChat key={user.id} />
 ```
 
-- **Line 121:** Blank line separates related sections; it performs no operation.
-- **Line 122:** Begins returning a parenthesized JSX tree.
-- **Line 123:** Applies the dark dashboard shell without changing signed-in access.
-- **Line 124:** Shows working navigation; disables navigation during editing so unsaved work is not replaced.
-- **Line 125:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 126:** Renders the same CoachLab heading as white COACH and green LAB HTML text, preserves its accessible name, adds the short tagline, and keeps the original session text and logout handler.
-- **Line 127:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 128:** Closes the header.
-- **Line 129:** Displays the selected discipline header from the shared mapping.
-- **Line 130:** Shows photo navigation only on the dashboard when no editor is open; selection updates the existing discipline and class filters.
-- **Line 131:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 132:** Passes navigation defaults to new manual forms; saved lesson data and current media remain authoritative when editing.
-- **Line 133:** Passes selected discipline and Fitness class defaults into the new AI form.
-- **Line 134:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 135:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
-- **Line 136:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 137:** Offers the combined Group classes filter beside individual Fitness types and optional metadata choices.
-- **Line 138:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
-- **Line 139:** Conditionally shows loading text as a live status paragraph.
-- **Line 140:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 141:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 142:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 143:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
-- **Line 144:** Closes the lesson section.
-- **Line 145:** Renders chat only within the signed-in app; changing the user ID resets its React state.
-- **Line 146:** Closes main.
-- **Line 147:** Closes the parenthesized return statement with a semicolon.
-- **Line 148:** Closes the App function.
+- **Line 121:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 122:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 123:** Blank line separates related sections; it performs no operation.
+- **Line 124:** Begins returning a parenthesized JSX tree.
+- **Line 125:** Applies the dark dashboard shell without changing signed-in access.
+- **Line 126:** Selecting a discipline closes Classes and applies the existing discipline and class-type filters.
+- **Line 127:** Toggles between Classes and lessons, disabled while an existing lesson editor is open.
+- **Line 128:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 129:** Renders the same CoachLab heading as white COACH and green LAB HTML text, preserves its accessible name, adds the short tagline, and keeps the original session text and logout handler.
+- **Line 130:** Shows existing lesson-create buttons only on the lesson view; their handlers remain unchanged.
+- **Line 131:** Closes the header.
+- **Line 132:** Renders the Classes page with loaded lesson choices and loading/error state, otherwise the existing lesson content.
+- **Line 133:** Displays the selected discipline header from the shared mapping.
+- **Line 134:** Shows photo navigation only on the dashboard when no editor is open; selection updates the existing discipline and class filters.
+- **Line 135:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 136:** Passes navigation defaults to new manual forms; saved lesson data and current media remain authoritative when editing.
+- **Line 137:** Passes selected discipline and Fitness class defaults into the new AI form.
+- **Line 138:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 139:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
+- **Line 140:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 141:** Offers the combined Group classes filter beside individual Fitness types and optional metadata choices.
+- **Line 142:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 143:** Conditionally shows loading text as a live status paragraph.
+- **Line 144:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 145:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 146:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 147:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
+- **Line 148:** Closes the lesson section.
+- **Line 149:** Closes the existing lesson-content fragment and the page-selection expression.
+- **Line 150:** Renders chat only within the signed-in app; changing the user ID resets its React state.
+
+### Lines 151–153
+
+```text
+151 |     </main>
+152 |   );
+153 | }
+```
+
+- **Line 151:** Closes main.
+- **Line 152:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 153:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## client/src/styles.css
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\styles.css`
 
-Photo framing and header styling: uses only owner assets, preserves current controls and changes presentation without database, API or state-flow changes.
+Classes integration: connects the existing lesson workflow to coach-owned class setup and assignments while preserving prior behavior.
 
 ### Lines 1–30
 
@@ -547,8 +563,8 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 48:** Changes both grids to one flexible column on small screens.
 - **Line 49:** Aligns section-heading children to their starts and reduces their gap.
 - **Line 50:** Reduces form-panel and card padding to 20px.
-- **Line 51:** Closes the media-query block.
-- **Line 52:** Blank line separating related statements; it has no runtime effect.
+- **Line 51:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 52:** Blank line separates related style or markup sections.
 - **Line 53:** Styles elements matching `details`. `margin: 18px 0` sets outside spacing (values run top/right/bottom/left or vertical/horizontal). `padding: 12px` sets inside spacing. `border: 1px solid #d7e0e4` sets outline width, style and color. `border-radius: 8px` sets corner roundness.
 - **Line 54:** Styles elements matching `summary`. `cursor: pointer` sets mouse cursor appearance. `font-weight: 650` sets text thickness.
 - **Line 55:** Styles elements matching `h4`. `margin: 16px 0 8px` sets outside spacing (values run top/right/bottom/left or vertical/horizontal).
@@ -595,7 +611,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 
 - **Line 61:** Styles elements matching `a`. `color: #176257` sets foreground text color. `text-underline-offset: 3px` sets distance between link text and underline.
 - **Line 62:** Styles elements matching `button.danger`. `color: #852b1d` sets foreground text color.
-- **Line 63:** Blank line separating related statements; it has no runtime effect.
+- **Line 63:** Blank line separates related style or markup sections.
 - **Line 64:** Styles the group of pictures and videos under an activity: a light dashed box with small outer margins and rounded corners so it reads as an optional add-on area.
 - **Line 65:** Removes the top margin of the group’s heading so it sits at the top of the box.
 - **Line 66:** Lays attachments out as a grid without bullet points: as many columns as fit, each at least 260 pixels wide (or the full width if the screen is narrower, using min()), with a 16-pixel gap.
@@ -660,7 +676,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 ```
 
 - **Line 91:** Makes the Move up, Move down and Remove buttons share rows, about two per row.
-- **Line 92:** Closes the media-query block.
+- **Line 92:** Closes the surrounding block, object or callback and completes the expression or statement.
 - **Line 93:** Removes the left padding that lesson text lists add, so attachment lists inside an activity line up with the card edge.
 - **Line 94:** Removes the extra bottom margin that text list items have.
 - **Line 95:** Styles the save message bar: it sticks to the top of the window while scrolling (position: sticky), sits above other content (z-index), lays out its text and Dismiss button in a row with a gap, and has a soft shadow so it is easy to notice.
@@ -686,8 +702,8 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 115:** Inside the phone-width rules: gives the login page smaller side padding.
 - **Line 116:** Gives the login card slightly smaller padding.
 - **Line 117:** Stacks the save message bar’s text above its Dismiss button on phones.
-- **Line 118:** Closes the media-query block.
-- **Line 119:** Blank line separating related statements; it has no runtime effect.
+- **Line 118:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 119:** Blank line separates related style or markup sections.
 - **Line 120:** Uses flexbox and an 8px gap for navigation; horizontal overflow scrolls on narrow screens, with padding for focus outlines and space below.
 
 ### Lines 121–150
@@ -747,8 +763,8 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 140:** Allows timeline titles and times to wrap with small vertical and horizontal gaps on narrow screens.
 - **Line 141:** Reduces timeline indentation on phones to leave more room for coaching cues.
 - **Line 142:** Uses consistent 16px card and form padding on phones.
-- **Line 143:** Closes the media-query block.
-- **Line 144:** Blank line separating related statements; it has no runtime effect.
+- **Line 143:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 144:** Blank line separates related style or markup sections.
 - **Line 145:** Fixes the chat control 16 pixels from the lower-right viewport corner, above ordinary content at stacking level 10.
 - **Line 146:** Positions the panel above its button; limits width to 370 pixels or screen width minus 32 pixels and height to the dynamic viewport minus 100 pixels. Vertical overflow scrolls. Padding, white background, dark text, border, rounding and shadow distinguish it.
 - **Line 147:** Uses a flex row, vertically centered items, space between heading and close button, and an eight-pixel gap.
@@ -797,10 +813,10 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 154:** Adds eight pixels above the send button.
 - **Line 155:** Gives panel buttons a minimum 44-pixel touch target height.
 - **Line 156:** When chat exists, reserves 100 pixels beneath main content so the floating control is less likely to cover it.
-- **Line 157:** Blank line separating related statements; it has no runtime effect.
+- **Line 157:** Blank line separates related style or markup sections.
 - **Line 158:** Uses a flex row, centered checkbox, readable spacing and a minimum 44-pixel clickable label for phone use.
 - **Line 159:** Keeps checkbox width natural and removes input margins so global text-field styling does not stretch it.
-- **Line 160:** Blank line separating related statements; it has no runtime effect.
+- **Line 160:** Blank line separates related style or markup sections.
 - **Line 161:** Comment: The owner's dark gym photography anchors the dashboard; editing panels stay light.
 - **Line 162:** CSS rule for body:has(.coach-shell): background: #071215;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 163:** CSS rule for .coach-shell: max-width: 1440px; color: #eef6f4; padding: 32px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
@@ -861,7 +877,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 182:** CSS rule for .coach-shell :focus-visible: outline: 3px solid #db9c22; outline-offset: 4px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 183:** CSS rule for @media (max-width: 1000px): .discipline-cards  grid-template-columns: repeat(2, minmax(0, 1fr));. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
 - **Line 184:** CSS rule for @media (max-width: 600px): .coach-shell  padding: 20px 14px;  .discipline-cards  grid-template-columns: 1fr; gap: 12px;  .discipline-tile  min-height: 190px;  .tile-copy  padding-top: 110px;. These declarations control the stated colors, spacing, layout and responsive sizing; they do not change lesson data.
-- **Line 185:** Blank line separating related statements; it has no runtime effect.
+- **Line 185:** Blank line separates related style or markup sections.
 - **Line 186:** Comment: Sidebar links are actual filters, with a compact wrapping layout on phones.
 - **Line 187:** CSS for .coach-shell : position: relative; padding-left: 242px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
 - **Line 188:** CSS for .coach-sidebar : position: absolute; left: 24px; top: 32px; width: 190px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
@@ -877,7 +893,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 198:** CSS for .discipline-header p : margin: 0; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
 - **Line 199:** CSS for @media (max-width: 1000px) : .coach-shell  padding-left: 24px;  .coach-sidebar  position: static; width: auto; margin-bottom: 24px;  .coach-sidebar nav  flex-direction: row; flex-wrap: wrap; gap: 4px;  .sidebar-brand  display: none;  .coach-sidebar button.secondary  font-size: 0.85rem; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
 - **Line 200:** CSS for @media (max-width: 600px) : .coach-shell  padding-left: 14px;  .discipline-header  min-height: 180px;  .discipline-header > div  padding: 20px; These rules position the navigation and image layers, style readable text and switch to wrapping mobile navigation.
-- **Line 201:** Blank line separating related statements; it has no runtime effect.
+- **Line 201:** Blank line separates related style or markup sections.
 - **Line 202:** Comment explaining the safety disclosure or readable visual styling; it does not execute.
 - **Line 203:** CSS rule .review-notice: color: #225540; font-weight: 650; margin: 0 0 16px; font-size: 0.9rem;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 204:** CSS rule .safety-notes: border: 1px solid #9aafa4; border-radius: 8px; background: #f1f6f2; margin: 16px 0 24px; padding: 0 16px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
@@ -888,7 +904,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 209:** CSS rule .coach-shell .draft-section: border: 1px solid #b8c9c1; border-left: 4px solid #26704c; border-radius: 8px; padding: 20px; margin: 20px 0; background: #f8faf8;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 210:** CSS rule .coach-shell .draft-section h3: color: #194d35;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 
-### Lines 211–237
+### Lines 211–240
 
 ```text
 211 | .coach-shell .lesson-timeline > li { background: #f8faf8; border-color: #26704c; margin-bottom: 16px; }
@@ -918,6 +934,9 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 235 | .discipline-tile[data-photo="bjj"] img { object-position: 100% top; }
 236 |
 237 | .discipline-tile[data-photo="muay-thai"] img { object-position: 100% top; }
+238 |
+239 | body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+240 | #root { flex: 1; }
 ```
 
 - **Line 211:** CSS rule .coach-shell .lesson-timeline > li: background: #f8faf8; border-color: #26704c; margin-bottom: 16px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
@@ -925,7 +944,7 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 213:** CSS rule .coach-shell .form-panel .actions: padding-top: 12px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 214:** CSS rule .coach-shell .media-list img, .coach-shell .media-list iframe: border-radius: 6px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 215:** CSS rule @media (max-width: 600px): .coach-shell .draft-section  padding: 14px;  .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select  font-size: 16px;  .coach-shell .form-panel .actions button  flex: 1 1 140px; min-height: 48px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
-- **Line 216:** Blank line separating related statements; it has no runtime effect.
+- **Line 216:** Blank line separates related style or markup sections.
 - **Line 217:** Comment: all seven dashboard cards share the same photo-above-caption layout; individual crop positions remain separate.
 - **Line 218:** Adds Muay Thai and BJJ to the existing five card selectors. Flex column layout places each photo above its title and caption; the other five keep their existing behavior.
 - **Line 219:** Uses the same relative-positioned, block, 4:3 object-fit cover photo layout for all seven cards. Only the two previously omitted cards gain this rule.
@@ -945,22 +964,49 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 233:** CSS selector .coach-shell > .hero .actions: flex-wrap: wrap;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 234:** CSS selector @media (max-width: 600px): .coach-shell > .hero  padding: 22px 16px; align-items: stretch;  .coach-shell > .hero .actions button  min-height: 48px; flex: 1 1 160px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 235:** Moves only the dashboard BJJ image crop from 50% 50% to 100% top. The right edge is retained, bringing the athletes inward while preserving the source WebP and other photo styles.
-- **Line 236:** Blank line separating related statements; it has no runtime effect.
+- **Line 236:** Blank line separates related style or markup sections.
 - **Line 237:** Moves only the dashboard Muay Thai image crop from 35% 50% to 100% top. Higher horizontal position retains more of the right side, bringing the athlete inward; no photo file is modified.
-
-### Shared static page footer
-
-```text
-238 |
-239 | body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-240 | #root { flex: 1; }
-241 | .site-footer { padding: 16px 12px; background: #071215; color: #a6b4b8; text-align: center; font-size: 0.875rem; line-height: 1.5; }
-```
-
 - **Line 238:** Blank line separates related style or markup sections.
 - **Line 239:** Makes the page a vertical flex container at least as tall as the viewport; 100vh is the fallback and 100dvh follows mobile browser controls. Content can grow beyond the viewport.
 - **Line 240:** Lets the React root fill spare page space, keeping the footer at the bottom of short screens and below longer content without a fixed overlay.
+
+### Lines 241–256
+
+```text
+241 | .site-footer { padding: 16px 12px; background: #071215; color: #a6b4b8; text-align: center; font-size: 0.875rem; line-height: 1.5; }
+242 |
+243 | /* Class controls reuse the existing accessible light panels and wrap on phones. */
+244 | .classes-nav { margin-bottom: 16px; min-height: 44px; }
+245 | .class-layout { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr); gap: 20px; margin-top: 20px; }
+246 | .class-layout nav { display: flex; flex-direction: column; gap: 8px; }
+247 | .class-layout nav button { text-align: left; overflow-wrap: anywhere; }
+248 | .class-layout nav button[aria-pressed="true"] { border: 3px solid #58a87a; }
+249 | .class-days { display: flex; flex-wrap: wrap; gap: 12px 20px; }
+250 | .class-days label { margin-bottom: 8px; }
+251 | .class-ladder summary { cursor: pointer; padding: 12px 0; font-weight: 700; }
+252 | .class-links { padding-left: 20px; }
+253 | .class-links li { border-bottom: 1px solid #b8c9c1; padding: 16px 0; overflow-wrap: anywhere; }
+254 | .class-assignment { margin: 16px 0; }
+255 | .class-assignment form { border: 1px solid #b8c9c1; padding: 16px; margin-top: 12px; border-radius: 8px; }
+256 | @media (max-width: 700px) { .class-layout { grid-template-columns: 1fr; } .class-layout nav { flex-direction: row; flex-wrap: wrap; } .class-layout button { min-height: 44px; } }
+```
+
 - **Line 241:** Adds modest padding, the existing dark background and readable muted gray text. Centers the 0.875rem text, with 1.5 line height and normal wrapping on phones.
+- **Line 242:** Blank line separates related style or markup sections.
+- **Line 243:** Comment for the reader: Class controls reuse the existing accessible light panels and wrap on phones.  It does not execute.
+- **Line 244:** CSS for .classes-nav : margin-bottom: 16px; min-height: 44px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 245:** CSS for .class-layout : display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr); gap: 20px; margin-top: 20px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 246:** CSS for .class-layout nav : display: flex; flex-direction: column; gap: 8px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 247:** CSS for .class-layout nav button : text-align: left; overflow-wrap: anywhere;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 248:** CSS for .class-layout nav button[aria-pressed="true"] : border: 3px solid #58a87a;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 249:** CSS for .class-days : display: flex; flex-wrap: wrap; gap: 12px 20px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 250:** CSS for .class-days label : margin-bottom: 8px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 251:** CSS for .class-ladder summary : cursor: pointer; padding: 12px 0; font-weight: 700;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 252:** CSS for .class-links : padding-left: 20px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 253:** CSS for .class-links li : border-bottom: 1px solid #b8c9c1; padding: 16px 0; overflow-wrap: anywhere;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 254:** CSS for .class-assignment : margin: 16px 0;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 255:** CSS for .class-assignment form : border: 1px solid #b8c9c1; padding: 16px; margin-top: 12px; border-radius: 8px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
+- **Line 256:** CSS for @media (max-width: 700px) : .class-layout  grid-template-columns: 1fr;  .class-layout nav  flex-direction: row; flex-wrap: wrap;  .class-layout button  min-height: 44px;. Controls readable spacing, borders, wrapping or phone layout without changing data.
 
 ## client/vite.config.js
 
@@ -3060,147 +3106,151 @@ Lesson planner presentation: keeps coaching content and existing actions while m
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
 
-Lesson planner presentation: keeps coaching content and existing actions while making review notes collapsible and editing surfaces readable. Tests render actual components; stored data and provider rules are unchanged.
+Classes integration: connects the existing lesson workflow to coach-owned class setup and assignments while preserving prior behavior.
 
 ### Lines 1–30
 
 ```text
-1 | import SafetyNotes from './SafetyNotes.jsx';
-2 | // Displays a saved lesson, its media and explicit edit/delete actions.
-3 | import { fitnessLabel } from './fitness.js';
-4 | import React, { useState } from 'react';
-5 | import VideoSuggestions from './VideoSuggestions.jsx';
-6 | import LessonMedia from './LessonMedia.jsx';
-7 | import MediaItem from './MediaItem.jsx';
-8 | import { activityBlocks, activityMinutes } from './activities.js';
-9 | import { timelineEntries } from './lesson-view.js';
-10 | import { groupMedia, mediaKey } from './media.js';
-11 |
-12 | // Breaks coaching text into readable bullets and expandable long explanations.
-13 | export function CoachingText({ text, after }) {
-14 |   if (!text) return <p>Not added</p>;
-15 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-16 |     const lines = block.split('\n').filter(Boolean);
-17 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-18 |     return <section className="coaching-block" key={index}>
-19 |       {heading && <h4>{lines[0]}</h4>}
-20 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-21 |       {after?.(index)}
-22 |     </section>;
-23 |   })}</>;
-24 | }
-25 | // Shows saved data without writing changes until the coach takes an explicit action.
-26 | export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
-27 |   const [confirming, setConfirming] = useState(false);
-28 |   const [busy, setBusy] = useState(false);
-29 |   const [error, setError] = useState('');
-30 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+1 | import AssignLesson from './AssignLesson.jsx';
+2 | import SafetyNotes from './SafetyNotes.jsx';
+3 | // Displays a saved lesson, its media and explicit edit/delete actions.
+4 | import { fitnessLabel } from './fitness.js';
+5 | import React, { useState } from 'react';
+6 | import VideoSuggestions from './VideoSuggestions.jsx';
+7 | import LessonMedia from './LessonMedia.jsx';
+8 | import MediaItem from './MediaItem.jsx';
+9 | import { activityBlocks, activityMinutes } from './activities.js';
+10 | import { timelineEntries } from './lesson-view.js';
+11 | import { groupMedia, mediaKey } from './media.js';
+12 |
+13 | // Breaks coaching text into readable bullets and expandable long explanations.
+14 | export function CoachingText({ text, after }) {
+15 |   if (!text) return <p>Not added</p>;
+16 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+17 |     const lines = block.split('\n').filter(Boolean);
+18 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+19 |     return <section className="coaching-block" key={index}>
+20 |       {heading && <h4>{lines[0]}</h4>}
+21 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+22 |       {after?.(index)}
+23 |     </section>;
+24 |   })}</>;
+25 | }
+26 | // Shows saved data without writing changes until the coach takes an explicit action.
+27 | export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
+28 |   const [confirming, setConfirming] = useState(false);
+29 |   const [busy, setBusy] = useState(false);
+30 |   const [error, setError] = useState('');
 ```
 
-- **Line 1:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 2:** Human-readable comment: Displays a saved lesson, its media and explicit edit/delete actions. This explanation does not execute.
-- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 4:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 6:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 7:** Imports the component that shows one picture or video.
-- **Line 8:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
-- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 10:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
-- **Line 11:** Blank line separates related sections for readability; it performs no operation.
-- **Line 12:** Human-readable comment: Breaks coaching text into readable bullets and expandable long explanations. This explanation does not execute.
-- **Line 13:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
-- **Line 14:** Renders a short placeholder when a text field is empty.
-- **Line 15:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 16:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 17:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 18:** Starts one formatted block, using its position as the React key.
-- **Line 19:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 20:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 21:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
-- **Line 22:** Closes the suggestion section and ends the JSX return statement.
-- **Line 23:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 24:** Closes the LessonCard function.
-- **Line 25:** Human-readable comment: Shows saved data without writing changes until the coach takes an explicit action. This explanation does not execute.
-- **Line 26:** Defines the lesson card component, now accepting an explicit video-approval callback alongside existing lesson actions and media.
-- **Line 27:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 28:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
-- **Line 29:** Stores a safe user-facing error message, initially empty.
-- **Line 30:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 1:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Human-readable comment: Displays a saved lesson, its media and explicit edit/delete actions. This explanation does not execute.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 8:** Imports the component that shows one picture or video.
+- **Line 9:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
+- **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 11:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
+- **Line 12:** Blank line separates related sections for readability; it performs no operation.
+- **Line 13:** Human-readable comment: Breaks coaching text into readable bullets and expandable long explanations. This explanation does not execute.
+- **Line 14:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
+- **Line 15:** Renders a short placeholder when a text field is empty.
+- **Line 16:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 17:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 18:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 19:** Starts one formatted block, using its position as the React key.
+- **Line 20:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 21:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 22:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
+- **Line 23:** Closes the suggestion section and ends the JSX return statement.
+- **Line 24:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 25:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 26:** Human-readable comment: Shows saved data without writing changes until the coach takes an explicit action. This explanation does not execute.
+- **Line 27:** Defines the lesson card component, now accepting an explicit video-approval callback alongside existing lesson actions and media.
+- **Line 28:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 29:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 30:** Stores a safe user-facing error message, initially empty.
 
 ### Lines 31–60
 
 ```text
-31 |   // Places checked media with the relevant activity or whole-lesson section.
-32 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
-33 |   // Sends deletion only after confirmation and reports when the server cannot confirm it.
-34 |   async function remove() {
-35 |     if (busy) return;
-36 |     setBusy(true); setError('');
-37 |     try {
-38 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
-39 |       if (response.status !== 204 && response.status !== 404) throw new Error();
-40 |       onDeleted();
-41 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-42 |     finally { setBusy(false); }
-43 |   }
-44 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
-45 |     <p className="review-notice">Coach review required</p>
-46 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
-47 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
-48 |     {lesson.discipline === 'Fitness' && <p className="metadata">{fitnessLabel(lesson) || 'Class type not specified'} · {lesson.class_format || 'Format not specified'}</p>}
-49 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-50 |     <h4>Lesson timeline</h4>
-51 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
-52 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
-53 |     <SafetyNotes><CoachingText text={lesson.coaching_notes} /></SafetyNotes>
-54 |     <LessonMedia lesson={lesson} />
-55 |     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
-56 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-57 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-58 |     {error && <p className="error" role="alert">{error}</p>}
-59 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-60 |   </article>;
+31 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+32 |   // Places checked media with the relevant activity or whole-lesson section.
+33 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+34 |   // Sends deletion only after confirmation and reports when the server cannot confirm it.
+35 |   async function remove() {
+36 |     if (busy) return;
+37 |     setBusy(true); setError('');
+38 |     try {
+39 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+40 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+41 |       onDeleted();
+42 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+43 |     finally { setBusy(false); }
+44 |   }
+45 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
+46 |     <p className="review-notice">Coach review required</p>
+47 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
+48 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+49 |     {lesson.discipline === 'Fitness' && <p className="metadata">{fitnessLabel(lesson) || 'Class type not specified'} · {lesson.class_format || 'Format not specified'}</p>}
+50 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+51 |     <h4>Lesson timeline</h4>
+52 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
+53 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+54 |     <SafetyNotes><CoachingText text={lesson.coaching_notes} /></SafetyNotes>
+55 |     <LessonMedia lesson={lesson} />
+56 |     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
+57 |     <AssignLesson lessonId={lesson.id} disabled={disabled || busy} />
+58 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+59 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+60 |     {error && <p className="error" role="alert">{error}</p>}
 ```
 
-- **Line 31:** Human-readable comment: Places checked media with the relevant activity or whole-lesson section. This explanation does not execute.
-- **Line 32:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
-- **Line 33:** Human-readable comment: Sends deletion only after confirmation and reports when the server cannot confirm it. This explanation does not execute.
-- **Line 34:** Defines the asynchronous deletion action, called only by the confirmation button.
-- **Line 35:** Ignores another action while a deletion request is in progress.
-- **Line 36:** Shows busy state and clears the previous error before sending.
-- **Line 37:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 38:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
-- **Line 39:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
-- **Line 40:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
-- **Line 41:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 42:** Always releases the busy state after success or failure.
-- **Line 43:** Closes the LessonCard function.
-- **Line 44:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
-- **Line 45:** Keeps the concise coach-review requirement visible above the lesson content.
-- **Line 46:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
-- **Line 47:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
-- **Line 48:** Shows a Fitness class label and format on the card, using plain fallback text for omitted details.
-- **Line 49:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 50:** Adds the visible heading for the activity timeline.
-- **Line 51:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
-- **Line 52:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
-- **Line 53:** Places all saved coaching notes, including safety content, in the shared collapsible disclosure without changing stored text.
-- **Line 54:** Passes the record to the reviewed-media lookup component.
-- **Line 55:** Renders the suggestion controls on the saved lesson card and disables them while editing or deleting; approval delegates to the dashboard.
-- **Line 56:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 57:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 58:** Shows errors in an accessible alert using the existing error styling.
-- **Line 59:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 60:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 31:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 32:** Human-readable comment: Places checked media with the relevant activity or whole-lesson section. This explanation does not execute.
+- **Line 33:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 34:** Human-readable comment: Sends deletion only after confirmation and reports when the server cannot confirm it. This explanation does not execute.
+- **Line 35:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 36:** Ignores another action while a deletion request is in progress.
+- **Line 37:** Marks work pending and clears the previous message so controls and status reflect this request.
+- **Line 38:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 39:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 40:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 41:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 42:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 43:** Always releases the busy state after success or failure.
+- **Line 44:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 45:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
+- **Line 46:** Keeps the concise coach-review requirement visible above the lesson content.
+- **Line 47:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
+- **Line 48:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 49:** Shows a Fitness class label and format on the card, using plain fallback text for omitted details.
+- **Line 50:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 51:** Adds the visible heading for the activity timeline.
+- **Line 52:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
+- **Line 53:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
+- **Line 54:** Places all saved coaching notes, including safety content, in the shared collapsible disclosure without changing stored text.
+- **Line 55:** Passes the record to the reviewed-media lookup component.
+- **Line 56:** Renders the suggestion controls on the saved lesson card and disables them while editing or deleting; approval delegates to the dashboard.
+- **Line 57:** Adds the assignment picker to a saved lesson using its original ID and existing busy/disabled state.
+- **Line 58:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 59:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 60:** Shows errors in an accessible alert using the existing error styling.
 
-### Lines 61–61
+### Lines 61–63
 
 ```text
-61 | }
+61 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+62 |   </article>;
+63 | }
 ```
 
-- **Line 61:** Closes the LessonCard function.
+- **Line 61:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 62:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 63:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## client/src/lesson-draft.js
 
@@ -15955,3 +16005,155 @@ Creates only new tables and indexes in one transaction. Existing lesson/account 
 - **Line 35:** Closes the surrounding block, object or callback and completes the expression or statement.
 - **Line 36:** Indexes the named reference column for efficient lookup and deletion cleanup.
 - **Line 37:** Commits the successfully created new tables and constraints together.
+
+## client/src/ClassEditor.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\ClassEditor.jsx`
+
+Class setup and the current coach’s discipline/audience ladder editor. Class progress uses stable level IDs; names and ordering can change without moving progress.
+
+### Lines 1–30
+
+```text
+1 | // Edits a class and its coach-owned ladder without collecting athlete identities.
+2 | import React, { useEffect, useState } from 'react';
+3 | import { newDisciplines } from './lesson-draft.js';
+4 | import { emptyFitness } from './fitness.js';
+5 | import FitnessFields from './FitnessFields.jsx';
+6 | import { weekdays, validateClass, validateLevels } from './classes.js';
+7 | import { classApi } from './class-api.js';
+8 | const blank = { name: '', discipline: 'Boxing', audience: 'Adults', days: [], days_per_week: 1, goal: '', current_level: '', ...emptyFitness };
+9 | export default function ClassEditor({ item, onSaved, onCancel }) {
+10 |   const [value, setValue] = useState(() => Object.fromEntries(Object.keys(blank).map(key => [key, item?.[key] ?? blank[key]])));
+11 |   const [ladder, setLadder] = useState(null), [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+12 |   // Cancel stale requests when discipline or audience changes; existing saved level is retained when valid.
+13 |   useEffect(() => {
+14 |     const controller = new AbortController(); setLadder(null); setDirty(false); setError('');
+15 |     classApi('class-ladder?' + new URLSearchParams({ discipline: value.discipline, audience: value.audience }), 'GET', undefined, controller.signal).then(data => {
+16 |       setLadder(data); setValue(current => ({ ...current, current_level: data.levels.some(level => level.id === current.current_level) ? current.current_level : data.levels[0].id }));
+17 |     }).catch(failure => { if (!controller.signal.aborted) setError(failure.message); });
+18 |     return () => controller.abort();
+19 |   }, [value.discipline, value.audience]);
+20 |   const patch = change => setValue(current => ({ ...current, ...change }));
+21 |   const editLevels = levels => { setLadder(current => ({ ...current, levels })); setDirty(true); };
+22 |   function move(index, delta) {
+23 |     const levels = [...ladder.levels]; [levels[index], levels[index + delta]] = [levels[index + delta], levels[index]]; editLevels(levels);
+24 |   }
+25 |   async function saveLadder() {
+26 |     const levels = ladder.levels.map(level => ({ ...level, name: level.name.trim(), skills: level.skills.map(skill => skill.trim()).filter(Boolean) }));
+27 |     const invalid = validateLevels(levels); if (invalid) { setError(invalid); return; }
+28 |     setBusy(true); setError('');
+29 |     try { setLadder(await classApi('class-ladder', 'PUT', { discipline: value.discipline, audience: value.audience, levels, revision: ladder.revision })); setDirty(false); }
+30 |     catch (failure) { setError(failure.message); } finally { setBusy(false); }
+```
+
+- **Line 1:** Comment for the reader: Edits a class and its coach-owned ladder without collecting athlete identities. It does not execute.
+- **Line 2:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 3:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 4:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 5:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 6:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 7:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 8:** Sets new-class form defaults, empty schedule and optional Fitness metadata; no record is saved yet.
+- **Line 9:** Defines ClassEditor with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 10:** Copies only editable class fields from an existing class, falling back to new-class defaults.
+- **Line 11:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
+- **Line 12:** Comment for the reader: Cancel stale requests when discipline or audience changes; existing saved level is retained when valid. It does not execute.
+- **Line 13:** Starts the ladder-loading effect; the dependency list below reruns it only when class discipline or audience changes, and cleanup cancels stale requests.
+- **Line 14:** Creates a cancellation signal and clears stale ladder state when the selected context changes.
+- **Line 15:** Fetches the current coach’s ladder for the selected discipline/audience with URL-encoded parameters and cancellation.
+- **Line 16:** Stores the returned ladder and retains the selected stable level ID when valid; otherwise chooses its first level.
+- **Line 17:** Shows loading failures unless the request was deliberately cancelled.
+- **Line 18:** Cancels pending work when this effect ends or the component unmounts.
+- **Line 19:** Repeats ladder loading only when discipline or audience changes.
+- **Line 20:** Merges only changed form fields into current local state.
+- **Line 21:** Replaces local ladder levels and marks them unsaved; class saving waits until ladder edits are saved.
+- **Line 22:** Defines move with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 23:** Copies the array, swaps two adjacent levels and marks the new order unsaved without changing stable IDs.
+- **Line 24:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 25:** Defines saveLadder with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 26:** Trims level names and skill lines, removing blank skill entries so the optional list can be empty.
+- **Line 27:** Validates edited levels and displays an error before any ladder request if they are invalid.
+- **Line 28:** Marks work pending and clears the previous message so controls and status reflect this request.
+- **Line 29:** Sends levels and the revision to detect stale edits; keeps the server response and clears dirty state only after success.
+- **Line 30:** Shows a safe failure message while retaining input and always releases the busy state.
+
+### Lines 31–41
+
+```text
+31 |   }
+32 |   async function save(event) {
+33 |     event.preventDefault(); const invalid = validateClass(value); if (invalid) { setError(invalid); return; }
+34 |     setBusy(true); setError('');
+35 |     try { await classApi('classes' + (item ? '/' + item.id : ''), item ? 'PUT' : 'POST', value); onSaved(); }
+36 |     catch (failure) { setError(failure.message); } finally { setBusy(false); }
+37 |   }
+38 |   return <form className="form-panel" onSubmit={save}><h3>{item ? 'Edit class' : 'Create class'}</h3><p>Use a group label, not children's names or personal information. Levels are coaching suggestions, not automatic belt or competition approval.</p><fieldset disabled={busy}><label>Class name<input required maxLength={100} value={value.name} onChange={event => patch({ name: event.target.value })} /></label><div className="form-row"><label>Discipline<select value={value.discipline} onChange={event => patch({ ...emptyFitness, discipline: event.target.value, current_level: '' })}>{[...newDisciplines, ...(item?.discipline === 'Personal Training' ? ['Personal Training'] : [])].map(name => <option key={name}>{name}</option>)}</select></label><label>Audience<select value={value.audience} onChange={event => patch({ audience: event.target.value, current_level: '' })}><option>Kids</option><option>Adults</option></select></label><label>Days per week<input required type="number" min="1" max="7" value={value.days_per_week} onChange={event => patch({ days_per_week: Number(event.target.value) })} /></label></div><FitnessFields value={value} onChange={patch} /><fieldset><legend>Which days?</legend><div className="class-days">{weekdays.map(day => <label className="check-label" key={day}><input type="checkbox" checked={value.days.includes(day)} onChange={event => patch({ days: event.target.checked ? [...value.days, day] : value.days.filter(item => item !== day) })} />{day}</label>)}</div></fieldset><label>Class goal<textarea maxLength={500} value={value.goal} onChange={event => patch({ goal: event.target.value })} /></label><label>Current level<select required disabled={!ladder} value={value.current_level} onChange={event => patch({ current_level: event.target.value })}><option value="">Choose a level</option>{ladder?.levels.map(level => <option key={level.id} value={level.id}>{level.name}</option>)}</select></label>{!ladder && !error && <p role="status">Loading your level ladder…</p>}
+39 |     {ladder && <details className="class-ladder"><summary>Edit my gym's level ladder</summary><p>This ladder is shared by your {value.audience.toLowerCase()} {value.discipline} classes only. Each class keeps its own current level. Save ladder changes before saving the class. Move any class off a level before removing it.</p>{ladder.levels.map((level, index) => <div className="draft-section" key={level.id}><label>Level name<input maxLength={60} value={level.name} onChange={event => editLevels(ladder.levels.map(item => item.id === level.id ? { ...item, name: event.target.value } : item))} /></label><label>Skills required (optional, one per line)<textarea value={level.skills.join('\n')} onChange={event => editLevels(ladder.levels.map(item => item.id === level.id ? { ...item, skills: event.target.value.split('\n') } : item))} /></label><div className="actions"><button type="button" className="secondary" disabled={index === 0} onClick={() => move(index, -1)}>Move up</button><button type="button" className="secondary" disabled={index === ladder.levels.length - 1} onClick={() => move(index, 1)}>Move down</button><button type="button" className="secondary" disabled={ladder.levels.length === 1} onClick={() => editLevels(ladder.levels.filter(item => item.id !== level.id))}>Remove level</button></div></div>)}<div className="actions"><button type="button" className="secondary" disabled={ladder.levels.length >= 30} onClick={() => editLevels([...ladder.levels, { id: crypto.randomUUID(), name: 'New level', skills: [] }])}>Add level</button><button type="button" disabled={!dirty} onClick={saveLadder}>Save ladder</button></div></details>}
+40 |     <div className="actions"><button type="submit" disabled={!ladder || dirty}>Save class</button><button type="button" className="secondary" onClick={onCancel}>Cancel</button></div></fieldset>{error && <p role="alert" className="error">{error}</p>}</form>;
+41 | }
+```
+
+- **Line 31:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 32:** Defines save with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 33:** Stops native form navigation and validates class input before creating or updating anything.
+- **Line 34:** Marks work pending and clears the previous message so controls and status reflect this request.
+- **Line 35:** Uses POST for a new class or PUT for its existing ID, then tells the parent to reload after success.
+- **Line 36:** Shows a safe failure message while retaining input and always releases the busy state.
+- **Line 37:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 38:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Class setup and the current coach’s discipline/audience ladder editor. Class progress uses stable level IDs; names and ordering can change without moving progress.
+- **Line 39:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Class setup and the current coach’s discipline/audience ladder editor. Class progress uses stable level IDs; names and ordering can change without moving progress.
+- **Line 40:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Class setup and the current coach’s discipline/audience ladder editor. Class progress uses stable level IDs; names and ordering can change without moving progress.
+- **Line 41:** Closes the surrounding block, object or callback and completes the expression or statement.
+
+## client/src/ClassesPage.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\ClassesPage.jsx`
+
+Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
+
+### Lines 1–20
+
+```text
+1 | // Shows only server-authorized classes, with explicit archive and assignment actions.
+2 | import React, { useEffect, useState } from 'react';
+3 | import ClassEditor from './ClassEditor.jsx';
+4 | import { classApi } from './class-api.js';
+5 | // Date edits stay local until the coach clicks Save date.
+6 | function Assignment({ item, classId, run, busy }) {
+7 |   const [date, setDate] = useState(item.scheduled_date || '');
+8 |   return <li><strong>{item.title}</strong><label>Optional date<input type="date" value={date} disabled={busy} onChange={event => setDate(event.target.value)} /></label><div className="actions"><button className="secondary" disabled={busy} onClick={() => run(() => classApi('class-assignments', 'POST', { class_ids: [classId], lesson_id: item.lesson_id, scheduled_date: date || null }))}>Save date</button><button className="secondary" disabled={busy} onClick={() => run(() => classApi('classes/' + classId + '/lessons/' + item.lesson_id, 'DELETE'))}>Remove from class</button></div></li>;
+9 | }
+10 | export default function ClassesPage({ lessons, lessonsLoading, lessonsError }) {
+11 |   const [classes, setClasses] = useState([]), [selected, setSelected] = useState(''), [editor, setEditor] = useState(null);
+12 |   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [showArchived, setShowArchived] = useState(false), [lessonId, setLessonId] = useState(''), [date, setDate] = useState('');
+13 |   const current = classes.find(item => item.id === selected);
+14 |   async function load() { setClasses(await classApi('classes')); }
+15 |   useEffect(() => { const controller = new AbortController(); setBusy(true); classApi('classes', 'GET', undefined, controller.signal).then(setClasses).catch(failure => { if (!controller.signal.aborted) setError(failure.message); }).finally(() => { if (!controller.signal.aborted) setBusy(false); }); return () => controller.abort(); }, []);
+16 |   // A failed mutation leaves the current selection and editor data available.
+17 |   async function run(action) { setBusy(true); setError(''); try { await action(); await load(); } catch (failure) { setError(failure.message); } finally { setBusy(false); } }
+18 |   if (editor) return <ClassEditor key={editor.id || 'new'} item={editor.id ? editor : null} onCancel={() => { setEditor(null); run(async () => {}); }} onSaved={() => { setEditor(null); run(async () => {}); }} />;
+19 |   return <section className="classes-page"><h2>Classes</h2><p>Organize the groups you coach. Assigned lessons are links to originals; class levels and schedules stay separate.</p><div className="actions"><button disabled={busy} onClick={() => setEditor({})}>Create class</button><button className="secondary" disabled={busy} onClick={() => run(async () => {})}>Refresh classes</button></div><label className="check-label"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived classes</label>{busy && <p role="status">Updating classes…</p>}{error && <p className="error" role="alert">{error}</p>}<div className="class-layout"><nav aria-label="Your classes">{classes.filter(item => showArchived || !item.archived).map(item => <button className="secondary" key={item.id} aria-pressed={selected === item.id} onClick={() => { setSelected(item.id); setLessonId(''); setDate(''); }}>{item.name}{item.archived ? ' (archived)' : ''}</button>)}{!busy && !classes.length && <p>No classes yet. Create your first group.</p>}</nav>{current && <article className="lesson-card"><h3>{current.name}</h3><p>{current.discipline} {current.class_type || ''} · {current.audience}</p><p>{current.days.join(', ')} ({current.days_per_week} days per week)</p><p>Goal: {current.goal || 'Not set'}</p><p>Current level: <strong>{current.levels.find(level => level.id === current.current_level)?.name || 'Choose a level'}</strong></p><ul>{current.levels.find(level => level.id === current.current_level)?.skills.map((skill, index) => <li key={index}>{skill}</li>)}</ul><div className="actions"><button className="secondary" disabled={busy} onClick={() => setEditor(current)}>Edit class / ladder</button><button className="secondary" disabled={busy} onClick={() => run(() => classApi('classes/' + current.id, 'PATCH', { archived: !current.archived }))}>{current.archived ? 'Restore class' : 'Archive class'}</button></div><small>Archiving keeps the class and its links. It does not delete lessons.</small><h4>Assigned lessons</h4><ul className="class-links">{current.assignments.map(item => <Assignment key={current.id + ':' + item.lesson_id + ':' + item.scheduled_date} item={item} classId={current.id} run={run} busy={busy || current.archived} />)}</ul>{!current.assignments.length && <p>No lessons assigned yet.</p>}{!current.archived && <form onSubmit={event => { event.preventDefault(); run(() => classApi('class-assignments', 'POST', { class_ids: [current.id], lesson_id: Number(lessonId), scheduled_date: date || null })); }}><h4>Add lesson</h4>{lessonsError && <p role="alert">Your lessons could not load. Return to the dashboard and retry.</p>}<fieldset disabled={busy || lessonsLoading || !!lessonsError}><label>Saved lesson<select required value={lessonId} onChange={event => setLessonId(event.target.value)}><option value="">Choose a saved lesson</option>{lessons.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><label>Optional date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><button type="submit" disabled={!lessonId}>Add lesson</button></fieldset></form>}</article>}</div></section>;
+20 | }
+```
+
+- **Line 1:** Comment for the reader: Shows only server-authorized classes, with explicit archive and assignment actions. It does not execute.
+- **Line 2:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 3:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 4:** Imports the named exports from the indicated module so this file can use the shared component, rule or tool; braces select named exports.
+- **Line 5:** Comment for the reader: Date edits stay local until the coach clicks Save date. It does not execute.
+- **Line 6:** Defines Assignment with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 7:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
+- **Line 8:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
+- **Line 9:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 10:** Defines ClassesPage with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 11:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
+- **Line 12:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
+- **Line 13:** Finds the currently selected class in the latest owner-authorized response.
+- **Line 14:** Reloads classes from the protected API after a successful action.
+- **Line 15:** Loads classes once when the page opens, handling failures and cancelling work on unmount.
+- **Line 16:** Comment for the reader: A failed mutation leaves the current selection and editor data available. It does not execute.
+- **Line 17:** Runs an explicit mutation, reloads fresh classes, reports failures and releases busy state without discarding the selection.
+- **Line 18:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 19:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
+- **Line 20:** Closes the surrounding block, object or callback and completes the expression or statement.

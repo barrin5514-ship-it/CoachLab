@@ -1,3 +1,4 @@
+import AssignLesson from './AssignLesson.jsx';
 import SafetyNotes from './SafetyNotes.jsx';
 // Displays a saved lesson, its media and explicit edit/delete actions.
 import { fitnessLabel } from './fitness.js';
@@ -53,6 +54,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, 
     <SafetyNotes><CoachingText text={lesson.coaching_notes} /></SafetyNotes>
     <LessonMedia lesson={lesson} />
     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
+    <AssignLesson lessonId={lesson.id} disabled={disabled || busy} />
     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
     {error && <p className="error" role="alert">{error}</p>}

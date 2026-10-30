@@ -1,4 +1,5 @@
 // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
+import ClassesPage from './ClassesPage.jsx';
 import { fitnessClassTypes } from './fitness.js';
 import DisciplineHeader, { DisciplineNavigation } from './DisciplineHeader.jsx';
 import { disciplineDefaults } from './discipline-pages.js';
@@ -13,6 +14,7 @@ import { fetchMedia, withApprovedVideos } from './media.js';
 
 // Keeps lessons and media together while one editor is open.
 export default function App({ user, onLogOut }) {
+  const [classesOpen, setClassesOpen] = useState(false);
   const [lessons, setLessons] = useState([]);
   const [audience, setAudience] = useState('All');
   const [discipline, setDiscipline] = useState('All');
@@ -121,11 +123,13 @@ export default function App({ user, onLogOut }) {
 
   return (
     <main className="coach-shell">
-      <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
+      <DisciplineNavigation discipline={discipline} classType={classType} disabled={!!formOpen} onSelect={card => { setClassesOpen(false); setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />
+      <button type="button" className="secondary classes-nav" disabled={!!formOpen} aria-pressed={classesOpen} onClick={() => setClassesOpen(current => !current)}>{classesOpen ? 'Back to lessons' : 'Classes'}</button>
       <header className="hero">
         <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
-        <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+        {!classesOpen && <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>}
       </header>
+      {classesOpen ? <ClassesPage lessons={lessons} lessonsLoading={loading} lessonsError={error} /> : <>
       <DisciplineHeader discipline={discipline} classType={classType} />
       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
@@ -142,6 +146,7 @@ export default function App({ user, onLogOut }) {
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
       </section>
+      </>}
       <CoachingChat key={user.id} />
     </main>
   );
