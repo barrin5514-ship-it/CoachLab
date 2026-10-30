@@ -384,3 +384,33 @@ test('mocked route repairs steps across disciplines, Fitness types and audiences
     assert.equal(result.draft.sections[0].instructions, '1. Demonstrate slowly.\n2. Practice with control.');
   }
 });
+
+// Regression checks use isolated signed-in routes and stand-in providers, never live Gemini.
+test('chat app help is specific, coaching reaches AI, off-topic redirects, and failures are distinct', async t => {
+  let calls = 0;
+  const state = await chatFixture(t, async () => { calls++; return 'Practice slow boxing footwork with coach supervision.'; });
+  for (const question of ['help', 'how do I use this', 'How do I use CoachLab?', 'how do I make a lesson']) {
+    const reply = await state.post(question);
+    assert.equal(reply.status, 200);
+    const { answer } = await reply.json();
+    for (const feature of ['New Lesson', 'AI lesson draft', 'Fitness', 'Suggest videos', 'Save lesson', 'Edit lesson']) assert.ok(answer.includes(feature));
+    state.advance(60001);
+  }
+  assert.equal(calls, 0);
+  assert.match((await (await state.post('Boxing footwork drills?')).json()).answer, /slow boxing footwork/);
+  assert.equal(calls, 1);
+  assert.equal((await (await state.post('Write a space opera')).json()).answer, 'I can help with coaching or using CoachLab. Please ask a specific coaching or app question.');
+  assert.equal(calls, 1);
+});
+
+test('chat failure logs only a fixed category and shows unavailable rather than off-topic', async t => {
+  const logs = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  for (const failure of [new Error('SECRET user text and credentials'), new (await import('./ai-provider.js')).AiError(504, 'SECRET')]) {
+    const state = await chatFixture(t, async () => { throw failure; });
+    const reply = await state.post('Boxing footwork drills?');
+    assert.equal(reply.status, 502);
+    assert.deepEqual(await reply.json(), { error: 'Chat is unavailable right now, try again in a minute.' });
+  }
+  assert.deepEqual(logs, [['[CoachLab chat] invalid_answer_or_provider_failure'], ['[CoachLab chat] provider_timeout']]);
+});

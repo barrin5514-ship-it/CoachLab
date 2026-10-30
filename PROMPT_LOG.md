@@ -5261,3 +5261,48 @@ Outcome: clean starting tree at bcec12e. Followed the explicit numeric instructi
 Fresh actual checks: serial npm test 116 passed, zero failures/skips (23.3 seconds); production npm run build passed including Prisma generation, TypeScript and Vite (40 modules). Walkthrough source and explanation numbering verified. Reviewed diff and staged file scope. No browser verification or live provider calls claimed. No new implementation mistakes encountered. No extra tests added for this reversible styling-only adjustment.
 
 Containing commit subject: "style: lower BJJ and Muay Thai photo positions". Final response records the actual commit hash and push synchronization after completion.
+
+## 2026-10-30 — Repair coaching chat fallback
+
+Verbatim user prompt:
+
+> COACHLAB — CHAT BOX ONLY REPLIES WITH FALLBACK MESSAGE
+> Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+>
+> PROBLEM
+> On the live site, the coaching chat answers every question with:
+> "I can help with coaching or using CoachLab. Please ask a specific
+> coaching or app question."
+> Even for clearly on-topic questions like "How do I use CoachLab?"
+> and "help".
+>
+> FIND THE CAUSE (report which one)
+> 1. The topic filter is too strict and blocks valid questions, or
+> 2. The Gemini call fails or returns something the code rejects,
+>    and it falls back to this message silently.
+>
+> FIX
+> - App-help questions ("how do I use this", "help", "how do I make
+>   a lesson") must get a real answer about CoachLab features:
+>   creating lessons, AI lesson draft, disciplines and Fitness
+>   classes, Suggest videos, saving and editing.
+> - Only truly off-topic questions get the fallback message.
+> - If the AI call fails, show a clear "Chat is unavailable right
+>   now, try again in a minute" message, not the off-topic one.
+> - Add safe server logging for the failure reason (no secrets,
+>   no user message text).
+> - Add tests for: app-help question answered, coaching question
+>   answered, off-topic gets fallback, AI failure shows the
+>   unavailable message.
+>
+> RULES
+> - Keep chat read-only, signed-in only, same quotas.
+> - Tests serially. Small commits. Push only if tests and build
+>   pass. Never print .env values. Don't touch other projects.
+>
+> REPORT BACK (one code block): the cause in plain English, commit
+> hash, push result, test/build results.
+
+Outcome: reproduced overly strict guard for "help" and "how do I use this" before any provider call (cause 1). "How do I use CoachLab?" already passed locally; live signed-in behavior/provider logs were unavailable, so no claim that all reported live failures share this cause. Existing provider exceptions already returned a separate 502; they did not silently become this fallback. Added narrowly matched factual app-help replies, current feature instructions, fixed safe logging categories, and the requested unavailable error. Authentication, read-only access and numeric quotas unchanged.
+
+Changed: server/chat.js, server/ai.test.js, CODE_WALKTHROUGH.md and this log. Tests: npm test, serial concurrency=1, 118 passed, zero failed. Production build: npm run build passed (dependency check, offline Prisma generation/TypeScript, Vite). No live Gemini calls, real lessons/databases or .env reads. Verified all 61 chat source lines against numbered walkthrough and explanation coverage (actual total verified by script). Local tooling corrections: Windows rg globs required directory-based searches; no application defect was introduced by those inspection errors. Commit subject: "Fix CoachLab app-help chat and safe failure diagnostics"; hash belongs in next authorized log update.
