@@ -5231,3 +5231,33 @@ Outcome: clean synchronized starting commit a123b7c. Added exactly one CSS rule 
 Actual verification: serial npm test 116 passed, zero failures/skips (24.8 seconds); production npm run build passed including Prisma generation, TypeScript and Vite (40 modules). Walkthrough line numbers/source comparison passed. Diff reviewed: one CSS addition plus documentation. No new tests for this reversible one-line styling change, no environment values read, no live AI calls. No new browser verification claimed; browser use was disabled during the preceding task. No genuine implementation mistakes encountered.
 
 Containing commit subject: "style: nudge BJJ dashboard photo left". Its resolved hash and push result are reported after commit. A commit cannot include its own hash.
+
+## 2026-10-30 — Lower BJJ and Muay Thai horizontal positions
+
+Exact user prompt:
+
+~~~text
+COACHLAB — MUAY THAI + BJJ PHOTO NUDGE (styling only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+Shift two dashboard card photos slightly more to the left, the
+same direction as the last BJJ nudge (bcec12e):
+- Brazilian Jiu-Jitsu: currently 65% 50%. Lower the horizontal
+  value by about 10 to 15%.
+- Muay Thai: lower its current horizontal value by about 10 to 15%.
+Keep the vertical values the same. Don't touch any other photo,
+the hero banner, or the title.
+
+RULES
+- Styling only. Tests serially. One small commit.
+- Push only if tests and build pass. Never print .env values.
+
+REPORT BACK (one code block): commit hash, push result,
+test/build results, and the old and new positions for both photos.
+~~~
+
+Outcome: clean starting tree at bcec12e. Followed the explicit numeric instruction: BJJ 65% 50% to 50% 50%; Muay Thai default 50% 50% to 35% 50%. Explained before editing that reducing the horizontal value moves a horizontally overflowing cover image right, unlike the previous leftward nudge; the wording and numeric instruction conflict, so the precise numeric request was used. Vertical positions remain 50%. Only these dashboard CSS selectors and required documentation changed; no other photo, hero, title, logic, API or data changes. No environment values read.
+
+Fresh actual checks: serial npm test 116 passed, zero failures/skips (23.3 seconds); production npm run build passed including Prisma generation, TypeScript and Vite (40 modules). Walkthrough source and explanation numbering verified. Reviewed diff and staged file scope. No browser verification or live provider calls claimed. No new implementation mistakes encountered. No extra tests added for this reversible styling-only adjustment.
+
+Containing commit subject: "style: lower BJJ and Muay Thai photo positions". Final response records the actual commit hash and push synchronization after completion.

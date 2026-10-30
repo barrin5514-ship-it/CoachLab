@@ -232,4 +232,6 @@ body:has(.coach-shell) { background: #071215; }
 .coach-shell > .hero .account-line { overflow-wrap: anywhere; }
 .coach-shell > .hero .actions { flex-wrap: wrap; }
 @media (max-width: 600px) { .coach-shell > .hero { padding: 22px 16px; align-items: stretch; } .coach-shell > .hero .actions button { min-height: 48px; flex: 1 1 160px; } }
-.discipline-tile[data-photo="bjj"] img { object-position: 65% 50%; }
+.discipline-tile[data-photo="bjj"] img { object-position: 50% 50%; }
+
+.discipline-tile[data-photo="muay-thai"] img { object-position: 35% 50%; }
