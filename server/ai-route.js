@@ -1,5 +1,5 @@
 // Validates AI lesson requests and replies before returning an unsaved draft.
-import { validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
+import { validateRequest, validateDraft, toLesson, normalizeDraftSteps } from '../client/src/lesson-draft.js';
 import { validateLesson } from './validate-lesson.js';
 import { reconcileDraftTiming } from './ai-timing.js';
 import { generateDraft, AiError } from './ai-provider.js';
@@ -20,7 +20,7 @@ export function registerAiRoute(app, { provider = generateDraft, now = Date.now 
     attempts.push(time);
     busy = true;
     try {
-      const draft = reconcileDraftTiming(await provider(request.body), request.body);
+      const draft = reconcileDraftTiming(normalizeDraftSteps(await provider(request.body)), request.body);
       // AI output is untrusted: validate the complete structure and timing before showing a draft.
       const invalid = validateDraft(draft, request.body);
       if (invalid) throw new AiError(502, `AI draft failed validation: ${invalid} Please try again.`);

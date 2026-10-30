@@ -2988,7 +2988,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\lesson-draft.js`
 
-Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
+AI step-format repair: this file participates in prompt construction, conservative formatting, shared validation or mocked regression tests. No data schema, provider quota or safety rules change.
 
 ### Lines 1–30
 
@@ -3068,27 +3068,27 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 37 |   return null;
 38 | }
 39 |
-40 | // Checks structure, coaching cues and exact timing before an AI draft is accepted.
-41 | export function validateDraft(draft, request) {
-42 |   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
-43 |   if (details.some(key => !text(draft[key], 1000))) return 'Every coaching guidance field requires 1–1000 characters.';
-44 |   if (!Array.isArray(draft.sections) || draft.sections.length !== sections.length) return 'The draft needs all five timed sections.';
-45 |   for (const [index, section] of draft.sections.entries()) {
-46 |     if (!object(section) || section.name !== sections[index] || !text(section.instructions, 1000)) return 'Each timed section needs its expected name and instructions (up to 1000 characters).';
-47 |     if (sectionGuidance.some(([key]) => !text(section[key], 200))) return 'Each section needs common mistakes and easier/harder options (up to 200 characters each).';
-48 |     if ((section.instructions.match(/(?:^|\n)\s*\d+[.)]\s+/g) || []).length < 2) return 'Each section needs at least two numbered coaching steps.';
-49 |     if (!Number.isInteger(section.minutes) || section.minutes < (index === 3 ? 0 : 1) || section.minutes > 180) return 'Section times must be whole minutes; only partner exercises may use zero.';
-50 |   }
-51 |   if (draft.sections.reduce((sum, section) => sum + section.minutes, 0) !== request.duration_minutes) return 'Section times must add up to the requested class duration.';
-52 |   return null;
-53 | }
-54 |
-55 | // Converts the approved structured draft into existing lesson fields, avoiding a second storage format.
-56 | export function toLesson(draft, request) {
-57 |   return {
-58 |     ...(request.discipline === 'Fitness' ? fitnessFields(request) : {}),
-59 |     audience: request.audience ?? 'Unspecified', title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,
-60 |     goal: draft.objectives,
+40 | // Recognize common step labels while requiring actual text after each marker.
+41 | const stepMarker = /(?:^|\n)\s*(?:[-*]\s+)?(?:step\s+)?\d+[.):][ \t]+/gi;
+42 | export const coachingStepCount = instructions => [...instructions.matchAll(stepMarker)].filter(match => instructions.slice(match.index + match[0].length).split('\n')[0].trim()).length;
+43 |
+44 | // Reformat supplied text only; never invent exercises to make a draft pass.
+45 | export function normalizeDraftSteps(draft) {
+46 |   if (!Array.isArray(draft?.sections)) return draft;
+47 |   return { ...draft, sections: draft.sections.map(section => {
+48 |     const text = section?.instructions;
+49 |     if (typeof text !== 'string' || text.length > 1000) return section;
+50 |     const lines = text.replace(/([.!?])[ \t]+(?=(?:step\s+)?\d+[.):][ \t]+)/gi, '$1\n');
+51 |     const canonical = lines.replace(stepMarker, (marker, offset) => (offset ? '\n' : '') + marker.trim().replace(/^[-*]\s+/, '').replace(/^step\s+/i, '').replace(/[):]$/, '.') + ' ');
+52 |     if (coachingStepCount(canonical) >= 2) return { ...section, instructions: canonical };
+53 |     if (coachingStepCount(canonical) !== 1 || !/^\s*\d+\.\s+/.test(canonical)) return section;
+54 |     const body = canonical.replace(/^\s*\d+\.\s+/, '');
+55 |     const parts = body.split(/\n+|(?<=[.!?])\s+(?=[A-Z])/).map(part => part.replace(/^\s*[-*]\s+/, '').trim()).filter(Boolean);
+56 |     if (parts.length < 2 || parts.some(part => (part.match(/[A-Za-z]+/g) || []).length < 2)) return section;
+57 |     const repaired = parts.map((part, index) => (index + 1) + '. ' + part).join('\n');
+58 |     return repaired.length <= 1000 ? { ...section, instructions: repaired } : section;
+59 |   }) };
+60 | }
 ```
 
 - **Line 31:** Requires an integer duration between 15 and 180 minutes inclusive.
@@ -3100,47 +3100,91 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 37:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
 - **Line 38:** Closes toLesson.
 - **Line 39:** Blank line separates related sections; it performs no operation.
-- **Line 40:** Human-readable comment: Checks structure, coaching cues and exact timing before an AI draft is accepted. This explanation does not execute.
-- **Line 41:** Opens the exported draft validator with the generated object and original class request.
-- **Line 42:** Rejects a non-object draft, blank or overlong title, or missing/overlong objectives; short-circuit || avoids reading properties of invalid objects.
-- **Line 43:** Requires nonblank text in every guidance field, each at most 1000 characters.
-- **Line 44:** Requires exactly five timed sections in an array.
-- **Line 45:** Loops over each section with its zero-based index, unpacked with square-bracket destructuring.
-- **Line 46:** Requires each section to be an object with the expected ordered name and nonempty instructions bounded to 1000 characters.
-- **Line 47:** Checks all three section guidance fields using some; a missing, blank or overlong value rejects the draft.
-- **Line 48:** Counts lines beginning with a number followed by a period or closing parenthesis and whitespace. Fewer than two numbered cues rejects the draft; this checks structure, not coaching correctness.
-- **Line 49:** Requires whole-minute times up to 180; the ternary expression allows zero only at index 3, the partner section.
-- **Line 50:** Closes toLesson.
-- **Line 51:** reduce accumulates section minutes from zero; a total different from the requested duration returns an error.
-- **Line 52:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
-- **Line 53:** Closes toLesson.
-- **Line 54:** Blank line separates related sections; it performs no operation.
-- **Line 55:** Human-readable comment: Converts the approved structured draft into existing lesson fields, avoiding a second storage format. This explanation does not execute.
-- **Line 56:** Opens the converter from an approved structured draft to the existing lesson API shape.
-- **Line 57:** Returns an object containing the fixture's helper functions.
-- **Line 58:** Spreads normalized Fitness metadata into the approved lesson; other disciplines keep their existing payload format.
-- **Line 59:** Copies audience into the saved lesson, defaulting omitted audience to Unspecified; existing lesson metadata remains intact.
-- **Line 60:** Maps generated objectives into the existing goal column.
+- **Line 40:** Comment explaining why common step labels are recognized.
+- **Line 41:** Defines a case-insensitive global pattern for line-start numbers, optional Step labels or bullets, and period, parenthesis or colon separators; spaces or tabs must follow the marker.
+- **Line 42:** Counts matched numbered lines only when text follows the marker, so empty step labels cannot satisfy the requirement.
+- **Line 43:** Blank line separates related sections; it performs no operation.
+- **Line 44:** Comment limiting repair to formatting text already supplied by the provider.
+- **Line 45:** Defines a pure draft-formatting helper shared with tests; the server invokes it before validation.
+- **Line 46:** Leaves missing or malformed section arrays untouched so normal validation can reject them.
+- **Line 47:** Copies the draft and maps its sections without modifying the original response.
+- **Line 48:** Reads a section’s instructions safely even when the section is null.
+- **Line 49:** Refuses to repair non-text or oversized instructions; it never truncates text to evade limits.
+- **Line 50:** Adds a line break before an inline numbered step following sentence punctuation, preserving that punctuation and all instruction words.
+- **Line 51:** Converts recognized Step, bullet and punctuation variants to the standard numbered-line format while keeping instruction text.
+- **Line 52:** Returns a copied section when at least two supplied steps are already usable.
+- **Line 53:** Only attempts sentence repair when exactly one recognized step begins the instructions; unnumbered paragraphs remain invalid.
+- **Line 54:** Removes the leading number before separating the existing instruction text.
+- **Line 55:** Splits at line breaks or sentence punctuation followed by a capital letter, removes optional bullet markers and empty fragments.
+- **Line 56:** Requires at least two fragments with at least two words each; a lone cue or empty second marker is not enough.
+- **Line 57:** Numbers the existing fragments in order and joins them with newlines; no exercises or coaching claims are invented.
+- **Line 58:** Uses the repaired text only if it still fits the original 1000-character maximum.
+- **Line 59:** Closes the section mapping and the copied draft object.
+- **Line 60:** Closes toLesson.
 
-### Lines 61–64
+### Lines 61–86
 
 ```text
-61 |     drills: `Techniques: ${draft.techniques}\n\n${draft.sections.map(section => `${section.name} — ${section.minutes} minutes\n${section.instructions}\n${sectionGuidance.map(([key, label]) => `${label}: ${section[key]}`).join('\n')}`).join('\n\n')}`,
-62 |     coaching_notes: `AI-assisted draft reviewed and approved by coach.\n${safetyGuidance(request)}\nStudents: ${request.students}\nEquipment: ${request.equipment?.trim() || 'AI recommendations are in Techniques; confirm availability.'}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
-63 |   };
-64 | }
+61 |
+62 | // Checks structure, coaching cues and exact timing before an AI draft is accepted.
+63 | export function validateDraft(draft, request) {
+64 |   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
+65 |   if (details.some(key => !text(draft[key], 1000))) return 'Every coaching guidance field requires 1–1000 characters.';
+66 |   if (!Array.isArray(draft.sections) || draft.sections.length !== sections.length) return 'The draft needs all five timed sections.';
+67 |   for (const [index, section] of draft.sections.entries()) {
+68 |     if (!object(section) || section.name !== sections[index] || !text(section.instructions, 1000)) return 'Each timed section needs its expected name and instructions (up to 1000 characters).';
+69 |     if (sectionGuidance.some(([key]) => !text(section[key], 200))) return 'Each section needs common mistakes and easier/harder options (up to 200 characters each).';
+70 |     if (coachingStepCount(section.instructions) < 2) return 'Each section needs at least two numbered coaching steps.';
+71 |     if (!Number.isInteger(section.minutes) || section.minutes < (index === 3 ? 0 : 1) || section.minutes > 180) return 'Section times must be whole minutes; only partner exercises may use zero.';
+72 |   }
+73 |   if (draft.sections.reduce((sum, section) => sum + section.minutes, 0) !== request.duration_minutes) return 'Section times must add up to the requested class duration.';
+74 |   return null;
+75 | }
+76 |
+77 | // Converts the approved structured draft into existing lesson fields, avoiding a second storage format.
+78 | export function toLesson(draft, request) {
+79 |   return {
+80 |     ...(request.discipline === 'Fitness' ? fitnessFields(request) : {}),
+81 |     audience: request.audience ?? 'Unspecified', title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,
+82 |     goal: draft.objectives,
+83 |     drills: `Techniques: ${draft.techniques}\n\n${draft.sections.map(section => `${section.name} — ${section.minutes} minutes\n${section.instructions}\n${sectionGuidance.map(([key, label]) => `${label}: ${section[key]}`).join('\n')}`).join('\n\n')}`,
+84 |     coaching_notes: `AI-assisted draft reviewed and approved by coach.\n${safetyGuidance(request)}\nStudents: ${request.students}\nEquipment: ${request.equipment?.trim() || 'AI recommendations are in Techniques; confirm availability.'}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
+85 |   };
+86 | }
 ```
 
-- **Line 61:** Formats all five sections into the existing drills field, preserving headings, minutes, numbered cues, mistakes and easier/harder options without another database column.
-- **Line 62:** Adds fixed safety rules to the approval note before class details and model guidance; this preserves the rules when the approved draft is saved.
-- **Line 63:** Closes the returned object and return statement.
-- **Line 64:** Closes toLesson.
+- **Line 61:** Blank line separates related sections; it performs no operation.
+- **Line 62:** Human-readable comment: Checks structure, coaching cues and exact timing before an AI draft is accepted. This explanation does not execute.
+- **Line 63:** Opens the exported draft validator with the generated object and original class request.
+- **Line 64:** Rejects a non-object draft, blank or overlong title, or missing/overlong objectives; short-circuit || avoids reading properties of invalid objects.
+- **Line 65:** Requires nonblank text in every guidance field, each at most 1000 characters.
+- **Line 66:** Requires exactly five timed sections in an array.
+- **Line 67:** Loops over each section with its zero-based index, unpacked with square-bracket destructuring.
+- **Line 68:** Requires each section to be an object with the expected ordered name and nonempty instructions bounded to 1000 characters.
+- **Line 69:** Checks all three section guidance fields using some; a missing, blank or overlong value rejects the draft.
+- **Line 70:** Uses the shared numbering recognizer in validation, requiring two nonempty steps in both browser and server.
+- **Line 71:** Requires whole-minute times up to 180; the ternary expression allows zero only at index 3, the partner section.
+- **Line 72:** Closes toLesson.
+- **Line 73:** reduce accumulates section minutes from zero; a total different from the requested duration returns an error.
+- **Line 74:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
+- **Line 75:** Closes toLesson.
+- **Line 76:** Blank line separates related sections; it performs no operation.
+- **Line 77:** Human-readable comment: Converts the approved structured draft into existing lesson fields, avoiding a second storage format. This explanation does not execute.
+- **Line 78:** Opens the converter from an approved structured draft to the existing lesson API shape.
+- **Line 79:** Returns an object containing the fixture's helper functions.
+- **Line 80:** Spreads normalized Fitness metadata into the approved lesson; other disciplines keep their existing payload format.
+- **Line 81:** Copies audience into the saved lesson, defaulting omitted audience to Unspecified; existing lesson metadata remains intact.
+- **Line 82:** Maps generated objectives into the existing goal column.
+- **Line 83:** Formats all five sections into the existing drills field, preserving headings, minutes, numbered cues, mistakes and easier/harder options without another database column.
+- **Line 84:** Adds fixed safety rules to the approval note before class details and model guidance; this preserves the rules when the approved draft is saved.
+- **Line 85:** Closes the returned object and return statement.
+- **Line 86:** Closes toLesson.
 
 ## server/ai-provider.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\ai-provider.js`
 
-Calls Gemini only on the server, with bounded requests and safe failure messages.
+AI step-format repair: this file participates in prompt construction, conservative formatting, shared validation or mocked regression tests. No data schema, provider quota or safety rules change.
 
 ### Lines 1–30
 
@@ -3171,7 +3215,7 @@ Calls Gemini only on the server, with bounded requests and safe failure messages
 24 | Return exactly five sections in this order: Warm-up, Technique teaching, Progressive drills, Partner exercises, Cooldown.
 25 | Each section has name, integer minutes and instructions (maximum 1000 characters, at least two numbered step-by-step cues). Each section MUST also include common_mistakes, easier and harder (each maximum 200 characters). Harder means more coordination or precision, never breaking the safety rules. Minutes must sum exactly to duration_minutes. All sections need positive time except Partner exercises may be zero with a solo alternative.
 26 | Keep output concise regardless of class length: use 2–4 numbered cues per section, target at most 450 characters for instructions and 100 characters each for common_mistakes, easier and harder. Use one short mistake and one option per field. Target at most 500 characters for each overall guidance field and objectives. Longer classes use more repetitions, practice rounds and breaks, not more text or techniques. Never omit safety guidance.
-27 | When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. Use short newline-separated bullet cues, not long paragraphs. Include numbered step-by-step teaching cues, progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
+27 | When objective, techniques or equipment are blank, recommend suitable options. Put recommended equipment in the techniques guidance; offer minimal-equipment alternatives. For every instructions string, use exactly this numbering style with a newline between steps: "1. Demonstrate slowly.\n2. Practice with control." Use 2–4 nonempty numbered steps in EVERY section, including warm-up, cooldown and zero-minute partner alternatives. Do not use bullets or a single paragraph for instructions. Include progressive drills and relevant partner roles. Allocate all activity and transitions within the class time; guidance fields do not add time.
 28 | For sections that teach or drill a nameable technique or exercise, add media_queries: up to two short search phrases (2 to 5 words, maximum 80 characters) naming that technique, for example "knee cut half guard pass". Use an empty list for warm-ups, cooldowns and generic activity. Phrases are search terms only: never include web addresses.
 29 | Adapt intensity and complexity to skill level, class size and equipment. Include controlled practice, consent, stop signals and appropriate modifications. Do not claim injury prevention or athlete readiness. Avoid medical advice or unsupported effectiveness claims.`;
 30 |
@@ -3203,7 +3247,7 @@ Calls Gemini only on the server, with bounded requests and safe failure messages
 - **Line 24:** This prompt line specifies the five activity names and their order.
 - **Line 25:** Instructs the model to produce numbered cues, bounded per-section guidance, safe harder options and times that sum to the requested duration. This is model guidance, not proof of safe content.
 - **Line 26:** Gives Gemini concise writing targets below the existing hard validation limits. Longer classes should extend repetitions and breaks, not output length; all safety guidance remains required.
-- **Line 27:** This line is part of the provider's system prompt, not executed JavaScript. It asks for recommended missing details, minimal-equipment options, short bullet cues, teaching progression and allocation within the requested total time.
+- **Line 27:** Prompt text now gives an exact numbered newline example for every section, including zero-minute alternatives, and removes contradictory bullet instructions; time and equipment requirements remain.
 - **Line 28:** Tells the AI to name the technique of each teaching or drilling section as short search phrases (never web addresses) and to leave the list empty for warm-ups and cooldowns. CoachLab then searches for media itself and checks every link.
 - **Line 29:** This final prompt line asks for appropriate modifications and safety cues without medical or unsupported claims, then closes the template literal.
 - **Line 30:** Blank line separates related sections; it performs no operation.
@@ -3312,13 +3356,13 @@ Calls Gemini only on the server, with bounded requests and safe failure messages
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\ai-route.js`
 
-Validates AI lesson requests and replies before returning an unsaved draft.
+AI step-format repair: this file participates in prompt construction, conservative formatting, shared validation or mocked regression tests. No data schema, provider quota or safety rules change.
 
 ### Lines 1–30
 
 ```text
 1 | // Validates AI lesson requests and replies before returning an unsaved draft.
-2 | import { validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
+2 | import { validateRequest, validateDraft, toLesson, normalizeDraftSteps } from '../client/src/lesson-draft.js';
 3 | import { validateLesson } from './validate-lesson.js';
 4 | import { reconcileDraftTiming } from './ai-timing.js';
 5 | import { generateDraft, AiError } from './ai-provider.js';
@@ -3339,7 +3383,7 @@ Validates AI lesson requests and replies before returning an unsaved draft.
 20 |     attempts.push(time);
 21 |     busy = true;
 22 |     try {
-23 |       const draft = reconcileDraftTiming(await provider(request.body), request.body);
+23 |       const draft = reconcileDraftTiming(normalizeDraftSteps(await provider(request.body)), request.body);
 24 |       // AI output is untrusted: validate the complete structure and timing before showing a draft.
 25 |       const invalid = validateDraft(draft, request.body);
 26 |       if (invalid) throw new AiError(502, `AI draft failed validation: ${invalid} Please try again.`);
@@ -3350,7 +3394,7 @@ Validates AI lesson requests and replies before returning an unsaved draft.
 ```
 
 - **Line 1:** Human-readable comment: Validates AI lesson requests and replies before returning an unsaved draft. This explanation does not execute.
-- **Line 2:** Imports shared request/draft validators and the existing-lesson formatter from the pure client module; this file still runs only on the server.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 3:** Imports the existing saved-lesson validator to check whether an approved draft will fit its storage fields.
 - **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 5:** Imports the real Gemini adapter and safe error type.
@@ -3371,7 +3415,7 @@ Validates AI lesson requests and replies before returning an unsaved draft.
 - **Line 20:** Records this accepted attempt, including attempts that later fail upstream.
 - **Line 21:** Marks the chat provider busy before asynchronous work begins.
 - **Line 22:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 23:** Waits for the provider draft and applies only the narrow server-side timing repair before ordinary validation; it does not save a lesson.
+- **Line 23:** Waits for the provider, normalizes existing instruction text, then applies the unchanged narrow timing repair before full validation.
 - **Line 24:** Human-readable comment: AI output is untrusted: validate the complete structure and timing before showing a draft. This explanation does not execute.
 - **Line 25:** Runs the unchanged full draft validator and retains its fixed diagnostic string when validation fails.
 - **Line 26:** Returns the specific validator-authored reason as a safe 502 error, rather than combining every failure into one ambiguous message. It never includes generated lesson text.
@@ -3726,7 +3770,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\ai.test.js`
 
-Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
+AI step-format repair: this file participates in prompt construction, conservative formatting, shared validation or mocked regression tests. No data schema, provider quota or safety rules change.
 
 ### Lines 1–30
 
@@ -3746,7 +3790,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 13 | import { migrate } from './migrations.js';
 14 | import { testOptions, authedFetch as fetch } from './test-auth.js';
 15 | import { generateDraft } from './ai-provider.js';
-16 | import { disciplines, sections, details, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
+16 | import { disciplines, sections, details, normalizeDraftSteps, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
 17 |
 18 | const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Kimura fundamentals', techniques: 'Kimura grip', equipment: 'Mats', privacy_confirmed: true };
 19 | const draft = { title: 'Mock Kimura lesson', objectives: 'Practice controlled positioning.', ...Object.fromEntries(details.map(key => [key, 'Mock coaching guidance for testing.'])), sections: sections.map(name => ({ name, minutes: 12, common_mistakes: 'Rushing the movement.', easier: 'Slow down and simplify.', harder: 'Add a coordination cue without contact.', instructions: '1. Demonstrate slowly.\n2. Rehearse under coach supervision.' })) };
@@ -3778,7 +3822,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 13:** Imports the real versioned migration runner.
 - **Line 14:** Imports the fake signed-in coach options and a fetch that sends the Origin header, so these older AI tests run as a signed-in coach.
 - **Line 15:** Imports the Gemini adapter for mocked transport tests.
-- **Line 16:** Imports shared lists, validation and formatting functions exercised by these tests.
+- **Line 16:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 17:** Blank line separates related sections; it performs no operation.
 - **Line 18:** Defines generic, nonpersonal BJJ class parameters with explicit privacy confirmation.
 - **Line 19:** Creates a repeatable mock draft with all five timed sections, numbered cues, common mistakes and progression options. No live model call is made.
@@ -4454,7 +4498,7 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 329:** Registers a transport test using mocked HTTP responses instead of Google's live API.
 - **Line 330:** Calls the real chat payload builder with a fake environment and fetcher so the outgoing request can be inspected safely.
 
-### Lines 331–343
+### Lines 331–360
 
 ```text
 331 |     const body = JSON.parse(options.body);
@@ -4470,6 +4514,23 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 341 |   await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => new Response('x'.repeat(8193)) }), error => error.status === 502);
 342 |   await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => Response.json(envelope({ answer: 'x'.repeat(1201) })) }), error => error.status === 502);
 343 | });
+344 |
+345 | import { fitnessClassTypes } from '../client/src/fitness.js';
+346 | // Mock text exercises formatting without spending provider quota or storing lessons.
+347 | test('numbering styles and conservative repair preserve cues and reject incomplete output', () => {
+348 |   for (const instructions of ['1. Demonstrate slowly. 2. Practice with control.', '1. Demonstrate slowly.\n2. Practice with control.', '1) Demonstrate slowly.\n2) Practice with control.', 'Step 1: Demonstrate slowly.\nStep 2: Practice with control.', 'step 1. Demonstrate slowly.\nstep 2. Practice with control.', '1. Demonstrate slowly.\nPractice with control.', '1. Demonstrate slowly. Practice with control.']) {
+349 |     const input = { ...draft, sections: draft.sections.map(section => ({ ...section, instructions })) };
+350 |     const original = structuredClone(input), repaired = normalizeDraftSteps(input);
+351 |     assert.equal(validateDraft(repaired, request), null);
+352 |     assert.deepEqual(input, original);
+353 |     assert.equal(repaired.sections[0].instructions, '1. Demonstrate slowly.\n2. Practice with control.');
+354 |   }
+355 |   for (const instructions of ['1. Demonstrate slowly.', '1. Demonstrate slowly.\n2.', '1. Demonstrate slowly.\nOkay', 'Demonstrate slowly. Practice with control.', '1. ' + 'x'.repeat(1001)]) {
+356 |     assert.ok(validateDraft(normalizeDraftSteps({ ...draft, sections: draft.sections.map(section => ({ ...section, instructions })) }), request));
+357 |   }
+358 |   assert.equal(normalizeDraftSteps(null), null);
+359 |   const incomplete = structuredClone(draft); incomplete.safety = '';
+360 |   assert.ok(validateDraft(normalizeDraftSteps(incomplete), request));
 ```
 
 - **Line 331:** Parses the outgoing body to inspect settings.
@@ -4485,6 +4546,81 @@ Fitness integration: connects optional Fitness metadata to the existing lesson w
 - **Line 341:** Requires an 8193-byte mock response to fail with 502 because chat permits only 8192 response bytes.
 - **Line 342:** Requires an otherwise valid mock answer of 1201 characters to fail with 502.
 - **Line 343:** Closes the integrated test.
+- **Line 344:** Blank line separates related sections; it performs no operation.
+- **Line 345:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 346:** Comment identifying fake provider text and the no-storage test boundary.
+- **Line 347:** Registers formatting, input-preservation and malformed-output tests.
+- **Line 348:** Exercises period, parenthesis, Step, lowercase and inline numbering plus a single numbered step with usable remaining text.
+- **Line 349:** Builds a complete draft fixture using the chosen instruction format in every section.
+- **Line 350:** Copies the input before repair so the test can prove the helper did not mutate it.
+- **Line 351:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 352:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 353:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 354:** Closes the discipline loop.
+- **Line 355:** Tests a lone cue, empty marker, one-word remainder, completely unnumbered text and oversized text; all must remain invalid.
+- **Line 356:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 357:** Closes the discipline loop.
+- **Line 358:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 359:** Removes safety guidance from a complete fixture to prove normalization cannot bypass that validation.
+- **Line 360:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+
+### Lines 361–386
+
+```text
+361 | });
+362 |
+363 | // Use the real HTTP route with mocked Gemini output for every discipline and class type.
+364 | test('mocked route repairs steps across disciplines, Fitness types and audiences without saving', async t => {
+365 |   let next;
+366 |   const server = createApp({}, { ...testOptions, provider: async () => next, now: (() => { let clock = 0; return () => clock += 86400001; })() }).listen(0, '127.0.0.1');
+367 |   await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
+368 |   const choices = [...disciplines.filter(discipline => discipline !== 'Fitness').map(discipline => ({ discipline })), ...fitnessClassTypes.map(class_type => ({ discipline: 'Fitness', class_type, class_type_other: class_type === 'Other' ? 'Balance flow' : '', class_format: 'Group class' }))];
+369 |   for (const choice of choices) for (const audience of ['Kids', 'Adults', 'Unspecified']) {
+370 |     const input = { ...request, ...choice, audience };
+371 |     next = await generateDraft(input, { env, fetcher: async (url, options) => {
+372 |       const prompt = JSON.parse(options.body).systemInstruction.parts[0].text;
+373 |       assert.match(prompt, /2–4 nonempty numbered steps in EVERY section/);
+374 |       assert.match(prompt, /1\. Demonstrate slowly\./);
+375 |       assert.match(prompt, /Beginner rule at every age: no hard sparring/);
+376 |       if (audience !== 'Adults') assert.match(prompt, /no head contact/);
+377 |       if (choice.discipline === 'Fitness') assert.match(prompt, /NO-CONTACT/);
+378 |       return Response.json(envelope({ ...draft, sections: draft.sections.map((section, index) => ({ ...section, instructions: index % 2 ? 'Step 1: Demonstrate slowly.\nStep 2: Practice with control.' : '1. Demonstrate slowly. Practice with control.' })) }));
+379 |     } });
+380 |     const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+381 |     assert.equal(response.status, 200);
+382 |     const result = await response.json();
+383 |     assert.equal(validateDraft(result.draft, input), null);
+384 |     assert.equal(result.draft.sections[0].instructions, '1. Demonstrate slowly.\n2. Practice with control.');
+385 |   }
+386 | });
+```
+
+- **Line 361:** Closes the integrated test.
+- **Line 362:** Blank line separates related sections; it performs no operation.
+- **Line 363:** Comment describing the real-route test with a fake external provider.
+- **Line 364:** Registers API-level coverage for all supported and legacy disciplines and class audiences.
+- **Line 365:** Holds the next fake provider response for this isolated server.
+- **Line 366:** Starts the real app with no lesson-storage methods and a fake clock advancing a day per read; this isolates the format matrix from rate limits, whose existing tests still run.
+- **Line 367:** Waits for listening and registers server cleanup after this test.
+- **Line 368:** Builds six legacy discipline cases plus every Fitness class type, with valid Other text and Group class format.
+- **Line 369:** Runs each class case for Kids, Adults and Unspecified audiences.
+- **Line 370:** Combines the generic request with each class and audience choice.
+- **Line 371:** Calls the actual Gemini request builder with an injected fetch function, so no live API call occurs.
+- **Line 372:** Reads the outgoing system prompt from the mock request body.
+- **Line 373:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 374:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 375:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 376:** Checks conservative Kids safety remains present for Kids and unspecified audiences.
+- **Line 377:** Checks Fitness requests still carry the no-contact rule.
+- **Line 378:** Returns a complete fake Gemini response alternating Step-style numbering and a repairable single numbered paragraph.
+- **Line 379:** Closes the injected fetch function, options object and generateDraft call.
+- **Line 380:** Posts the class request to the loopback test server using the existing authenticated test fetch helper.
+- **Line 381:** Requires a successful HTTP 200 generation response.
+- **Line 382:** Parses the response so the unchanged draft and lesson validators can inspect the result.
+- **Line 383:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 384:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 385:** Closes the discipline loop.
+- **Line 386:** Closes the integrated test.
 
 ## prisma/schema.prisma
 

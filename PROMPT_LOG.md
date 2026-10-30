@@ -5045,3 +5045,49 @@ Genuine mistake/correction: the first new validation fixture incorrectly passed 
 Documentation: updated exact numbered source/configuration/migration/test listings and explanations; documented optional metadata, PostgreSQL-only Fitness storage, legacy behavior and deployment checks. Review and commit reference: this work belongs to the single commit titled "feat: add Fitness class types while preserving legacy lessons"; its hash is reported after committing because a commit cannot contain its own hash. Push and live deployment status must be reported from actual observations.
 
 Final local review: all 16 affected listings (1,523 lines) matched source and explanation numbering; JavaScript syntax checks passed. SQLite store implementation was compared with HEAD and is unchanged. Unrelated walkthrough sections were checked unchanged. Reviewed source/SQL/test diffs and documentation; no whitespace errors. Live deployment still requires Render confirmation after push.
+
+## 2026-10-29 — Repair AI coaching-step formatting
+
+Exact user prompt:
+
+~~~text
+COACHLAB — FIX: AI DRAFT FAILS "AT LEAST TWO NUMBERED STEPS"
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is tomorrow: small and safe.
+
+PROBLEM
+Live AI drafts repeatedly fail with:
+"AI draft failed validation. Each section needs at least two
+numbered coaching steps. Please try again."
+Seen on a new Fitness lesson (Cardio kickboxing, Group class)
+after commit 40205d3.
+
+FIX
+- Find why the AI output misses this rule (prompt unclear, step
+  format differs, numbering style like "Step 1"/"1)" not recognized,
+  or text-length limits cutting steps).
+- Make the AI prompt state the exact required format clearly.
+- Accept common numbering styles. If a section has one step plus
+  usable text, repair it safely instead of rejecting the whole draft.
+- Keep all safety rules and other validation unchanged.
+- Test with mocked outputs for every discipline, especially Fitness
+  class types, plus Kids/Adults. No live AI calls.
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass. No database changes. Never print .env values.
+
+REPORT BACK (in one code block)
+- The real cause in plain English.
+- Commit hash, push result, test/build results.
+~~~
+
+Assistant investigation/outcome: clean starting tree at 40205d30cc0aad1f247d1d22c4231b7098928232. The prompt simultaneously requested numbered cues and newline-separated bullet cues without an exact example. The validator recognized only line-start digits followed by period/parenthesis and whitespace; Step-style and inline numbering were rejected. The reported error is reached only after parsing and instruction size checks; provider truncation and oversize output have separate errors. Mocked output reproduced this formatting mismatch. No original failed live response was available, so the exact live output style is not established. No live AI requests were made.
+
+Changes: server/ai-provider.js gives an exact newline-separated 1./2. example for every section (including cooldown and zero-minute alternatives) and removes contradictory bullet wording. client/src/lesson-draft.js shares common-style step counting and a pure repair helper: standardize supplied markers, separate inline numbered steps, or number existing sentence/line fragments when exactly one numbered cue has at least one usable remainder. Fragments require two words each. No coaching content is invented, truncated or fetched again. Lone instructions, empty markers, oversized text and missing safety guidance still fail. server/ai-route.js applies formatting before existing timing reconciliation and full validation. Existing safety rules, approval, timing bounds, response/token/timeout limits and database behavior remain unchanged.
+
+Tests: server/ai.test.js adds format, nonmutation and rejection checks and a real HTTP-route matrix with mocked Gemini responses across six legacy disciplines plus all 12 Fitness types, each for Kids, Adults and Unspecified (54 combinations). The mock server has no storage implementation and cannot save lessons. The clock advances to isolate matrix coverage from limits; existing limiter tests remain unchanged. Targeted AI suite: 15 passed; final full serial npm test: 114 passed, zero failures/skips, 25.6 seconds. Production npm run build passed, including Prisma generation, TypeScript and Vite (36 modules). Exact walkthrough listings/explanations for four affected files (582 lines) and JavaScript syntax checks passed. No new dependencies, schema changes, real secrets read or live provider calls.
+
+Genuine tool mistakes: attempted to read nonexistent server/ai.js, then located the actual route using rg. Two tool-code quoting errors occurred before any command ran; corrected using patch and literal PowerShell here-strings. They did not change application behavior. No fabricated production defect or test success.
+
+Reviewed application/test diffs and numbered explanations; all new or modified lines are covered in CODE_WALKTHROUGH.md. Containing commit subject: "fix: normalize AI coaching steps without inventing instructions". A commit cannot include its own hash; report its resolved hash after commit/push. Previous Fitness commit resolved to 40205d30cc0aad1f247d1d22c4231b7098928232. Deployment and health results are reported from actual post-push checks.

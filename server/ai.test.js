@@ -13,7 +13,7 @@ import { createApp } from './app.js';
 import { migrate } from './migrations.js';
 import { testOptions, authedFetch as fetch } from './test-auth.js';
 import { generateDraft } from './ai-provider.js';
-import { disciplines, sections, details, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
+import { disciplines, sections, details, normalizeDraftSteps, validateRequest, validateDraft, toLesson } from '../client/src/lesson-draft.js';
 
 const request = { discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: 'Kimura fundamentals', techniques: 'Kimura grip', equipment: 'Mats', privacy_confirmed: true };
 const draft = { title: 'Mock Kimura lesson', objectives: 'Practice controlled positioning.', ...Object.fromEntries(details.map(key => [key, 'Mock coaching guidance for testing.'])), sections: sections.map(name => ({ name, minutes: 12, common_mistakes: 'Rushing the movement.', easier: 'Slow down and simplify.', harder: 'Add a coordination cue without contact.', instructions: '1. Demonstrate slowly.\n2. Rehearse under coach supervision.' })) };
@@ -340,4 +340,47 @@ test('chat reuses Gemini with bounded output and fixed coaching/app safety instr
   assert.match(answer, /New Lesson/);
   await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => new Response('x'.repeat(8193)) }), error => error.status === 502);
   await assert.rejects(answerChat('Boxing?', { env, fetcher: async () => Response.json(envelope({ answer: 'x'.repeat(1201) })) }), error => error.status === 502);
+});
+
+import { fitnessClassTypes } from '../client/src/fitness.js';
+// Mock text exercises formatting without spending provider quota or storing lessons.
+test('numbering styles and conservative repair preserve cues and reject incomplete output', () => {
+  for (const instructions of ['1. Demonstrate slowly. 2. Practice with control.', '1. Demonstrate slowly.\n2. Practice with control.', '1) Demonstrate slowly.\n2) Practice with control.', 'Step 1: Demonstrate slowly.\nStep 2: Practice with control.', 'step 1. Demonstrate slowly.\nstep 2. Practice with control.', '1. Demonstrate slowly.\nPractice with control.', '1. Demonstrate slowly. Practice with control.']) {
+    const input = { ...draft, sections: draft.sections.map(section => ({ ...section, instructions })) };
+    const original = structuredClone(input), repaired = normalizeDraftSteps(input);
+    assert.equal(validateDraft(repaired, request), null);
+    assert.deepEqual(input, original);
+    assert.equal(repaired.sections[0].instructions, '1. Demonstrate slowly.\n2. Practice with control.');
+  }
+  for (const instructions of ['1. Demonstrate slowly.', '1. Demonstrate slowly.\n2.', '1. Demonstrate slowly.\nOkay', 'Demonstrate slowly. Practice with control.', '1. ' + 'x'.repeat(1001)]) {
+    assert.ok(validateDraft(normalizeDraftSteps({ ...draft, sections: draft.sections.map(section => ({ ...section, instructions })) }), request));
+  }
+  assert.equal(normalizeDraftSteps(null), null);
+  const incomplete = structuredClone(draft); incomplete.safety = '';
+  assert.ok(validateDraft(normalizeDraftSteps(incomplete), request));
+});
+
+// Use the real HTTP route with mocked Gemini output for every discipline and class type.
+test('mocked route repairs steps across disciplines, Fitness types and audiences without saving', async t => {
+  let next;
+  const server = createApp({}, { ...testOptions, provider: async () => next, now: (() => { let clock = 0; return () => clock += 86400001; })() }).listen(0, '127.0.0.1');
+  await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
+  const choices = [...disciplines.filter(discipline => discipline !== 'Fitness').map(discipline => ({ discipline })), ...fitnessClassTypes.map(class_type => ({ discipline: 'Fitness', class_type, class_type_other: class_type === 'Other' ? 'Balance flow' : '', class_format: 'Group class' }))];
+  for (const choice of choices) for (const audience of ['Kids', 'Adults', 'Unspecified']) {
+    const input = { ...request, ...choice, audience };
+    next = await generateDraft(input, { env, fetcher: async (url, options) => {
+      const prompt = JSON.parse(options.body).systemInstruction.parts[0].text;
+      assert.match(prompt, /2–4 nonempty numbered steps in EVERY section/);
+      assert.match(prompt, /1\. Demonstrate slowly\./);
+      assert.match(prompt, /Beginner rule at every age: no hard sparring/);
+      if (audience !== 'Adults') assert.match(prompt, /no head contact/);
+      if (choice.discipline === 'Fitness') assert.match(prompt, /NO-CONTACT/);
+      return Response.json(envelope({ ...draft, sections: draft.sections.map((section, index) => ({ ...section, instructions: index % 2 ? 'Step 1: Demonstrate slowly.\nStep 2: Practice with control.' : '1. Demonstrate slowly. Practice with control.' })) }));
+    } });
+    const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(validateDraft(result.draft, input), null);
+    assert.equal(result.draft.sections[0].instructions, '1. Demonstrate slowly.\n2. Practice with control.');
+  }
 });

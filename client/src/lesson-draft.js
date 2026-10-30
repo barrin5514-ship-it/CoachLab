@@ -37,6 +37,28 @@ export function validateRequest(value) {
   return null;
 }
 
+// Recognize common step labels while requiring actual text after each marker.
+const stepMarker = /(?:^|\n)\s*(?:[-*]\s+)?(?:step\s+)?\d+[.):][ \t]+/gi;
+export const coachingStepCount = instructions => [...instructions.matchAll(stepMarker)].filter(match => instructions.slice(match.index + match[0].length).split('\n')[0].trim()).length;
+
+// Reformat supplied text only; never invent exercises to make a draft pass.
+export function normalizeDraftSteps(draft) {
+  if (!Array.isArray(draft?.sections)) return draft;
+  return { ...draft, sections: draft.sections.map(section => {
+    const text = section?.instructions;
+    if (typeof text !== 'string' || text.length > 1000) return section;
+    const lines = text.replace(/([.!?])[ \t]+(?=(?:step\s+)?\d+[.):][ \t]+)/gi, '$1\n');
+    const canonical = lines.replace(stepMarker, (marker, offset) => (offset ? '\n' : '') + marker.trim().replace(/^[-*]\s+/, '').replace(/^step\s+/i, '').replace(/[):]$/, '.') + ' ');
+    if (coachingStepCount(canonical) >= 2) return { ...section, instructions: canonical };
+    if (coachingStepCount(canonical) !== 1 || !/^\s*\d+\.\s+/.test(canonical)) return section;
+    const body = canonical.replace(/^\s*\d+\.\s+/, '');
+    const parts = body.split(/\n+|(?<=[.!?])\s+(?=[A-Z])/).map(part => part.replace(/^\s*[-*]\s+/, '').trim()).filter(Boolean);
+    if (parts.length < 2 || parts.some(part => (part.match(/[A-Za-z]+/g) || []).length < 2)) return section;
+    const repaired = parts.map((part, index) => (index + 1) + '. ' + part).join('\n');
+    return repaired.length <= 1000 ? { ...section, instructions: repaired } : section;
+  }) };
+}
+
 // Checks structure, coaching cues and exact timing before an AI draft is accepted.
 export function validateDraft(draft, request) {
   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
@@ -45,7 +67,7 @@ export function validateDraft(draft, request) {
   for (const [index, section] of draft.sections.entries()) {
     if (!object(section) || section.name !== sections[index] || !text(section.instructions, 1000)) return 'Each timed section needs its expected name and instructions (up to 1000 characters).';
     if (sectionGuidance.some(([key]) => !text(section[key], 200))) return 'Each section needs common mistakes and easier/harder options (up to 200 characters each).';
-    if ((section.instructions.match(/(?:^|\n)\s*\d+[.)]\s+/g) || []).length < 2) return 'Each section needs at least two numbered coaching steps.';
+    if (coachingStepCount(section.instructions) < 2) return 'Each section needs at least two numbered coaching steps.';
     if (!Number.isInteger(section.minutes) || section.minutes < (index === 3 ? 0 : 1) || section.minutes > 180) return 'Section times must be whole minutes; only partner exercises may use zero.';
   }
   if (draft.sections.reduce((sum, section) => sum + section.minutes, 0) !== request.duration_minutes) return 'Section times must add up to the requested class duration.';
