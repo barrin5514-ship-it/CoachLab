@@ -1,4 +1,5 @@
 // Starts the selected database and authenticated server, stopping on failure instead of falling back.
+import { prismaClasses } from './class-store.js';
 import { createApp } from './app.js';
 import { openDatabase } from './database.js';
 import { migrate } from './migrations.js';
@@ -18,6 +19,7 @@ try {
   // Choose one database explicitly; a failed connection must never silently switch storage.
   const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
+  let classes;
   let auth;
   const security = production ? productionSecuritySettings() : null;
   const publicUrl = security?.publicUrl || (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
@@ -46,11 +48,12 @@ try {
     startupStage = 'authentication initialization';
     auth = createAuth({ ...authSettings, prisma: client });
     lessons = prismaLessons(client);
+    classes = prismaClasses(client);
   } else {
     throw new Error('Unsupported database selection.');
   }
   startupStage = 'Express and built React initialization';
-  const server = createApp(lessons, { auth, allowedOrigins, production }).listen(port, host, () => {
+  const server = createApp(lessons, { auth, allowedOrigins, production, classes }).listen(port, host, () => {
     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
   });
   server.on('error', async () => {

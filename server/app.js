@@ -1,4 +1,5 @@
 // Connects authenticated Express routes to lesson storage, media checks and AI services.
+import { registerClassRoutes } from './class-route.js';
 import { registerChatRoute } from './chat.js';
 import { registerVideoSuggestions } from './video-suggestions.js';
 import { youtubeQuota as defaultYouTubeQuota } from './youtube-quota.js';
@@ -210,6 +211,7 @@ export function createApp(database, options = {}) {
     }
   });
 
+  registerClassRoutes(app, options.classes);
   registerAiRoute(app, options);
   registerChatRoute(app, options);
   registerVideoSuggestions(app, lessons, options);

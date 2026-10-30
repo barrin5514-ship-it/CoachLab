@@ -13,7 +13,7 @@
     "build:client": "vite build --config client/vite.config.js",
     "start": "node server/start-production.js",
     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-    "test": "node --test --test-concurrency=1 server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js server/production.test.js server/fitness.test.js",
+    "test": "node --test --test-concurrency=1 server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js server/production.test.js server/fitness.test.js server/classes.test.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
     "test:prisma": "npm run prisma:generate && node --test --test-concurrency=1 server/prisma-setup.test.js server/prisma-compatibility.test.js",

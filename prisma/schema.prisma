@@ -26,6 +26,7 @@ model Lesson {
   drills           String   @default("") @db.Text
   coaching_notes   String   @default("") @db.Text
   created_at       DateTime @default(now()) @db.Timestamptz(3)
+  assignments      ClassLesson[]
   media            LessonMedia[]
   owner_id         String?
   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
@@ -68,6 +69,8 @@ model User {
   image         String?
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ladders       ClassLadder[]
+  classes       CoachingClass[]
   sessions      Session[]
   accounts      Account[]
   lessons       Lesson[]
@@ -134,4 +137,53 @@ model RateLimit {
   lastRequest BigInt @map("last_request")
 
   @@map("auth_rate_limits")
+}
+
+// Coach-owned ladder configuration; stable JSON level IDs survive renaming and ordering.
+model ClassLadder {
+  id String @id
+  owner_id String
+  discipline String
+  audience String
+  levels Json
+  revision Int @default(1)
+  owner User @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  classes CoachingClass[]
+  @@unique([owner_id, discipline, audience])
+  @@map("class_ladders")
+}
+
+// Each class stores its own level and schedule, even when it shares a ladder.
+model CoachingClass {
+  id String @id
+  owner_id String
+  ladder_id String
+  name String @db.VarChar(100)
+  discipline String
+  audience String
+  days Json
+  goal String @default("") @db.VarChar(500)
+  current_level String
+  class_type String?
+  class_type_other String? @db.VarChar(40)
+  class_format String?
+  archived Boolean @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  owner User @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  ladder ClassLadder @relation(fields: [ladder_id], references: [id], onDelete: Restrict)
+  assignments ClassLesson[]
+  @@index([owner_id])
+  @@map("coaching_classes")
+}
+
+// A unique link permits a lesson in many classes without copying its content.
+model ClassLesson {
+  class_id String
+  lesson_id Int
+  scheduled_date DateTime? @db.Date
+  class CoachingClass @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  @@id([class_id, lesson_id])
+  @@index([lesson_id])
+  @@map("class_lessons")
 }
