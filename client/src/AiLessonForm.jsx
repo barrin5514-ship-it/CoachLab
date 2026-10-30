@@ -1,3 +1,4 @@
+import SafetyNotes from './SafetyNotes.jsx';
 // Lets a coach generate, edit and explicitly approve an AI draft before saving it.
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
@@ -94,12 +95,12 @@ export default function AiLessonForm({ onSaved, onCancel, defaults = {} }) {
   return (
     <PendingMedia.Provider value={registry}>
     <section className="form-panel" aria-labelledby="ai-heading">
-      <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
-      <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
-      <p className="safety-guidance">{safetyGuidance(request)}</p>
+      <h2 id="ai-heading">{draft ? 'Review your AI lesson draft' : 'Generate a lesson draft'}</h2>
+      <p className="review-notice">Coach review required</p>
       <form onSubmit={submit}>
         <fieldset disabled={busy}>
           <legend className="sr-only">AI lesson details</legend>
+          <SafetyNotes key={draft ? 'draft-review' : 'request-review'} expanded><p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p><p className="safety-guidance">{safetyGuidance(request)}</p>{draft && <label>Safety considerations<textarea required maxLength={1000} value={draft.safety} onChange={event => edit('safety', event.target.value)} /></label>}</SafetyNotes>
           {!draft ? <>
             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
             <div className="form-row">
@@ -130,7 +131,7 @@ export default function AiLessonForm({ onSaved, onCancel, defaults = {} }) {
               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
             </div>
             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
-            {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
+            {details.map((key, index) => key !== 'safety' && <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
           </>}
           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>

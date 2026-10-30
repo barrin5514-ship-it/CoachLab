@@ -1,3 +1,4 @@
+import SafetyNotes from './SafetyNotes.jsx';
 // Creates or updates lessons only when the coach submits the form.
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
@@ -61,6 +62,7 @@ export default function LessonForm({ onSaved, onCancel, defaults = {}, lesson, m
     <PendingMedia.Provider value={registry}>
     <section className="form-panel" aria-labelledby="new-heading">
       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+      <p className="review-notice">Coach review required</p>
       <p>Title and discipline are required. Add the details that help you coach.</p>
       <form onSubmit={submit}>
         <fieldset disabled={saving}>
@@ -73,9 +75,10 @@ export default function LessonForm({ onSaved, onCancel, defaults = {}, lesson, m
             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
           </div>
           <FitnessFields value={values} onChange={patch => setValues(current => ({ ...current, ...patch }))} />
-          {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+          {textFields.filter(([name]) => name !== 'coaching_notes').map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+          <SafetyNotes expanded><label>Coaching notes<textarea name="coaching_notes" rows="3" maxLength={10000} value={values.coaching_notes} onChange={change} /><small>Optional · up to 10,000 characters</small></label></SafetyNotes>
           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
         </fieldset>
         {saving && <p role="status">Saving your lesson…</p>}

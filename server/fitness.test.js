@@ -144,6 +144,13 @@ test('Fitness controls and cards render while legacy edit options and dashboard 
     const fitness = { ...base, id: 2, class_type: 'Other', class_type_other: 'Balance flow', class_format: 'Group class', created_at: '2026-01-01Z' };
     assert.match(await render('LessonCard', { lesson: fitness }), /Balance flow/);
     assert.match(await render('LessonCard', { lesson: legacy }), /Personal Training/);
+    const review = await render('SafetyNotes', { expanded: true, children: 'Original safety content' });
+    assert.match(review, /open=""/); assert.match(review, /Show safety notes/); assert.match(review, /Original safety content/);
+    assert.doesNotMatch(await render('SafetyNotes', { children: 'Saved notes' }), /open=/);
+    assert.match(newForm, /Coach review required/); assert.match(newForm, /Show safety notes/);
+    assert.match(await render('LessonForm', { lesson: { ...legacy, coaching_notes: 'Preserve original safety guidance' } }), /Preserve original safety guidance/);
+    assert.match(await render('AiLessonForm', {}), /AI can make mistakes/);
+    assert.match(await render('AiLessonForm', {}), /Show safety notes/);
     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Fitness', 'Other'), [fitness]);
     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Fitness', 'Yoga'), []);
     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Personal Training'), [legacy]);

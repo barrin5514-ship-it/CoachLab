@@ -1,3 +1,4 @@
+import SafetyNotes from './SafetyNotes.jsx';
 // Displays a saved lesson, its media and explicit edit/delete actions.
 import { fitnessLabel } from './fitness.js';
 import React, { useState } from 'react';
@@ -41,6 +42,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, 
     finally { setBusy(false); }
   }
   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
+    <p className="review-notice">Coach review required</p>
     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
     {lesson.discipline === 'Fitness' && <p className="metadata">{fitnessLabel(lesson) || 'Class type not specified'} · {lesson.class_format || 'Format not specified'}</p>}
@@ -48,7 +50,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, 
     <h4>Lesson timeline</h4>
     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
-    <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+    <SafetyNotes><CoachingText text={lesson.coaching_notes} /></SafetyNotes>
     <LessonMedia lesson={lesson} />
     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
