@@ -79,3 +79,17 @@ test('timeline separates minutes from cues and preserves media block indices and
   assert.equal(timeline[2].minutes, 10);
   assert.equal(timeline[3].title, 'Cooldown');
 });
+
+// Owner dashboard cards must reuse existing Fitness values and lightweight local assets.
+test('discipline cards map Fitness shortcuts without introducing new disciplines', async () => {
+  const { disciplineCards } = await import('../client/src/discipline-pages.js');
+  const { statSync } = await import('node:fs');
+  assert.equal(disciplineCards.length, 7);
+  for (const card of disciplineCards) assert.ok(statSync(new URL('../client/public/images/' + card.image + '.webp', import.meta.url)).size < 200000);
+  assert.equal(disciplineCards.find(card => card.title === 'Personal Training').classType, 'Personal training');
+  assert.equal(disciplineCards.find(card => card.title === 'Classes').discipline, 'Fitness');
+  const { filterLessons } = await import('../client/src/lesson-view.js');
+  const rows = [{ discipline: 'Fitness', class_type: 'Personal training' }, { discipline: 'Fitness', class_type: 'Yoga' }, { discipline: 'Personal Training' }];
+  assert.deepEqual(filterLessons(rows, 'All', 'Fitness', 'Group classes'), [rows[1]]);
+  assert.deepEqual(filterLessons(rows, 'All', 'Personal Training'), [rows[2]]);
+});

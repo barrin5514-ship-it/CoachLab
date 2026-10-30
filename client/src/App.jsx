@@ -1,5 +1,6 @@
 // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
 import { fitnessClassTypes } from './fitness.js';
+import DisciplineCards from './DisciplineCards.jsx';
 import CoachingChat from './CoachingChat.jsx';
 import React, { useEffect, useState } from 'react';
 import LessonForm from './LessonForm.jsx';
@@ -117,19 +118,20 @@ export default function App({ user, onLogOut }) {
   }
 
   return (
-    <main>
+    <main className="coach-shell">
       <header className="hero">
-        <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+        <div><h1>CoachLab</h1><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
       </header>
       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => { setDiscipline(value); setClassType('All'); }}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+      {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
       <section aria-labelledby="lessons-heading">
         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-        {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
+        {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', 'Group classes', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
         {loading && <p role="status">Loading lesson plans…</p>}
         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}

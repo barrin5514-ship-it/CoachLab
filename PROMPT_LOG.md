@@ -5091,3 +5091,39 @@ Tests: server/ai.test.js adds format, nonmutation and rejection checks and a rea
 Genuine tool mistakes: attempted to read nonexistent server/ai.js, then located the actual route using rg. Two tool-code quoting errors occurred before any command ran; corrected using patch and literal PowerShell here-strings. They did not change application behavior. No fabricated production defect or test success.
 
 Reviewed application/test diffs and numbered explanations; all new or modified lines are covered in CODE_WALKTHROUGH.md. Containing commit subject: "fix: normalize AI coaching steps without inventing instructions". A commit cannot include its own hash; report its resolved hash after commit/push. Previous Fitness commit resolved to 40205d30cc0aad1f247d1d22c4231b7098928232. Deployment and health results are reported from actual post-push checks.
+
+## 2026-10-30 — Owner photo redesign, dashboard step
+
+Exact owner prompt:
+
+~~~text
+ADDITIONS FROM OWNER — FOLLOW THESE OVER ANYTHING ABOVE
+- Run this ONLY after the "numbered steps" AI fix is pushed.
+- Images: the owner's images are in this folder:
+  C:\Users\barri\OneDrive\Pictures\Screenshots\coachlab redesign photos
+  Copy them into the project (e.g. client/public/images/), compress
+  to WebP under ~200 KB each, lazy-load them, and map each one to
+  its discipline card/page by its file name. Use ONLY these images.
+  If one is missing, use a dark gradient placeholder.
+- Fitness already covers Personal Training and Classes: both
+  dashboard cards should open Fitness (Personal Training card =
+  class type Personal training; Classes card = group class types).
+  No new discipline. MMA is already supported.
+- Do NOT add controls that don't work (Favorites, Settings, bell,
+  search, drag handles, Add Section, Saved tab). Style only
+  existing features.
+- Safety/coach-review notes: one-line "Coach review required" notice
+  at the top, full notes in a collapsible "Show safety notes"
+  section. Same content, still seen before saving.
+- Keep the five sections, cues, media, Suggest videos, chat box,
+  filters and badges working. Good contrast on phones.
+- Low RAM: tests serially. Small commits (dashboard, discipline
+  pages, lesson planner). Push to origin/main ONLY if tests and
+  build pass. Never print .env values. Don't touch other projects.
+~~~
+
+Preparation/outcome: confirmed the preceding numbered-step fix 952cf8be542947ca797f01999b3eb49ad5d67040 is already on main/origin. Clean starting tree. Read AGENTS and used frontend-design guidance. Asked about the missing original redesign brief; meanwhile inspected the supplied Dashboard Mockup, which provides a concrete dark/photo/green-action/light-editor reference. No nonworking reference controls were added. Only the seven owner discipline photographs are used as site assets; the two composite mockups are design references, not interactive background screenshots.
+
+Created client/src/discipline-pages.js and DisciplineCards.jsx, changed App.jsx, lesson-view.js, styles.css and server/lesson-ui.test.js. Seven client/public/images/*.webp files are derived from the matching owner filenames: boxing (Sweaty Boxer), muay-thai (Cinematic Muay Thai), bjj (Ground grappling), wrestling (Wrestling clinch), mma (Controlled MMA), personal-training (Trainer Coaching), classes (Energetic kickboxing). FFmpeg conversion was serial, 960px wide, WebP quality 76; sizes 24,964–39,288 bytes. Source photos unchanged. Lazy image decode/loading and error fallback reveal a dark gradient. Cards select existing filters; Classes means all specified Fitness types except Personal training. Legacy Personal Training remains available in navigation.
+
+Actual checks: baseline 114/114; dashboard suite 115/115, no failures/skips; production build passed, 38 modules. Source/walkthrough numbering and explanations checked for six files, 460 lines; JS syntax passed. No browser success claimed: cua returned "Local browser use is disabled in Work settings"; did not bypass that restriction. No database changes, credentials read, provider calls or new packages. A read of the nonexistent client/src/index.css produced no content; corrected to the actual styles.css. Commit reference: containing commit "style: add owner-photo discipline dashboard"; resolved hash will be recorded in the next step.

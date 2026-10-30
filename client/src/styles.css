@@ -157,3 +157,28 @@ body:has(.coach-chat) main { padding-bottom: 100px; }
 
 .video-choice { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; }
 .video-choice input { width: auto; margin: 0; }
+
+/* The owner's dark gym photography anchors the dashboard; editing panels stay light. */
+body:has(.coach-shell) { background: #071215; }
+.coach-shell { max-width: 1440px; color: #eef6f4; padding: 32px; }
+.coach-shell .hero { border-color: #34504d; align-items: flex-end; }
+.coach-shell h1 { font-family: 'Arial Narrow', Impact, sans-serif; letter-spacing: -0.02em; }
+.coach-shell > .hero p { max-width: 60ch; }
+.coach-shell > .hero .link { color: #81e5b3; }
+.coach-shell button:not(.secondary):not(.discipline-tile) { background: #136444; color: #fff; }
+.coach-shell button:not(.secondary):not(.discipline-tile):hover:not(:disabled) { background: #0b4d33; }
+.coach-shell .form-panel, .coach-shell .lesson-card, .coach-shell .empty, .coach-shell .chat-panel { color: #172d3a; }
+.coach-shell > section > .section-heading span { color: #bdcfca; }
+.coach-shell > section > label { max-width: 480px; }
+.coach-shell > section > label select { color: #172d3a; }
+.discipline-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 24px 0 40px; }
+.discipline-tile { position: relative; min-height: 210px; padding: 0; overflow: hidden; text-align: left; background: linear-gradient(135deg, #183b37, #071215); border: 1px solid #51635e; border-radius: 10px; color: #fff; }
+.discipline-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.discipline-tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 15%, #020a0be8 90%); }
+.tile-copy { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 6px; padding: 120px 18px 20px; }
+.tile-copy strong { font: 700 1.6rem/1.1 'Arial Narrow', Impact, sans-serif; }
+.tile-copy > span { font-size: 0.86rem; font-weight: 400; line-height: 1.4; }
+.discipline-tile:hover:not(:disabled) { border-color: #81e5b3; background: #183b37; }
+.coach-shell :focus-visible { outline: 3px solid #db9c22; outline-offset: 4px; }
+@media (max-width: 1000px) { .discipline-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .coach-shell { padding: 20px 14px; } .discipline-cards { grid-template-columns: 1fr; gap: 12px; } .discipline-tile { min-height: 190px; } .tile-copy { padding-top: 110px; } }
