@@ -1,4 +1,5 @@
 // Gives SQLite and Prisma the same owner-scoped lesson and attachment operations.
+import { fitnessFields } from '../client/src/fitness.js';
 export class MediaReferenceError extends Error {}
 
 const lessonColumns = "id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at, COALESCE(audience, 'Unspecified') AS audience";
@@ -106,14 +107,14 @@ export function prismaLessons(client) {
     list: async ownerId => (await client.lesson.findMany({ where: { owner_id: ownerId }, orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
     // Creates the lesson and its attachments together so a partial save cannot survive.
     create: (ownerId, lesson, media) => transaction(async tx => {
-      const created = await tx.lesson.create({ data: { ...lesson, owner_id: ownerId } });
+      const created = await tx.lesson.create({ data: { ...lesson, ...fitnessFields(lesson), owner_id: ownerId } });
       if (media) await attach(tx, ownerId, created.id, media);
       return serialize(created);
     }),
-    // Updates the cards and sends their combined text back to the parent form.
+    // Updates the same owned lesson and its optional metadata in one transaction.
     update: (ownerId, id, lesson, media) => transaction(async tx => {
       let updated;
-      try { updated = await tx.lesson.update({ where: { id, owner_id: ownerId }, data: lesson }); }
+      try { updated = await tx.lesson.update({ where: { id, owner_id: ownerId }, data: { ...lesson, ...fitnessFields(lesson) } }); }
       catch (error) { if (error.code === 'P2025') return null; throw error; }
       if (media) await attach(tx, ownerId, id, media);
       return serialize(updated);

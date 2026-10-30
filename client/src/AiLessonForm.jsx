@@ -3,9 +3,12 @@ import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
 import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
-import { disciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
+import { newDisciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 
-const initial = { audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
+import FitnessFields from './FitnessFields.jsx';
+import { emptyFitness } from './fitness.js';
+
+const initial = { ...emptyFitness, audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
 // Separates generation from approval so AI output cannot save itself.
 export default function AiLessonForm({ onSaved, onCancel }) {
   const [request, setRequest] = useState(initial);
@@ -100,16 +103,17 @@ export default function AiLessonForm({ onSaved, onCancel }) {
           {!draft ? <>
             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
             <div className="form-row">
-              <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
+              <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, ...emptyFitness, discipline: event.target.value })}>{newDisciplines.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>Audience<select value={request.audience} onChange={event => setRequest({ ...request, audience: event.target.value })}>{audiences.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
             </div>
+            <FitnessFields value={request} onChange={patch => setRequest(current => ({ ...current, ...patch }))} />
             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
           </> : <>
-            <p>{request.audience} · {request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
+            <p>{request.class_type && `${request.class_type === 'Other' ? request.class_type_other : request.class_type} · ${request.class_format || 'Format not specified'} · `}{request.audience} · {request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">

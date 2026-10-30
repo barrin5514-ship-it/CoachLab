@@ -1,4 +1,5 @@
 // Builds lesson-based video searches, checks candidates and enforces owner access and limits.
+import { fitnessLabel } from '../client/src/fitness.js';
 import { catalogCandidates, youtubeCandidates } from './media-finder.js';
 import { verifyLink } from './media-verify.js';
 import { youtubeId } from '../client/src/media.js';
@@ -8,7 +9,7 @@ const techniques = ['jab', 'cross', 'hook', 'uppercut', 'footwork', 'slip', 'par
 const filler = new Set('a an the and or to of for with from using use used on in at by is are be this that lesson class training goal objective techniques technique activity activities section sections cues coaching notes minutes minute drills drill practice slowly carefully please learn teach demonstrate common mistakes easier harder option avoid no not opponent students student coach'.split(' '));
 // Extracts useful phrases from lesson text while keeping audience context and Kids exclusions.
 export function lessonVideoQuery(lesson) {
-  const fields = [lesson.title, lesson.goal, lesson.techniques, lesson.drills, lesson.coaching_notes];
+  const fields = [lesson.title, lesson.goal, lesson.techniques, lesson.drills, lesson.coaching_notes, lesson.discipline === 'Fitness' ? fitnessLabel(lesson) : ''];
   const ranked = new Map();
   for (const [index, field] of fields.entries()) {
     const text = String(field || '').slice(0, 16000).toLowerCase().replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.\w+|\b\d[\d ()+-]{7,}\d\b/g, ' ').replace(/\b(?:named|name is)\s+[a-z]+(?:\s+[a-z]+)?/g, ' ').replace(/[-–—]/g, ' ');
@@ -41,7 +42,9 @@ export async function suggestLessonVideos(lesson, { env = process.env, verify = 
   const key = (env.YOUTUBE_API_KEY || '').trim();
   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
   // Lead with technique words; audience and goal context should not bury the main search subject.
-  const searchTerms = query ? `${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
+  const classTerms = lesson.class_type === 'Other' ? lessonVideoQuery({ title: fitnessLabel(lesson), audience: lesson.audience })?.technique || '' : fitnessLabel(lesson);
+  const fitnessContext = lesson.discipline === 'Fitness' ? `${classTerms} ${lesson.skill_level || 'Beginner'} ${lesson.class_format || ''} ${/kickboxing|boxing fitness/i.test(lesson.class_type || '') ? 'non contact' : ''}`.trim() : '';
+  const searchTerms = query ? `${fitnessContext ? fitnessContext + ' ' : ''}${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
   diagnostic('start', { key_present: !!key, search_terms: searchTerms, match_terms: matchTerms });
   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
   const videos = [];

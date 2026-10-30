@@ -5,8 +5,10 @@ import { activityMinutes } from './activities.js';
 import { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 import { discardUpload, mediaPayload, newKey } from './media.js';
 
-const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-const initial = { audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+import { newDisciplines } from './lesson-draft.js';
+import { emptyFitness, validateFitness } from './fitness.js';
+import FitnessFields from './FitnessFields.jsx';
+const initial = { ...emptyFitness, audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
 const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 
 // Uses the same form for new lessons and explicit updates to an existing ID.
@@ -21,7 +23,7 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
   // Updates the local form values; persistence waits for form submission.
   function change(event) {
     const { name, value } = event.target;
-    setValues(current => ({ ...current, [name]: value }));
+    setValues(current => ({ ...current, ...(name === 'discipline' ? emptyFitness : {}), [name]: value }));
   }
 
   // Validates and submits the lesson with its staged media; failures leave the editor available.
@@ -30,6 +32,8 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
     if (submitting.current) return;
     setError('');
     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+    const fitnessError = validateFitness(values);
+    if (fitnessError) { setError(fitnessError); return; }
     if (registry.count()) {
       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
@@ -63,11 +67,12 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
           <legend className="sr-only">Lesson details</legend>
           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
           <div className="form-row">
-            <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
+            <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{(lesson?.discipline === 'Personal Training' ? [...newDisciplines, 'Personal Training'] : newDisciplines).map(name => <option key={name}>{name}</option>)}</select></label>
             <label>Audience<select name="audience" value={values.audience} onChange={change}>{['Unspecified', 'Kids', 'Adults'].map(audience => <option key={audience}>{audience}</option>)}</select><small>Class group only. Never enter children’s personal information.</small></label>
             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
           </div>
+          <FitnessFields value={values} onChange={patch => setValues(current => ({ ...current, ...patch }))} />
           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}

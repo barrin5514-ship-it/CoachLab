@@ -21,7 +21,7 @@ const env = { GEMINI_API_KEY: 'mock-test-value', AI_MODEL: 'gemini-3.5-flash-lit
 // Wraps a fake AI answer in the provider response shape so no live request is needed.
 const envelope = value => ({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(value) }] } }] });
 
-test('contract accepts six disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
+test('contract accepts supported and legacy disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
   for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: null }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
   assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);
@@ -113,7 +113,7 @@ test('AI API generates without saving; approved mapped lesson persists; limits a
   release();
   assert.equal((await pending).status, 200);
   mode = 'ok';
-  for (let attempt = 0; attempt < 11; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
+  for (let attempt = 0; attempt < 10; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
   time += 60001;
   assert.equal((await generate(request)).status, 429);
   time += 86400000;

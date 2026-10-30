@@ -1,4 +1,5 @@
 // Displays a saved lesson, its media and explicit edit/delete actions.
+import { fitnessLabel } from './fitness.js';
 import React, { useState } from 'react';
 import VideoSuggestions from './VideoSuggestions.jsx';
 import LessonMedia from './LessonMedia.jsx';
@@ -42,6 +43,7 @@ export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, 
   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+    {lesson.discipline === 'Fitness' && <p className="metadata">{fitnessLabel(lesson) || 'Class type not specified'} · {lesson.class_format || 'Format not specified'}</p>}
     <h4>Training goal</h4><CoachingText text={lesson.goal} />
     <h4>Lesson timeline</h4>
     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}

@@ -1,8 +1,9 @@
 // Rejects unsupported or oversized lesson fields before either database receives them.
-const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+import { disciplines } from '../client/src/lesson-draft.js';
+import { fitnessKeys, validateFitness, fitnessFields } from '../client/src/fitness.js';
 const levels = ['Beginner', 'Intermediate', 'Advanced'];
 const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
-const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience'];
+const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience', ...fitnessKeys];
 
 // Checks known fields, types and bounds before any lesson reaches storage.
 export function validateLesson(body) {
@@ -31,5 +32,8 @@ export function validateLesson(body) {
   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
   }
+  const fitnessError = validateFitness(body);
+  if (fitnessError) return { error: fitnessError };
+  if (body.discipline === 'Fitness') Object.assign(lesson, fitnessFields(body));
   return { lesson };
 }

@@ -1,8 +1,8 @@
 // Builds dashboard filters and readable timelines from existing lesson fields.
-export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Personal Training'];
+export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Fitness', 'Personal Training'];
 // Combines discipline and audience filters without changing the saved list.
-export function filterLessons(lessons, audience, discipline) {
-  return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline));
+export function filterLessons(lessons, audience, discipline, classType = 'All') {
+  return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline) && (discipline !== 'Fitness' || classType === 'All' || (lesson.class_type || 'Unspecified') === classType));
 }
 // Separates heading, minutes and cues while preserving each activity's media index.
 export function timelineEntries(blocks) {

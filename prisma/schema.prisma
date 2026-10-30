@@ -15,6 +15,10 @@ model Lesson {
   id               Int      @id @default(autoincrement())
   title            String   @db.Text
   discipline       String   @db.Text
+  // Optional Fitness metadata; legacy records need no rewriting.
+  class_type       String?  @db.Text
+  class_type_other String?  @db.VarChar(40)
+  class_format     String?  @db.Text
   audience         String?  @default("Unspecified") @db.Text
   skill_level      String   @default("Beginner") @db.Text
   duration_minutes Int?

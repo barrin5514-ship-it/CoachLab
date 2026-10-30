@@ -92,317 +92,323 @@ Mounts the login gate and application into the page.
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\App.jsx`
 
-Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
-2 | import CoachingChat from './CoachingChat.jsx';
-3 | import React, { useEffect, useState } from 'react';
-4 | import LessonForm from './LessonForm.jsx';
-5 | import LessonCard from './LessonCard.jsx';
-6 | import AiLessonForm from './AiLessonForm.jsx';
-7 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
-8 | import { fetchMedia, withApprovedVideos } from './media.js';
-9 |
-10 | // Keeps lessons and media together while one editor is open.
-11 | export default function App({ user, onLogOut }) {
-12 |   const [lessons, setLessons] = useState([]);
-13 |   const [audience, setAudience] = useState('All');
-14 |   const [discipline, setDiscipline] = useState('All');
-15 |   const visibleLessons = filterLessons(lessons, audience, discipline);
-16 |   const [loading, setLoading] = useState(true);
-17 |   const [error, setError] = useState('');
-18 |   const [notice, setNotice] = useState(null);
-19 |   const [opening, setOpening] = useState(false);
-20 |   const [formOpen, setFormOpen] = useState(false);
-21 |   const [reload, setReload] = useState(0);
-22 |   const [editing, setEditing] = useState(null);
-23 |   const [editingMedia, setEditingMedia] = useState([]);
-24 |   const [media, setMedia] = useState([]);
-25 |   const [mediaError, setMediaError] = useState('');
-26 |   const [mediaReload, setMediaReload] = useState(0);
-27 |
-28 |   useEffect(() => {
-29 |     const controller = new AbortController();
-30 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
+2 | import { fitnessClassTypes } from './fitness.js';
+3 | import CoachingChat from './CoachingChat.jsx';
+4 | import React, { useEffect, useState } from 'react';
+5 | import LessonForm from './LessonForm.jsx';
+6 | import LessonCard from './LessonCard.jsx';
+7 | import AiLessonForm from './AiLessonForm.jsx';
+8 | import { disciplineNavigation, filterLessons } from './lesson-view.js';
+9 | import { fetchMedia, withApprovedVideos } from './media.js';
+10 |
+11 | // Keeps lessons and media together while one editor is open.
+12 | export default function App({ user, onLogOut }) {
+13 |   const [lessons, setLessons] = useState([]);
+14 |   const [audience, setAudience] = useState('All');
+15 |   const [discipline, setDiscipline] = useState('All');
+16 |   const [classType, setClassType] = useState('All');
+17 |   const visibleLessons = filterLessons(lessons, audience, discipline, classType);
+18 |   const [loading, setLoading] = useState(true);
+19 |   const [error, setError] = useState('');
+20 |   const [notice, setNotice] = useState(null);
+21 |   const [opening, setOpening] = useState(false);
+22 |   const [formOpen, setFormOpen] = useState(false);
+23 |   const [reload, setReload] = useState(0);
+24 |   const [editing, setEditing] = useState(null);
+25 |   const [editingMedia, setEditingMedia] = useState([]);
+26 |   const [media, setMedia] = useState([]);
+27 |   const [mediaError, setMediaError] = useState('');
+28 |   const [mediaReload, setMediaReload] = useState(0);
+29 |
+30 |   useEffect(() => {
 ```
 
 - **Line 1:** Human-readable comment: Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments. This explanation does not execute.
 - **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 3:** Imports React for JSX plus effect and state hooks from the installed React package.
-- **Line 4:** Imports the neighboring form component as LessonForm.
-- **Line 5:** Imports the neighboring card component as LessonCard.
-- **Line 6:** Imports the new browser component for requesting, reviewing and approving an AI draft.
-- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Imports React for JSX plus effect and state hooks from the installed React package.
+- **Line 5:** Imports the neighboring form component as LessonForm.
+- **Line 6:** Imports the neighboring card component as LessonCard.
+- **Line 7:** Imports the new browser component for requesting, reviewing and approving an AI draft.
 - **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 9:** Blank line separates related sections; it performs no operation.
-- **Line 10:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
-- **Line 11:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
-- **Line 12:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
-- **Line 13:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
-- **Line 14:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
-- **Line 15:** Combines the audience and discipline filters using the shared, tested helper without modifying the source lessons.
-- **Line 16:** Stores whether a list request is running; true initially displays loading feedback.
-- **Line 17:** Stores a safe user-facing error message, initially empty.
-- **Line 18:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
-- **Line 19:** True while a lesson is being opened for editing and its attachments are being fetched.
-- **Line 20:** Stores whether the form is mounted; false initially hides it.
-- **Line 21:** Stores a numeric retry counter; changing it reruns the effect.
-- **Line 22:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
-- **Line 23:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
-- **Line 24:** State for every saved attachment returned by the server.
-- **Line 25:** State for an error message when attachments could not be loaded.
-- **Line 26:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
-- **Line 27:** Blank line separates related sections; it performs no operation.
-- **Line 28:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 29:** Creates a browser cancellation controller for this request.
-- **Line 30:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Blank line separates related sections; it performs no operation.
+- **Line 11:** Human-readable comment: Keeps lessons and media together while one editor is open. This explanation does not execute.
+- **Line 12:** The dashboard now receives the signed-in coach (user) and a function that logs out (onLogOut), both supplied by the Gate component.
+- **Line 13:** Array destructuring receives the current lessons array and its setter; useState starts with an empty array.
+- **Line 14:** Creates audience filter state; All initially shows every lesson. setAudience changes the selected filter and rerenders React.
+- **Line 15:** Creates discipline-filter state, initially All, with a setter that rerenders the dashboard.
+- **Line 16:** Keeps the Fitness dashboard class-type filter in React state, initially showing every class type.
+- **Line 17:** Combines audience, discipline and class-type filters to derive visible cards without changing stored lessons.
+- **Line 18:** Stores whether a list request is running; true initially displays loading feedback.
+- **Line 19:** Stores a safe user-facing error message, initially empty.
+- **Line 20:** The save message is now an object with a tone (success or warning) and text instead of a plain string; null means no message.
+- **Line 21:** True while a lesson is being opened for editing and its attachments are being fetched.
+- **Line 22:** Stores whether the form is mounted; false initially hides it.
+- **Line 23:** Stores a numeric retry counter; changing it reruns the effect.
+- **Line 24:** Stores the saved lesson currently being edited; null means a new lesson rather than an update.
+- **Line 25:** Keeps the editor's attachment draft separate from the saved dashboard media, so cancelling an approved video does not alter the displayed saved lesson.
+- **Line 26:** State for every saved attachment returned by the server.
+- **Line 27:** State for an error message when attachments could not be loaded.
+- **Line 28:** A counter that, when increased, makes the attachments load again (after saving or pressing Retry).
+- **Line 29:** Blank line separates related sections; it performs no operation.
+- **Line 30:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
 
 ### Lines 31–60
 
 ```text
-31 |     async function loadLessons() {
-32 |       setLoading(true);
-33 |       setError('');
-34 |       try {
-35 |         const response = await fetch('/api/lessons', { signal: controller.signal });
-36 |         if (!response.ok) throw new Error('Unable to load lessons.');
-37 |         const data = await response.json();
-38 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
-39 |         setLessons(data);
-40 |       } catch (failure) {
-41 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
-42 |       } finally {
-43 |         if (!controller.signal.aborted) setLoading(false);
-44 |       }
-45 |     }
-46 |     loadLessons();
-47 |     return () => controller.abort();
-48 |   }, [reload]);
-49 |
-50 |   useEffect(() => {
-51 |     const controller = new AbortController();
-52 |     // Loads attachments separately so a media error does not hide the lesson text.
-53 |     async function loadMedia() {
-54 |       try {
-55 |         const data = await fetchMedia(controller.signal);
-56 |         setMedia(data);
-57 |         setMediaError('');
-58 |       } catch (failure) {
-59 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-60 |       }
+31 |     const controller = new AbortController();
+32 |     // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
+33 |     async function loadLessons() {
+34 |       setLoading(true);
+35 |       setError('');
+36 |       try {
+37 |         const response = await fetch('/api/lessons', { signal: controller.signal });
+38 |         if (!response.ok) throw new Error('Unable to load lessons.');
+39 |         const data = await response.json();
+40 |         if (!Array.isArray(data)) throw new Error('Unexpected lesson response.');
+41 |         setLessons(data);
+42 |       } catch (failure) {
+43 |         if (failure.name !== 'AbortError') setError('Could not load saved lessons. Check the backend connection and try again.');
+44 |       } finally {
+45 |         if (!controller.signal.aborted) setLoading(false);
+46 |       }
+47 |     }
+48 |     loadLessons();
+49 |     return () => controller.abort();
+50 |   }, [reload]);
+51 |
+52 |   useEffect(() => {
+53 |     const controller = new AbortController();
+54 |     // Loads attachments separately so a media error does not hide the lesson text.
+55 |     async function loadMedia() {
+56 |       try {
+57 |         const data = await fetchMedia(controller.signal);
+58 |         setMedia(data);
+59 |         setMediaError('');
+60 |       } catch (failure) {
 ```
 
-- **Line 31:** Declares an async helper, allowing await inside its braces.
-- **Line 32:** Marks the list request as running.
-- **Line 33:** Clears the previous list error before retrying.
-- **Line 34:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 35:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
-- **Line 36:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
-- **Line 37:** Parses the server's JSON response.
-- **Line 38:** Rejects a response that is not an array instead of attempting to map invalid data.
-- **Line 39:** Stores the backend records, triggering a render.
-- **Line 40:** Catches request, response or cancellation failures.
-- **Line 41:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
-- **Line 42:** Starts finally, which runs whether the request succeeded or failed.
-- **Line 43:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
-- **Line 44:** Closes the App function.
-- **Line 45:** Closes the App function.
-- **Line 46:** Starts the helper; its own try/catch handles its failures.
-- **Line 47:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 48:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
-- **Line 49:** Blank line separates related sections; it performs no operation.
-- **Line 50:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
-- **Line 51:** Creates a browser cancellation controller for this request.
-- **Line 52:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
-- **Line 53:** Declares the loader for attachments inside the effect.
-- **Line 54:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 55:** The attachment loader now uses fetchMedia, with the abort signal.
-- **Line 56:** Stores the attachments.
-- **Line 57:** Clears any earlier media error.
-- **Line 58:** Catches request, response or cancellation failures.
-- **Line 59:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
-- **Line 60:** Closes the App function.
+- **Line 31:** Creates a browser cancellation controller for this request.
+- **Line 32:** Human-readable comment: Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen. This explanation does not execute.
+- **Line 33:** Declares an async helper, allowing await inside its braces.
+- **Line 34:** Marks the list request as running.
+- **Line 35:** Clears the previous list error before retrying.
+- **Line 36:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 37:** Awaits GET through Vite's relative API proxy; the signal allows cancellation on cleanup.
+- **Line 38:** Throws an Error for a non-successful HTTP status; ! negates response.ok.
+- **Line 39:** Parses the server's JSON response.
+- **Line 40:** Rejects a response that is not an array instead of attempting to map invalid data.
+- **Line 41:** Stores the backend records, triggering a render.
+- **Line 42:** Catches request, response or cancellation failures.
+- **Line 43:** Ignores intentional cancellation; otherwise stores useful connection guidance. !== means strict inequality.
+- **Line 44:** Starts finally, which runs whether the request succeeded or failed.
+- **Line 45:** Ends loading only for a still-active request, so an obsolete aborted request cannot reset a newer request's indicator.
+- **Line 46:** Closes the App function.
+- **Line 47:** Closes the App function.
+- **Line 48:** Starts the helper; its own try/catch handles its failures.
+- **Line 49:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 50:** Closes useEffect; the dependency array makes it run on first mount and when reload changes.
+- **Line 51:** Blank line separates related sections; it performs no operation.
+- **Line 52:** Starts an effect callback; React runs it after rendering and whenever its dependency changes.
+- **Line 53:** Creates a browser cancellation controller for this request.
+- **Line 54:** Human-readable comment: Loads attachments separately so a media error does not hide the lesson text. This explanation does not execute.
+- **Line 55:** Declares the loader for attachments inside the effect.
+- **Line 56:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 57:** The attachment loader now uses fetchMedia, with the abort signal.
+- **Line 58:** Stores the attachments.
+- **Line 59:** Clears any earlier media error.
+- **Line 60:** Catches request, response or cancellation failures.
 
 ### Lines 61–90
 
 ```text
-61 |     }
-62 |     loadMedia();
-63 |     return () => controller.abort();
-64 |   }, [reload, mediaReload]);
-65 |
-66 |   // Selects attachments for one lesson instead of showing another lesson's media.
-67 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
-68 |
-69 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
-70 |   async function handleEdit(lesson, approvedVideos = []) {
-71 |     setNotice(null);
-72 |     setOpening(true);
-73 |     try {
-74 |       const fresh = await fetchMedia();
-75 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
-76 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
-77 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
-78 |       setMedia(fresh);
-79 |       setMediaError('');
-80 |       setEditing(lesson);
-81 |       setFormOpen('manual');
-82 |       window.scrollTo({ top: 0, behavior: 'smooth' });
-83 |       return true;
-84 |     } catch {
-85 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
-86 |       return false;
-87 |     } finally { setOpening(false); }
-88 |   }
-89 |
-90 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
+61 |         if (failure.name !== 'AbortError') setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+62 |       }
+63 |     }
+64 |     loadMedia();
+65 |     return () => controller.abort();
+66 |   }, [reload, mediaReload]);
+67 |
+68 |   // Selects attachments for one lesson instead of showing another lesson's media.
+69 |   const mediaFor = id => media.filter(item => item.lesson_id === id);
+70 |
+71 |   // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
+72 |   async function handleEdit(lesson, approvedVideos = []) {
+73 |     setNotice(null);
+74 |     setOpening(true);
+75 |     try {
+76 |       const fresh = await fetchMedia();
+77 |       const attached = fresh.filter(item => item.lesson_id === lesson.id);
+78 |       // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
+79 |       setEditingMedia(withApprovedVideos(attached, approvedVideos));
+80 |       setMedia(fresh);
+81 |       setMediaError('');
+82 |       setEditing(lesson);
+83 |       setFormOpen('manual');
+84 |       window.scrollTo({ top: 0, behavior: 'smooth' });
+85 |       return true;
+86 |     } catch {
+87 |       setNotice({ tone: 'warning', text: 'Could not load this lesson’s pictures and videos, so editing was not opened (saving without them could remove them). Check the connection and try again.' });
+88 |       return false;
+89 |     } finally { setOpening(false); }
+90 |   }
 ```
 
-- **Line 61:** Closes the App function.
-- **Line 62:** Starts the load.
-- **Line 63:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
-- **Line 64:** Ends the effect; it re-runs when either reload counter changes.
-- **Line 65:** Blank line separates related sections; it performs no operation.
-- **Line 66:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
-- **Line 67:** Helper that returns only the attachments of one lesson.
-- **Line 68:** Blank line separates related sections; it performs no operation.
-- **Line 69:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
-- **Line 70:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
-- **Line 71:** Clears any old message.
-- **Line 72:** Shows that opening is in progress (the buttons are disabled meanwhile).
-- **Line 73:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 74:** Asks the server what attachments are really stored now.
-- **Line 75:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
-- **Line 76:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
-- **Line 77:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
-- **Line 78:** Replaces the page’s attachment list with that fresh copy.
-- **Line 79:** Clears any earlier media error.
-- **Line 80:** Remembers which lesson is being edited.
-- **Line 81:** Opens the manual form.
-- **Line 82:** Scrolls to the top where the form appears, as before.
-- **Line 83:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
-- **Line 84:** Catches failure without including private exception details in public hosting logs.
-- **Line 85:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
-- **Line 86:** Reports failure to the selection panel so it can keep results and checked videos for retry.
-- **Line 87:** Always ends the opening state.
-- **Line 88:** Closes the App function.
-- **Line 89:** Blank line separates related sections; it performs no operation.
-- **Line 90:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
+- **Line 61:** Shows a friendly message unless the request was merely cancelled. Lessons stay visible because they load separately.
+- **Line 62:** Closes the App function.
+- **Line 63:** Closes the App function.
+- **Line 64:** Starts the load.
+- **Line 65:** Returns an effect cleanup callback that cancels the request when this effect is replaced or App unmounts.
+- **Line 66:** Ends the effect; it re-runs when either reload counter changes.
+- **Line 67:** Blank line separates related sections; it performs no operation.
+- **Line 68:** Human-readable comment: Selects attachments for one lesson instead of showing another lesson's media. This explanation does not execute.
+- **Line 69:** Helper that returns only the attachments of one lesson.
+- **Line 70:** Blank line separates related sections; it performs no operation.
+- **Line 71:** Human-readable comment: Fetches current attachments before opening the editor, preventing stale media from being silently removed. This explanation does not execute.
+- **Line 72:** Opens the existing lesson editor with an optional list of coach-approved videos; an empty list preserves normal editing.
+- **Line 73:** Clears any old message.
+- **Line 74:** Shows that opening is in progress (the buttons are disabled meanwhile).
+- **Line 75:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 76:** Asks the server what attachments are really stored now.
+- **Line 77:** Filters freshly loaded attachments to this lesson ID, preserving its current saved media.
+- **Line 78:** Human-readable comment: Merge against freshly fetched attachments so batch approval does not remove newly saved media. This explanation does not execute.
+- **Line 79:** Merges all selected videos with freshly fetched attachments in memory, skipping duplicate YouTube IDs before the editor opens.
+- **Line 80:** Replaces the page’s attachment list with that fresh copy.
+- **Line 81:** Clears any earlier media error.
+- **Line 82:** Remembers which lesson is being edited.
+- **Line 83:** Opens the manual form.
+- **Line 84:** Scrolls to the top where the form appears, as before.
+- **Line 85:** Tells assert.throws or assert.rejects that the caught error passed the custom validation checks.
+- **Line 86:** Catches failure without including private exception details in public hosting logs.
+- **Line 87:** …the form is NOT opened and a warning explains why. Opening it with an empty list and saving would have removed the lesson’s attachments.
+- **Line 88:** Reports failure to the selection panel so it can keep results and checked videos for retry.
+- **Line 89:** Always ends the opening state.
+- **Line 90:** Closes the App function.
 
 ### Lines 91–120
 
 ```text
-91 |   async function handleSaved(lesson, sent) {
-92 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
-93 |     setAudience('All');
-94 |     setDiscipline('All');
-95 |     setFormOpen(false);
-96 |     setEditing(null);
-97 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
-98 |     let text = `Saved “${lesson.title}”.`;
-99 |     let tone = 'success';
-100 |     try {
-101 |       const fresh = await fetchMedia();
-102 |       setMedia(fresh);
-103 |       setMediaError('');
-104 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
-105 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
-106 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
-107 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
-108 |     } catch {
-109 |       tone = 'warning';
-110 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
-111 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
-112 |     }
-113 |     setNotice({ tone, text });
-114 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-115 |   }
-116 |
-117 |   return (
-118 |     <main>
-119 |       <header className="hero">
-120 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+91 |
+92 |   // Refreshes the dashboard and checks attachments after the server confirms a save.
+93 |   async function handleSaved(lesson, sent) {
+94 |     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
+95 |     setAudience('All');
+96 |     setDiscipline('All'); setClassType('All');
+97 |     setFormOpen(false);
+98 |     setEditing(null);
+99 |     setNotice({ tone: 'success', text: `Saved “${lesson.title}”.${sent ? ' Checking its pictures and videos…' : ''}` });
+100 |     let text = `Saved “${lesson.title}”.`;
+101 |     let tone = 'success';
+102 |     try {
+103 |       const fresh = await fetchMedia();
+104 |       setMedia(fresh);
+105 |       setMediaError('');
+106 |       const stored = fresh.filter(item => item.lesson_id === lesson.id).length;
+107 |       if (sent === undefined) text += stored ? ` It has ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'}.` : '';
+108 |       else if (stored === sent) text += sent ? ` ${stored} picture${stored === 1 ? '' : 's'} or video${stored === 1 ? '' : 's'} saved with it.` : ' It has no pictures or videos.';
+109 |       else { tone = 'warning'; text += ` Only ${stored} of ${sent} pictures and videos were stored. Open the lesson to check them.`; }
+110 |     } catch {
+111 |       tone = 'warning';
+112 |       text += ' The lesson was saved, but its pictures and videos could not be re-checked just now. Press Retry loading media.';
+113 |       setMediaError('Could not load saved pictures and videos. Your lessons are still shown.');
+114 |     }
+115 |     setNotice({ tone, text });
+116 |     requestAnimationFrame(() => document.getElementById(`lesson-${lesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+117 |   }
+118 |
+119 |   return (
+120 |     <main>
 ```
 
-- **Line 91:** handleSaved is now asynchronous and receives how many attachments the form sent.
-- **Line 92:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
-- **Line 93:** Resets the audience filter after saving so the newly saved lesson is visible.
-- **Line 94:** Resets discipline filtering after a save so the saved lesson can be seen.
-- **Line 95:** Closes the form; unmounting it discards its input state after success.
-- **Line 96:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
-- **Line 97:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
-- **Line 98:** Starts the final message text.
-- **Line 99:** Starts as a success tone.
-- **Line 100:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 101:** Asks the server what attachments are really stored now.
-- **Line 102:** Replaces the page’s attachment list with that fresh copy.
-- **Line 103:** Clears any earlier media error.
-- **Line 104:** Counts the stored attachments of this lesson.
-- **Line 105:** If the form did not send a media list, only mentions the count when there is one.
-- **Line 106:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
-- **Line 107:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
-- **Line 108:** Catches failure without including private exception details in public hosting logs.
-- **Line 109:** …uses a warning tone,
-- **Line 110:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
-- **Line 111:** …and shows the retry banner.
-- **Line 112:** Closes the App function.
-- **Line 113:** Shows the final message.
-- **Line 114:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
-- **Line 115:** Closes the App function.
-- **Line 116:** Blank line separates related sections; it performs no operation.
-- **Line 117:** Begins returning a parenthesized JSX tree.
-- **Line 118:** Opens the semantic main content element.
-- **Line 119:** Opens the page header and applies the hero CSS class using JSX's className attribute.
-- **Line 120:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 91:** Blank line separates related sections; it performs no operation.
+- **Line 92:** Human-readable comment: Refreshes the dashboard and checks attachments after the server confirms a save. This explanation does not execute.
+- **Line 93:** handleSaved is now asynchronous and receives how many attachments the form sent.
+- **Line 94:** Updates the saved lesson in place in the list (or adds it at the top if it is new) instead of always moving it to the top, so the list order does not jump.
+- **Line 95:** Resets the audience filter after saving so the newly saved lesson is visible.
+- **Line 96:** Resets both filters after a save so the newly saved lesson remains visible.
+- **Line 97:** Closes the form; unmounting it discards its input state after success.
+- **Line 98:** Clears the selected saved lesson after a confirmed save so later new lessons start blank.
+- **Line 99:** Shows the save message immediately, mentioning that attachments are being checked when there were any.
+- **Line 100:** Starts the final message text.
+- **Line 101:** Starts as a success tone.
+- **Line 102:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 103:** Asks the server what attachments are really stored now.
+- **Line 104:** Replaces the page’s attachment list with that fresh copy.
+- **Line 105:** Clears any earlier media error.
+- **Line 106:** Counts the stored attachments of this lesson.
+- **Line 107:** If the form did not send a media list, only mentions the count when there is one.
+- **Line 108:** If the stored count equals the number sent, confirms how many pictures and videos were saved (or that there are none). Singular and plural are chosen with the conditional expressions.
+- **Line 109:** If the numbers differ, switches to a warning that says how many were stored, so a lost attachment can never go unnoticed.
+- **Line 110:** Catches failure without including private exception details in public hosting logs.
+- **Line 111:** …uses a warning tone,
+- **Line 112:** …says the lesson was saved but the attachments could not be confirmed and points to Retry loading media,
+- **Line 113:** …and shows the retry banner.
+- **Line 114:** Closes the App function.
+- **Line 115:** Shows the final message.
+- **Line 116:** On the next screen refresh, smoothly scrolls the saved lesson’s card into the middle of the view, so the coach lands on the lesson that was just saved instead of a random place or the top of the page.
+- **Line 117:** Closes the App function.
+- **Line 118:** Blank line separates related sections; it performs no operation.
+- **Line 119:** Begins returning a parenthesized JSX tree.
+- **Line 120:** Opens the semantic main content element.
 
-### Lines 121–140
+### Lines 121–143
 
 ```text
-121 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
-122 |       </header>
-123 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => setDiscipline(value)}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
-124 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
-125 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-126 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
-127 |       <section aria-labelledby="lessons-heading">
-128 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
-129 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
-130 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
-131 |         {loading && <p role="status">Loading lesson plans…</p>}
-132 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
-133 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
-134 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-135 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
-136 |       </section>
-137 |       <CoachingChat key={user.id} />
-138 |     </main>
-139 |   );
-140 | }
+121 |       <header className="hero">
+122 |         <div><p className="eyebrow">PLAN WITH PURPOSE</p><h1>CoachLab</h1><p>Your next great session starts with a clear plan.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
+123 |         <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>
+124 |       </header>
+125 |       <nav className="discipline-nav" aria-label="Filter lessons by discipline">{['All', ...disciplineNavigation].map(value => <button type="button" key={value} aria-pressed={discipline === value} onClick={() => { setDiscipline(value); setClassType('All'); }}>{value === 'Brazilian Jiu-Jitsu' ? 'BJJ' : value === 'All' ? 'All disciplines' : value}</button>)}</nav>
+126 |       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
+127 |       {formOpen === 'manual' && <LessonForm key={editing?.id || 'new'} lesson={editing} media={editing ? editingMedia : []} onSaved={handleSaved} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
+128 |       {formOpen === 'ai' && <AiLessonForm onSaved={handleSaved} onCancel={() => setFormOpen(false)} />}
+129 |       <section aria-labelledby="lessons-heading">
+130 |         <div className="section-heading"><h2 id="lessons-heading">Your lesson plans</h2><span>{visibleLessons.length} shown · {lessons.length} saved</span></div>
+131 |         <label>Filter by audience<select value={audience} onChange={event => setAudience(event.target.value)}>{['All', 'Kids', 'Adults', 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>
+132 |         {discipline === 'Fitness' && <label>Filter by class type<select value={classType} onChange={event => setClassType(event.target.value)}>{['All', ...fitnessClassTypes, 'Unspecified'].map(value => <option key={value}>{value}</option>)}</select></label>}
+133 |         {!loading && !error && lessons.length > 0 && visibleLessons.length === 0 && <p role="status">No lessons match these filters. Choose All to see more.</p>}
+134 |         {loading && <p role="status">Loading lesson plans…</p>}
+135 |         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
+136 |         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
+137 |         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
+138 |         <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+139 |       </section>
+140 |       <CoachingChat key={user.id} />
+141 |     </main>
+142 |   );
+143 | }
 ```
 
-- **Line 121:** The New Lesson and AI draft buttons now clear the message with null.
-- **Line 122:** Closes the header.
-- **Line 123:** Renders six discipline buttons plus All in a labeled navigation region. aria-pressed exposes the selected filter, clicks update state, and the full Brazilian Jiu-Jitsu value is displayed as BJJ.
-- **Line 124:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
-- **Line 125:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
-- **Line 126:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
-- **Line 127:** Opens a section whose accessible name refers to the heading ID below.
-- **Line 128:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
-- **Line 129:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
-- **Line 130:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
-- **Line 131:** Conditionally shows loading text as a live status paragraph.
-- **Line 132:** Shows a separate error banner with a Retry button if only the attachments failed to load.
-- **Line 133:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
-- **Line 134:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
-- **Line 135:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
-- **Line 136:** Closes the lesson section.
-- **Line 137:** Renders chat only within the signed-in app; changing the user ID resets its React state.
-- **Line 138:** Closes main.
-- **Line 139:** Closes the parenthesized return statement with a semicolon.
-- **Line 140:** Closes the App function.
+- **Line 121:** Opens the page header and applies the hero CSS class using JSX's className attribute.
+- **Line 122:** The header now shows who is signed in (name and email, escaped by React) and a Log out button styled as a link.
+- **Line 123:** The New Lesson and AI draft buttons now clear the message with null.
+- **Line 124:** Closes the header.
+- **Line 125:** Renders the discipline buttons, including Fitness and legacy Personal Training; switching tabs resets the class filter.
+- **Line 126:** Shows the message as a bar that sticks to the top of the screen while scrolling (see the CSS), coloured by its tone, with a Dismiss button. role="status" lets screen readers announce it.
+- **Line 127:** Renders the manual lesson editor when selected, with the saved lesson ID as its React key and the isolated attachment draft. Save uses the existing save handler; Cancel closes the form and clears the selected lesson without storing the draft.
+- **Line 128:** Renders AiLessonForm only for AI mode, reusing the saved-row callback and closing the form on explicit cancellation.
+- **Line 129:** Opens a section whose accessible name refers to the heading ID below.
+- **Line 130:** Displays both the filtered count and the full saved count so hidden lessons are not mistaken for missing data.
+- **Line 131:** Renders a labeled dropdown. value binds it to React state; onChange reads the selection. map creates a keyed option for each allowed filter.
+- **Line 132:** Shows a class-type filter only inside Fitness, with All and Unspecified options for optional metadata.
+- **Line 133:** Shows a helpful no-match message only after successful loading, suggesting All to broaden the two filters.
+- **Line 134:** Conditionally shows loading text as a live status paragraph.
+- **Line 135:** Shows a separate error banner with a Retry button if only the attachments failed to load.
+- **Line 136:** Shows load errors in an alert with a retry button; loading or any open form disables retry. Clicking increments reload to rerun the existing lesson-fetch effect.
+- **Line 137:** Shows an empty-state heading and instructions only after a successful load with zero rows. ! means not, && requires all conditions, and === checks exact equality.
+- **Line 138:** Maps visible lessons to cards. Each receives its own media and disabled state; Add passes the chosen video to handleEdit, while existing edit/delete callbacks retain their behavior and cleanup.
+- **Line 139:** Closes the lesson section.
+- **Line 140:** Renders chat only within the signed-in app; changing the user ID resets its React state.
+- **Line 141:** Closes main.
+- **Line 142:** Closes the parenthesized return statement with a semicolon.
+- **Line 143:** Closes the App function.
 
 ## client/src/styles.css
 
@@ -1022,7 +1028,7 @@ Starts the selected database and authenticated server, stopping on failure inste
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\package.json`
 
-Production preparation: this file connects deployment configuration to the existing application. Development remains supported.
+Fitness integration: runs the Fitness regression tests serially alongside the existing suite.
 
 ### Lines 1–30
 
@@ -1042,7 +1048,7 @@ Production preparation: this file connects deployment configuration to the exist
 13 |     "build:client": "vite build --config client/vite.config.js",
 14 |     "start": "node server/start-production.js",
 15 |     "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
-16 |     "test": "node --test --test-concurrency=1 server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js server/production.test.js",
+16 |     "test": "node --test --test-concurrency=1 server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js server/production.test.js server/fitness.test.js",
 17 |     "prisma:validate": "prisma validate",
 18 |     "prisma:generate": "prisma generate && tsc -p tsconfig.prisma.json",
 19 |     "test:prisma": "npm run prisma:generate && node --test --test-concurrency=1 server/prisma-setup.test.js server/prisma-compatibility.test.js",
@@ -1074,7 +1080,7 @@ Production preparation: this file connects deployment configuration to the exist
 - **Line 13:** Keeps the original React-only production build available as a separate script.
 - **Line 14:** Starts the guarded production entry point, which applies pending migrations before Express starts.
 - **Line 15:** Defines npm run db:migrate: Node reads optional .env and executes server/migrate.js without watch mode.
-- **Line 16:** Runs existing regression tests and production checks one test file at a time to limit RAM usage; these use disposable fixtures, not real Neon.
+- **Line 16:** Runs the existing regression suites and the new Fitness suite with one test file at a time to limit RAM usage.
 - **Line 17:** Adds a local schema-validation command using the pinned CLI; no datasource URL is configured.
 - **Line 18:** Generates the Prisma client, then compiles it only if generation succeeds; && links these two required local steps.
 - **Line 19:** Regenerates Prisma first and then runs its offline setup/compatibility tests serially.
@@ -1658,89 +1664,97 @@ Checks database behavior with controlled fixtures; read each test name for its e
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\validate-lesson.js`
 
-Rejects unsupported or oversized lesson fields before either database receives them.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Rejects unsupported or oversized lesson fields before either database receives them.
-2 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-3 | const levels = ['Beginner', 'Intermediate', 'Advanced'];
-4 | const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
-5 | const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience'];
-6 |
-7 | // Checks known fields, types and bounds before any lesson reaches storage.
-8 | export function validateLesson(body) {
-9 |   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-10 |     return { error: 'Send a JSON object containing lesson fields.' };
-11 |   }
-12 |   if (Object.keys(body).some(field => !fields.includes(field))) {
-13 |     return { error: 'The request contains unsupported lesson fields.' };
-14 |   }
-15 |   const lesson = {};
-16 |   for (const [field, limit] of Object.entries(textLimits)) {
-17 |     const value = body[field] === undefined && field !== 'title' ? '' : body[field];
-18 |     if (typeof value !== 'string' || value.length > limit) {
-19 |       return { error: `${field} must be text with at most ${limit} characters.` };
-20 |     }
-21 |     lesson[field] = value.trim();
-22 |   }
-23 |   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
-24 |   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
-25 |   lesson.discipline = body.discipline;
-26 |   lesson.audience = body.audience === undefined ? 'Unspecified' : body.audience;
-27 |   if (!['Kids', 'Adults', 'Unspecified'].includes(lesson.audience)) return { error: 'Choose Kids, Adults, or Unspecified.' };
-28 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
-29 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
-30 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
+2 | import { disciplines } from '../client/src/lesson-draft.js';
+3 | import { fitnessKeys, validateFitness, fitnessFields } from '../client/src/fitness.js';
+4 | const levels = ['Beginner', 'Intermediate', 'Advanced'];
+5 | const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
+6 | const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience', ...fitnessKeys];
+7 |
+8 | // Checks known fields, types and bounds before any lesson reaches storage.
+9 | export function validateLesson(body) {
+10 |   if (!body || typeof body !== 'object' || Array.isArray(body)) {
+11 |     return { error: 'Send a JSON object containing lesson fields.' };
+12 |   }
+13 |   if (Object.keys(body).some(field => !fields.includes(field))) {
+14 |     return { error: 'The request contains unsupported lesson fields.' };
+15 |   }
+16 |   const lesson = {};
+17 |   for (const [field, limit] of Object.entries(textLimits)) {
+18 |     const value = body[field] === undefined && field !== 'title' ? '' : body[field];
+19 |     if (typeof value !== 'string' || value.length > limit) {
+20 |       return { error: `${field} must be text with at most ${limit} characters.` };
+21 |     }
+22 |     lesson[field] = value.trim();
+23 |   }
+24 |   if (!lesson.title) return { error: 'Title is required and cannot be blank.' };
+25 |   if (!disciplines.includes(body.discipline)) return { error: 'Choose a supported discipline.' };
+26 |   lesson.discipline = body.discipline;
+27 |   lesson.audience = body.audience === undefined ? 'Unspecified' : body.audience;
+28 |   if (!['Kids', 'Adults', 'Unspecified'].includes(lesson.audience)) return { error: 'Choose Kids, Adults, or Unspecified.' };
+29 |   lesson.skill_level = body.skill_level === undefined ? 'Beginner' : body.skill_level;
+30 |   if (!levels.includes(lesson.skill_level)) return { error: 'Choose Beginner, Intermediate, or Advanced.' };
 ```
 
 - **Line 1:** Human-readable comment: Rejects unsupported or oversized lesson fields before either database receives them. This explanation does not execute.
-- **Line 2:** Defines the array of six supported discipline strings; const prevents reassignment of the array variable.
-- **Line 3:** Defines the three accepted skill-level strings.
-- **Line 4:** Maps each free-text field to its maximum JavaScript string length, measured in UTF-16 code units.
-- **Line 5:** Adds audience to the API field allowlist; unknown input properties remain rejected.
-- **Line 6:** Blank line separates related sections for readability; it performs no operation.
-- **Line 7:** Human-readable comment: Checks known fields, types and bounds before any lesson reaches storage. This explanation does not execute.
-- **Line 8:** Exports the validation function taking the parsed request body; braces open its body.
-- **Line 9:** Rejects absent/null bodies, non-object values, or arrays. ! means not; || combines alternatives; Array.isArray distinguishes arrays from ordinary objects.
-- **Line 10:** Returns an object with an error property, ending validation before any field access or write.
-- **Line 11:** Closes the validateLesson function.
-- **Line 12:** Uses some and includes to detect any submitted key not present in the allowed-field array. The arrow callback tests each key.
-- **Line 13:** Returns a safe unsupported-fields error rather than accepting client-supplied IDs or timestamps.
-- **Line 14:** Closes the validateLesson function.
-- **Line 15:** Creates an empty normalized lesson object; const prevents replacing the binding but allows assigning its properties.
-- **Line 16:** Iterates field/limit pairs from Object.entries. Array destructuring assigns each pair to field and limit.
-- **Line 17:** Defaults omitted optional text to empty text, but leaves missing title undefined so it is rejected. === checks strict equality; && means both conditions; the ternary selects one of two values.
-- **Line 18:** Rejects non-string input or text longer than its configured limit, before trimming. This prevents whitespace padding from bypassing limits.
-- **Line 19:** Returns a template-string error that inserts the field name and length limit using dollar-sign/braces interpolation; both come from trusted configuration.
-- **Line 20:** Closes the validateLesson function.
-- **Line 21:** Stores the trimmed string under the current field name using bracket property access. trim removes surrounding JavaScript whitespace.
-- **Line 22:** Closes the validateLesson function.
-- **Line 23:** Rejects a title that is empty after trimming; returning stops the function.
-- **Line 24:** Requires discipline to exactly match one supported string. Missing, null, or unsupported values fail.
-- **Line 25:** Copies the validated discipline into the normalized object.
-- **Line 26:** Uses Unspecified only when the caller omits audience. Otherwise retains the supplied value for explicit validation.
-- **Line 27:** Checks exact membership in the three supported audience strings; invalid values return a safe validation error.
-- **Line 28:** Defaults only an omitted skill_level to Beginner. Explicit null is preserved temporarily so the next check rejects it.
-- **Line 29:** Rejects skill levels not present in the allowed array, returning a useful message.
-- **Line 30:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Defines the three accepted skill-level strings.
+- **Line 5:** Maps each free-text field to its maximum JavaScript string length, measured in UTF-16 code units.
+- **Line 6:** Extends the lesson API allowlist with the three shared Fitness field names.
+- **Line 7:** Blank line separates related sections for readability; it performs no operation.
+- **Line 8:** Human-readable comment: Checks known fields, types and bounds before any lesson reaches storage. This explanation does not execute.
+- **Line 9:** Exports the validation function taking the parsed request body; braces open its body.
+- **Line 10:** Rejects absent/null bodies, non-object values, or arrays. ! means not; || combines alternatives; Array.isArray distinguishes arrays from ordinary objects.
+- **Line 11:** Returns an object with an error property, ending validation before any field access or write.
+- **Line 12:** Closes the validateLesson function.
+- **Line 13:** Uses some and includes to detect any submitted key not present in the allowed-field array. The arrow callback tests each key.
+- **Line 14:** Returns a safe unsupported-fields error rather than accepting client-supplied IDs or timestamps.
+- **Line 15:** Closes the validateLesson function.
+- **Line 16:** Creates an empty normalized lesson object; const prevents replacing the binding but allows assigning its properties.
+- **Line 17:** Iterates field/limit pairs from Object.entries. Array destructuring assigns each pair to field and limit.
+- **Line 18:** Defaults omitted optional text to empty text, but leaves missing title undefined so it is rejected. === checks strict equality; && means both conditions; the ternary selects one of two values.
+- **Line 19:** Rejects non-string input or text longer than its configured limit, before trimming. This prevents whitespace padding from bypassing limits.
+- **Line 20:** Returns a template-string error that inserts the field name and length limit using dollar-sign/braces interpolation; both come from trusted configuration.
+- **Line 21:** Closes the validateLesson function.
+- **Line 22:** Stores the trimmed string under the current field name using bracket property access. trim removes surrounding JavaScript whitespace.
+- **Line 23:** Closes the validateLesson function.
+- **Line 24:** Rejects a title that is empty after trimming; returning stops the function.
+- **Line 25:** Requires discipline to exactly match one supported string. Missing, null, or unsupported values fail.
+- **Line 26:** Copies the validated discipline into the normalized object.
+- **Line 27:** Uses Unspecified only when the caller omits audience. Otherwise retains the supplied value for explicit validation.
+- **Line 28:** Checks exact membership in the three supported audience strings; invalid values return a safe validation error.
+- **Line 29:** Defaults only an omitted skill_level to Beginner. Explicit null is preserved temporarily so the next check rejects it.
+- **Line 30:** Rejects skill levels not present in the allowed array, returning a useful message.
 
-### Lines 31–35
+### Lines 31–39
 
 ```text
-31 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
-32 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
-33 |   }
-34 |   return { lesson };
-35 | }
+31 |   lesson.duration_minutes = body.duration_minutes === undefined ? null : body.duration_minutes;
+32 |   if (lesson.duration_minutes !== null && (!Number.isInteger(lesson.duration_minutes) || lesson.duration_minutes < 1 || lesson.duration_minutes > 1440)) {
+33 |     return { error: 'Duration must be a whole number from 1 to 1440 minutes, or null.' };
+34 |   }
+35 |   const fitnessError = validateFitness(body);
+36 |   if (fitnessError) return { error: fitnessError };
+37 |   if (body.discipline === 'Fitness') Object.assign(lesson, fitnessFields(body));
+38 |   return { lesson };
+39 | }
 ```
 
-- **Line 31:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
-- **Line 32:** Returns a safe duration error message when the condition fails.
-- **Line 33:** Closes the validateLesson function.
-- **Line 34:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
-- **Line 35:** Closes the validateLesson function.
+- **Line 31:** Defaults an omitted duration to null, representing an unspecified duration in SQLite; explicit values are retained for validation.
+- **Line 32:** Allows null; otherwise requires an integer from 1 to 1440 inclusive. !== means strict not-equal, Number.isInteger rejects numeric strings and fractions, and parentheses group the invalid alternatives.
+- **Line 33:** Returns a safe duration error message when the condition fails.
+- **Line 34:** Closes the validateLesson function.
+- **Line 35:** Runs the shared Fitness rules so browser, AI and server requests agree about supported choices.
+- **Line 36:** Returns a structured validation error before a database write.
+- **Line 37:** Copies normalized class metadata into validated Fitness lessons only, preserving older non-Fitness payload behavior.
+- **Line 38:** Returns the normalized lesson using object-property shorthand, equivalent to a lesson key containing the lesson variable.
+- **Line 39:** Closes the validateLesson function.
 
 ## server/app.js
 
@@ -2640,7 +2654,7 @@ Checks api behavior with controlled fixtures; read each test name for its expect
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonForm.jsx`
 
-Creates or updates lessons only when the coach submits the form.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
@@ -2652,29 +2666,29 @@ Creates or updates lessons only when the coach submits the form.
 5 | import { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 6 | import { discardUpload, mediaPayload, newKey } from './media.js';
 7 |
-8 | const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-9 | const initial = { audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
-10 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
-11 |
-12 | // Uses the same form for new lessons and explicit updates to an existing ID.
-13 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
-14 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
-15 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
-16 |   const [saving, setSaving] = useState(false);
-17 |   const [error, setError] = useState('');
-18 |   const submitting = useRef(false);
-19 |   const [registry] = useState(pendingRegistry);
-20 |
-21 |   // Updates the local form values; persistence waits for form submission.
-22 |   function change(event) {
-23 |     const { name, value } = event.target;
-24 |     setValues(current => ({ ...current, [name]: value }));
-25 |   }
-26 |
-27 |   // Validates and submits the lesson with its staged media; failures leave the editor available.
-28 |   async function submit(event) {
-29 |     event.preventDefault();
-30 |     if (submitting.current) return;
+8 | import { newDisciplines } from './lesson-draft.js';
+9 | import { emptyFitness, validateFitness } from './fitness.js';
+10 | import FitnessFields from './FitnessFields.jsx';
+11 | const initial = { ...emptyFitness, audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
+12 | const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
+13 |
+14 | // Uses the same form for new lessons and explicit updates to an existing ID.
+15 | export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
+16 |   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
+17 |   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
+18 |   const [saving, setSaving] = useState(false);
+19 |   const [error, setError] = useState('');
+20 |   const submitting = useRef(false);
+21 |   const [registry] = useState(pendingRegistry);
+22 |
+23 |   // Updates the local form values; persistence waits for form submission.
+24 |   function change(event) {
+25 |     const { name, value } = event.target;
+26 |     setValues(current => ({ ...current, ...(name === 'discipline' ? emptyFitness : {}), [name]: value }));
+27 |   }
+28 |
+29 |   // Validates and submits the lesson with its staged media; failures leave the editor available.
+30 |   async function submit(event) {
 ```
 
 - **Line 1:** Human-readable comment: Creates or updates lessons only when the coach submits the form. This explanation does not execute.
@@ -2684,411 +2698,443 @@ Creates or updates lessons only when the coach submits the form.
 - **Line 5:** Imports the context object and registry helper that track unfinished media panels.
 - **Line 6:** Imports discardUpload (cleans up unsaved uploads), mediaPayload (turns attachments into the shape the API accepts) and newKey (makes temporary keys) from the new media helper file.
 - **Line 7:** Blank line separates related sections for readability; it performs no operation.
-- **Line 8:** Defines the six exact discipline strings accepted by the backend; brackets form an array.
-- **Line 9:** Defines initial form values, including Unspecified for a new lesson audience; the other existing fields keep their defaults.
-- **Line 10:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
-- **Line 11:** Blank line separates related sections for readability; it performs no operation.
-- **Line 12:** Human-readable comment: Uses the same form for new lessons and explicit updates to an existing ID. This explanation does not execute.
-- **Line 13:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
-- **Line 14:** Initializes controlled form state from the existing lesson or defaults. Object.fromEntries rebuilds only known fields; ?? supplies the default for missing or null values.
-- **Line 15:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
-- **Line 16:** Initializes the saving flag to false.
-- **Line 17:** Stores a safe user-facing error message, initially empty.
-- **Line 18:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
-- **Line 19:** Creates the registry once for this form (the function form of useState runs only on the first render).
-- **Line 20:** Blank line separates related sections for readability; it performs no operation.
-- **Line 21:** Human-readable comment: Updates the local form values; persistence waits for form submission. This explanation does not execute.
-- **Line 22:** Begins the shared input-change handler with the browser/React event parameter.
-- **Line 23:** Destructures the changed control's name and string value from event.target.
-- **Line 24:** Updates state from its latest value. Object spread copies other fields; computed property syntax [name] replaces just this control's field. Parentheses make the arrow return an object literal.
-- **Line 25:** Closes the component function.
-- **Line 26:** Blank line separates related sections for readability; it performs no operation.
-- **Line 27:** Human-readable comment: Validates and submits the lesson with its staged media; failures leave the editor available. This explanation does not execute.
-- **Line 28:** Defines the asynchronous form submission handler receiving the browser event.
-- **Line 29:** Prevents the form's default page navigation.
-- **Line 30:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 11:** Initializes blank optional Fitness fields alongside the existing form defaults; no class details are required for legacy lessons.
+- **Line 12:** Defines goal and notes text inputs and their limits; drills now use the separate activity editor.
+- **Line 13:** Blank line separates related sections for readability; it performs no operation.
+- **Line 14:** Human-readable comment: Uses the same form for new lessons and explicit updates to an existing ID. This explanation does not execute.
+- **Line 15:** The form now also receives the lesson’s saved attachments through the media prop; renaming it savedMedia inside avoids a clash with the state variable below, and = [] means “none” when a new lesson has no attachments.
+- **Line 16:** Initializes controlled form state from the existing lesson or defaults. Object.fromEntries rebuilds only known fields; ?? supplies the default for missing or null values.
+- **Line 17:** Keeps the attachments in component state. The lazy initializer runs once and gives every saved attachment a temporary clientKey so React can track new and saved items the same way.
+- **Line 18:** Initializes the saving flag to false.
+- **Line 19:** Stores a safe user-facing error message, initially empty.
+- **Line 20:** Creates a ref with current=false; unlike state, setting current is immediate and does not cause rendering.
+- **Line 21:** Creates the registry once for this form (the function form of useState runs only on the first render).
+- **Line 22:** Blank line separates related sections for readability; it performs no operation.
+- **Line 23:** Human-readable comment: Updates the local form values; persistence waits for form submission. This explanation does not execute.
+- **Line 24:** Begins the shared input-change handler with the browser/React event parameter.
+- **Line 25:** Destructures the changed control's name and string value from event.target.
+- **Line 26:** Copies the form state and clears Fitness-only fields when the discipline changes, preventing stale hidden values from saving.
+- **Line 27:** Closes the component function.
+- **Line 28:** Blank line separates related sections for readability; it performs no operation.
+- **Line 29:** Human-readable comment: Validates and submits the lesson with its staged media; failures leave the editor available. This explanation does not execute.
+- **Line 30:** Defines the asynchronous form submission handler receiving the browser event.
 
 ### Lines 31–60
 
 ```text
-31 |     setError('');
-32 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
-33 |     if (registry.count()) {
-34 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
-35 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
-36 |       return;
-37 |     }
-38 |     submitting.current = true;
-39 |     setSaving(true);
-40 |     try {
-41 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
-42 |       if (lesson || media.length) body.media = mediaPayload(media);
-43 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-44 |       const data = await response.json();
-45 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
-46 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
-47 |       onSaved(data, body.media?.length);
-48 |     } catch (failure) {
-49 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
-50 |     } finally {
-51 |       submitting.current = false;
-52 |       setSaving(false);
-53 |     }
-54 |   }
-55 |
-56 |   return (
-57 |     <PendingMedia.Provider value={registry}>
-58 |     <section className="form-panel" aria-labelledby="new-heading">
-59 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
-60 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+31 |     event.preventDefault();
+32 |     if (submitting.current) return;
+33 |     setError('');
+34 |     if (!values.title.trim()) { setError('Enter a lesson title that is not blank.'); return; }
+35 |     const fitnessError = validateFitness(values);
+36 |     if (fitnessError) { setError(fitnessError); return; }
+37 |     if (registry.count()) {
+38 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+39 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+40 |       return;
+41 |     }
+42 |     submitting.current = true;
+43 |     setSaving(true);
+44 |     try {
+45 |       const body = { ...values, duration_minutes: values.duration_minutes === '' ? null : Number(values.duration_minutes) };
+46 |       if (lesson || media.length) body.media = mediaPayload(media);
+47 |       const response = await fetch(lesson ? `/api/lessons/${lesson.id}` : '/api/lessons', { method: lesson ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+48 |       const data = await response.json();
+49 |       if (response.status !== (lesson ? 200 : 201)) throw new Error(data.error || 'The server could not save this lesson.');
+50 |       if (!Number.isInteger(data.id)) throw new Error('The server did not confirm the saved lesson.');
+51 |       onSaved(data, body.media?.length);
+52 |     } catch (failure) {
+53 |       setError(failure instanceof TypeError || failure instanceof SyntaxError ? 'Could not confirm the save. Check the connection. If it was interrupted, reload and check your lessons before retrying; your input is still here.' : failure.message);
+54 |     } finally {
+55 |       submitting.current = false;
+56 |       setSaving(false);
+57 |     }
+58 |   }
+59 |
+60 |   return (
 ```
 
-- **Line 31:** Clears any earlier error for this save attempt.
-- **Line 32:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
-- **Line 33:** Before saving, checks whether any media panel still holds unfinished work.
-- **Line 34:** If so, shows a plain message explaining what to do: press Add (or Done) to keep it, or Cancel to discard it.
-- **Line 35:** Scrolls to the first unfinished panel so the coach can see it.
-- **Line 36:** Stops the save. Nothing is sent to the server, so a lesson is never saved while an attachment is half-added.
-- **Line 37:** Closes the component function.
-- **Line 38:** Locks submission synchronously.
-- **Line 39:** Sets saving state so controls disable and progress feedback renders.
-- **Line 40:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 41:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
-- **Line 42:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
-- **Line 43:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
-- **Line 44:** Parses the server's JSON response.
-- **Line 45:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
-- **Line 46:** Requires an integer returned ID before treating the lesson as confirmed.
-- **Line 47:** Tells the parent how many attachments were sent (undefined when none were sent), so it can confirm that the same number arrived in the database.
-- **Line 48:** Catches request, response or cancellation failures.
-- **Line 49:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
-- **Line 50:** Begins finally, which always executes after the attempt.
-- **Line 51:** Releases the immediate lock.
-- **Line 52:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
-- **Line 53:** Closes the component function.
-- **Line 54:** Closes the component function.
-- **Line 55:** Blank line separates related sections for readability; it performs no operation.
-- **Line 56:** Begins returning the JSX form tree.
-- **Line 57:** Wraps the form so every media component inside can report to the registry.
-- **Line 58:** Opens a styled section and connects its accessible name to new-heading.
-- **Line 59:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
-- **Line 60:** Explains required fields in a paragraph.
+- **Line 31:** Prevents the form's default page navigation.
+- **Line 32:** Returns immediately when another submission is in flight; this lock also protects the gap before disabled controls render.
+- **Line 33:** Clears any earlier error for this save attempt.
+- **Line 34:** Trims the title to test for whitespace-only input, displays a useful error and returns before sending if blank; native required alone would accept spaces.
+- **Line 35:** Runs the shared Fitness rules so browser, AI and server requests agree about supported choices.
+- **Line 36:** Shows the validation error and leaves the form open instead of sending invalid data.
+- **Line 37:** Before saving, checks whether any media panel still holds unfinished work.
+- **Line 38:** If so, shows a plain message explaining what to do: press Add (or Done) to keep it, or Cancel to discard it.
+- **Line 39:** Scrolls to the first unfinished panel so the coach can see it.
+- **Line 40:** Stops the save. Nothing is sent to the server, so a lesson is never saved while an attachment is half-added.
+- **Line 41:** Closes the component function.
+- **Line 42:** Locks submission synchronously.
+- **Line 43:** Sets saving state so controls disable and progress feedback renders.
+- **Line 44:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 45:** Copies the form object but converts duration: empty string becomes null, otherwise Number produces the number required by the API. The ternary chooses between these cases.
+- **Line 46:** Adds the media list to the request body for edits (so removals are saved) and for new lessons that have attachments. A brand-new lesson without media sends no media key at all, keeping the old request shape.
+- **Line 47:** Chooses PUT with the saved ID for editing, or POST for creation. JSON.stringify serializes the editable values and the JSON header tells Express how to parse them.
+- **Line 48:** Parses the server's JSON response.
+- **Line 49:** Requires HTTP 200 for an update or 201 for creation; unexpected responses show the server's safe error or a fallback message.
+- **Line 50:** Requires an integer returned ID before treating the lesson as confirmed.
+- **Line 51:** Tells the parent how many attachments were sent (undefined when none were sent), so it can confirm that the same number arrived in the database.
+- **Line 52:** Catches request, response or cancellation failures.
+- **Line 53:** For network TypeError or parsing SyntaxError, explains uncertainty and advises checking saved lessons before retrying; otherwise shows the error message, including safe backend validation errors. No setter clears values, so input is retained.
+- **Line 54:** Begins finally, which always executes after the attempt.
+- **Line 55:** Releases the immediate lock.
+- **Line 56:** Ends saving state, re-enabling the form after errors; after success the form has been unmounted.
+- **Line 57:** Closes the component function.
+- **Line 58:** Closes the component function.
+- **Line 59:** Blank line separates related sections for readability; it performs no operation.
+- **Line 60:** Begins returning the JSX form tree.
 
-### Lines 61–82
+### Lines 61–87
 
 ```text
-61 |       <form onSubmit={submit}>
-62 |         <fieldset disabled={saving}>
-63 |           <legend className="sr-only">Lesson details</legend>
-64 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
-65 |           <div className="form-row">
-66 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{disciplines.map(name => <option key={name}>{name}</option>)}</select></label>
-67 |             <label>Audience<select name="audience" value={values.audience} onChange={change}>{['Unspecified', 'Kids', 'Adults'].map(audience => <option key={audience}>{audience}</option>)}</select><small>Class group only. Never enter children’s personal information.</small></label>
-68 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
-69 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
-70 |           </div>
-71 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
-72 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
-73 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
-74 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
-75 |         </fieldset>
-76 |         {saving && <p role="status">Saving your lesson…</p>}
-77 |         {error && <p className="error" role="alert">{error}</p>}
-78 |       </form>
-79 |     </section>
-80 |     </PendingMedia.Provider>
-81 |   );
-82 | }
+61 |     <PendingMedia.Provider value={registry}>
+62 |     <section className="form-panel" aria-labelledby="new-heading">
+63 |       <h2 id="new-heading">{lesson ? 'Edit saved lesson' : 'New lesson plan'}</h2>
+64 |       <p>Title and discipline are required. Add the details that help you coach.</p>
+65 |       <form onSubmit={submit}>
+66 |         <fieldset disabled={saving}>
+67 |           <legend className="sr-only">Lesson details</legend>
+68 |           <label>Lesson title<input autoFocus name="title" required maxLength={200} value={values.title} onChange={change} /></label>
+69 |           <div className="form-row">
+70 |             <label>Discipline<select name="discipline" required value={values.discipline} onChange={change}><option value="">Choose a discipline</option>{(lesson?.discipline === 'Personal Training' ? [...newDisciplines, 'Personal Training'] : newDisciplines).map(name => <option key={name}>{name}</option>)}</select></label>
+71 |             <label>Audience<select name="audience" value={values.audience} onChange={change}>{['Unspecified', 'Kids', 'Adults'].map(audience => <option key={audience}>{audience}</option>)}</select><small>Class group only. Never enter children’s personal information.</small></label>
+72 |             <label>Skill level<select name="skill_level" value={values.skill_level} onChange={change}>{['Beginner', 'Intermediate', 'Advanced'].map(level => <option key={level}>{level}</option>)}</select></label>
+73 |             <label>Duration (minutes)<input name="duration_minutes" type="number" min="1" max="1440" step="1" value={values.duration_minutes} onChange={change} /><small>Optional · 1–1440 minutes</small></label>
+74 |           </div>
+75 |           <FitnessFields value={values} onChange={patch => setValues(current => ({ ...current, ...patch }))} />
+76 |           {textFields.map(([name, label, limit]) => <label key={name}>{label}<textarea name={name} rows="3" maxLength={limit} value={values[name]} onChange={change} /><small>Optional · up to {limit.toLocaleString()} characters</small></label>)}
+77 |           <ActivityEditor value={values.drills} onChange={drills => setValues(current => ({ ...current, drills }))} media={media} onMediaChange={setMedia} />
+78 |           {activityMinutes(values.drills) > 0 && <p role="status" className="metadata">Activity minutes added up: {activityMinutes(values.drills)}{values.duration_minutes !== '' && ` of ${values.duration_minutes} class minutes`}{values.duration_minutes !== '' && activityMinutes(values.drills) !== Number(values.duration_minutes) && ' — they do not match yet. You can still save.'}</p>}
+79 |           <div className="actions"><button type="submit">{saving ? 'Saving…' : lesson ? 'Save changes' : 'Save lesson'}</button><button className="secondary" type="button" onClick={() => { media.forEach(discardUpload); onCancel(); }}>Cancel</button></div>
+80 |         </fieldset>
+81 |         {saving && <p role="status">Saving your lesson…</p>}
+82 |         {error && <p className="error" role="alert">{error}</p>}
+83 |       </form>
+84 |     </section>
+85 |     </PendingMedia.Provider>
+86 |   );
+87 | }
 ```
 
-- **Line 61:** Opens a form whose submission uses the asynchronous handler.
-- **Line 62:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
-- **Line 63:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
-- **Line 64:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
-- **Line 65:** Opens the responsive row for the three compact controls.
-- **Line 66:** Creates a labeled required controlled select. The empty-valued placeholder is invalid; map renders one option per discipline, key gives stable identity, and the option text also becomes its value. Closing tags end select and label.
-- **Line 67:** Renders the audience selector with three allowed choices and a privacy reminder. name links it to the shared change handler; value tracks current form state.
-- **Line 68:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
-- **Line 69:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
-- **Line 70:** Closes the responsive row.
-- **Line 71:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
-- **Line 72:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
-- **Line 73:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
-- **Line 74:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
-- **Line 75:** Closes the fieldset.
-- **Line 76:** Conditionally displays an accessible saving status via &&.
-- **Line 77:** Shows errors in an accessible alert using the existing error styling.
-- **Line 78:** Closes the form element.
-- **Line 79:** Closes the section.
-- **Line 80:** Closes the wrapper.
-- **Line 81:** Closes the JSX return expression and statement.
-- **Line 82:** Closes the component function.
+- **Line 61:** Wraps the form so every media component inside can report to the registry.
+- **Line 62:** Opens a styled section and connects its accessible name to new-heading.
+- **Line 63:** Shows the correct creation/editing title while preserving the section's accessible heading ID.
+- **Line 64:** Explains required fields in a paragraph.
+- **Line 65:** Opens a form whose submission uses the asynchronous handler.
+- **Line 66:** Opens a fieldset that disables its descendant controls while saving, including Cancel.
+- **Line 67:** Provides an accessible field-group label; sr-only hides it visually without removing it from assistive technology.
+- **Line 68:** Wraps a text input in its label. autoFocus focuses it on mount; name selects the state key; required and maxLength enforce title constraints. value and onChange make it controlled; the slash closes input and the closing label ends its wrapper.
+- **Line 69:** Opens the responsive row for the three compact controls.
+- **Line 70:** Shows Fitness for new plans, but retains a selectable Personal Training option when editing an existing legacy lesson.
+- **Line 71:** Renders the audience selector with three allowed choices and a privacy reminder. name links it to the shared change handler; value tracks current form state.
+- **Line 72:** Creates the controlled skill select with Beginner, Intermediate and Advanced options; map and key create stable option elements, and the initial state supplies the default.
+- **Line 73:** Creates an optional controlled numeric input with minimum 1, maximum 1440 and integer step 1. Empty is allowed because required is absent. A small element explains the range.
+- **Line 74:** Closes the responsive row.
+- **Line 75:** Uses the same class-type and format controls in the manual lesson editor.
+- **Line 76:** Maps metadata triples into labeled textareas. Array destructuring names each item; rows sets initial height, maxLength enforces its limit, values[name] reads dynamic state, and change handles edits. The small element formats the limit with locale grouping; closing tags and parentheses end each mapped label and the map expression.
+- **Line 77:** Gives the activity editor the attachments and a setter, so each activity card can show its own pictures and videos and the Add Media buttons.
+- **Line 78:** When activity headings contain minutes, shows a status line with their total, compares it with the class duration if one is entered and gently warns when they differ. The warning never blocks saving. && renders the text only when its left side is true.
+- **Line 79:** The Save button is unchanged. Cancel now first deletes any files uploaded during this session that were never saved (media.forEach(discardUpload)) and then calls the parent’s onCancel.
+- **Line 80:** Closes the fieldset.
+- **Line 81:** Conditionally displays an accessible saving status via &&.
+- **Line 82:** Shows errors in an accessible alert using the existing error styling.
+- **Line 83:** Closes the form element.
+- **Line 84:** Closes the section.
+- **Line 85:** Closes the wrapper.
+- **Line 86:** Closes the JSX return expression and statement.
+- **Line 87:** Closes the component function.
 
 ## client/src/LessonCard.jsx
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\LessonCard.jsx`
 
-Displays a saved lesson, its media and explicit edit/delete actions.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Displays a saved lesson, its media and explicit edit/delete actions.
-2 | import React, { useState } from 'react';
-3 | import VideoSuggestions from './VideoSuggestions.jsx';
-4 | import LessonMedia from './LessonMedia.jsx';
-5 | import MediaItem from './MediaItem.jsx';
-6 | import { activityBlocks, activityMinutes } from './activities.js';
-7 | import { timelineEntries } from './lesson-view.js';
-8 | import { groupMedia, mediaKey } from './media.js';
-9 |
-10 | // Breaks coaching text into readable bullets and expandable long explanations.
-11 | export function CoachingText({ text, after }) {
-12 |   if (!text) return <p>Not added</p>;
-13 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
-14 |     const lines = block.split('\n').filter(Boolean);
-15 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
-16 |     return <section className="coaching-block" key={index}>
-17 |       {heading && <h4>{lines[0]}</h4>}
-18 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
-19 |       {after?.(index)}
-20 |     </section>;
-21 |   })}</>;
-22 | }
-23 | // Shows saved data without writing changes until the coach takes an explicit action.
-24 | export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
-25 |   const [confirming, setConfirming] = useState(false);
-26 |   const [busy, setBusy] = useState(false);
-27 |   const [error, setError] = useState('');
-28 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
-29 |   // Places checked media with the relevant activity or whole-lesson section.
-30 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+2 | import { fitnessLabel } from './fitness.js';
+3 | import React, { useState } from 'react';
+4 | import VideoSuggestions from './VideoSuggestions.jsx';
+5 | import LessonMedia from './LessonMedia.jsx';
+6 | import MediaItem from './MediaItem.jsx';
+7 | import { activityBlocks, activityMinutes } from './activities.js';
+8 | import { timelineEntries } from './lesson-view.js';
+9 | import { groupMedia, mediaKey } from './media.js';
+10 |
+11 | // Breaks coaching text into readable bullets and expandable long explanations.
+12 | export function CoachingText({ text, after }) {
+13 |   if (!text) return <p>Not added</p>;
+14 |   return <>{text.split(/\n\s*\n/).map((block, index) => {
+15 |     const lines = block.split('\n').filter(Boolean);
+16 |     const heading = lines.length > 1 && /(?:minutes|:)$/.test(lines[0].trim());
+17 |     return <section className="coaching-block" key={index}>
+18 |       {heading && <h4>{lines[0]}</h4>}
+19 |       <ul>{(heading ? lines.slice(1) : lines).map((line, position) => <li key={position}>{line.length > 240 ? <details><summary>{line.slice(0, 100)}…</summary><p>{line}</p></details> : line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')}</li>)}</ul>
+20 |       {after?.(index)}
+21 |     </section>;
+22 |   })}</>;
+23 | }
+24 | // Shows saved data without writing changes until the coach takes an explicit action.
+25 | export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
+26 |   const [confirming, setConfirming] = useState(false);
+27 |   const [busy, setBusy] = useState(false);
+28 |   const [error, setError] = useState('');
+29 |   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+30 |   // Places checked media with the relevant activity or whole-lesson section.
 ```
 
 - **Line 1:** Human-readable comment: Displays a saved lesson, its media and explicit edit/delete actions. This explanation does not execute.
-- **Line 2:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 4:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
-- **Line 5:** Imports the component that shows one picture or video.
-- **Line 6:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
-- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 8:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
-- **Line 9:** Blank line separates related sections for readability; it performs no operation.
-- **Line 10:** Human-readable comment: Breaks coaching text into readable bullets and expandable long explanations. This explanation does not execute.
-- **Line 11:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
-- **Line 12:** Renders a short placeholder when a text field is empty.
-- **Line 13:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
-- **Line 14:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
-- **Line 15:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
-- **Line 16:** Starts one formatted block, using its position as the React key.
-- **Line 17:** Renders the first line as a heading only when the preceding test recognized it.
-- **Line 18:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
-- **Line 19:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
-- **Line 20:** Closes the suggestion section and ends the JSX return statement.
-- **Line 21:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 22:** Closes the LessonCard function.
-- **Line 23:** Human-readable comment: Shows saved data without writing changes until the coach takes an explicit action. This explanation does not execute.
-- **Line 24:** Defines the lesson card component, now accepting an explicit video-approval callback alongside existing lesson actions and media.
-- **Line 25:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
-- **Line 26:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
-- **Line 27:** Stores a safe user-facing error message, initially empty.
-- **Line 28:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
-- **Line 29:** Human-readable comment: Places checked media with the relevant activity or whole-lesson section. This explanation does not execute.
-- **Line 30:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports React, { useState } from 'react'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Imports LessonMedia from './LessonMedia.jsx'. Named imports use braces; these bindings let this file reuse the exported functions or types without duplicating them.
+- **Line 6:** Imports the component that shows one picture or video.
+- **Line 7:** Imports activityBlocks as well, so the card splits activities exactly the way the text display does.
+- **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 9:** Imports groupMedia (decides which attachments belong under which activity) and mediaKey (a stable React key).
+- **Line 10:** Blank line separates related sections for readability; it performs no operation.
+- **Line 11:** Human-readable comment: Breaks coaching text into readable bullets and expandable long explanations. This explanation does not execute.
+- **Line 12:** CoachingText gains an optional after prop: a function that can draw extra content (here, attachments) after any block.
+- **Line 13:** Renders a short placeholder when a text field is empty.
+- **Line 14:** Uses a React fragment to render each blank-line-separated block without adding an unnecessary wrapper element.
+- **Line 15:** Splits a block into individual cue lines and removes empty lines with filter(Boolean).
+- **Line 16:** Recognizes a heading only when a block has following lines and its first line ends in minutes or a colon; trim removes surrounding whitespace for the check.
+- **Line 17:** Starts one formatted block, using its position as the React key.
+- **Line 18:** Renders the first line as a heading only when the preceding test recognized it.
+- **Line 19:** Omits the heading from the cue list and maps remaining lines to bullets. Long lines get a 100-character summary with the full original text expandable; short lines have leading typed bullet/number markers removed to avoid duplicate markers. All content remains React-escaped text.
+- **Line 20:** Calls after(index) when it was supplied. The ?. operator skips the call for goal and notes text, which pass no function.
+- **Line 21:** Closes the suggestion section and ends the JSX return statement.
+- **Line 22:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 23:** Closes the LessonCard function.
+- **Line 24:** Human-readable comment: Shows saved data without writing changes until the coach takes an explicit action. This explanation does not execute.
+- **Line 25:** Defines the lesson card component, now accepting an explicit video-approval callback alongside existing lesson actions and media.
+- **Line 26:** Initially hides the delete confirmation. Pressing Delete reveals it without issuing a request.
+- **Line 27:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 28:** Stores a safe user-facing error message, initially empty.
+- **Line 29:** Splits the attachments into those that belong under a particular activity (byBlock) and everything else (rest).
+- **Line 30:** Human-readable comment: Places checked media with the relevant activity or whole-lesson section. This explanation does not execute.
 
-### Lines 31–57
+### Lines 31–59
 
 ```text
-31 |   // Sends deletion only after confirmation and reports when the server cannot confirm it.
-32 |   async function remove() {
-33 |     if (busy) return;
-34 |     setBusy(true); setError('');
-35 |     try {
-36 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
-37 |       if (response.status !== 204 && response.status !== 404) throw new Error();
-38 |       onDeleted();
-39 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
-40 |     finally { setBusy(false); }
-41 |   }
-42 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
-43 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
-44 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
-45 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
-46 |     <h4>Lesson timeline</h4>
-47 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
-48 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
-49 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
-50 |     <LessonMedia lesson={lesson} />
-51 |     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
-52 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
-53 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
-54 |     {error && <p className="error" role="alert">{error}</p>}
-55 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
-56 |   </article>;
-57 | }
+31 |   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+32 |   // Sends deletion only after confirmation and reports when the server cannot confirm it.
+33 |   async function remove() {
+34 |     if (busy) return;
+35 |     setBusy(true); setError('');
+36 |     try {
+37 |       const response = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE' });
+38 |       if (response.status !== 204 && response.status !== 404) throw new Error();
+39 |       onDeleted();
+40 |     } catch { setError('Could not confirm deletion. Check the connection and refresh before retrying.'); }
+41 |     finally { setBusy(false); }
+42 |   }
+43 |   return <article className="lesson-card" id={`lesson-${lesson.id}`}>
+44 |     <div className="lesson-badges"><span className="discipline">{lesson.discipline}</span><span className="audience-badge">{lesson.audience ?? 'Unspecified'}</span></div><h3>{lesson.title}</h3>
+45 |     <p className="metadata">{lesson.skill_level} · {lesson.duration_minutes === null ? 'Duration not set' : `${lesson.duration_minutes} min`}{activityMinutes(lesson.drills) > 0 && ` · activities total ${activityMinutes(lesson.drills)} min`}</p>
+46 |     {lesson.discipline === 'Fitness' && <p className="metadata">{fitnessLabel(lesson) || 'Class type not specified'} · {lesson.class_format || 'Format not specified'}</p>}
+47 |     <h4>Training goal</h4><CoachingText text={lesson.goal} />
+48 |     <h4>Lesson timeline</h4>
+49 |     {lesson.drills ? <ol className="lesson-timeline">{timelineEntries(activityBlocks(lesson.drills)).map(item => <li key={item.index}><div className="timeline-heading"><h5>{item.title}</h5><span>{item.minutes === null ? 'Untimed guidance' : item.minutes + ' min'}</span></div><CoachingText text={item.cues} />{gallery(byBlock.get(item.index))}</li>)}</ol> : <p>No activities added yet.</p>}
+50 |     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
+51 |     <details><summary>Coaching notes, modifications and safety</summary><CoachingText text={lesson.coaching_notes} /></details>
+52 |     <LessonMedia lesson={lesson} />
+53 |     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
+54 |     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
+55 |     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
+56 |     {error && <p className="error" role="alert">{error}</p>}
+57 |     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
+58 |   </article>;
+59 | }
 ```
 
-- **Line 31:** Human-readable comment: Sends deletion only after confirmation and reports when the server cannot confirm it. This explanation does not execute.
-- **Line 32:** Defines the asynchronous deletion action, called only by the confirmation button.
-- **Line 33:** Ignores another action while a deletion request is in progress.
-- **Line 34:** Shows busy state and clears the previous error before sending.
-- **Line 35:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 36:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
-- **Line 37:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
-- **Line 38:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
-- **Line 39:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
-- **Line 40:** Always releases the busy state after success or failure.
-- **Line 41:** Closes the LessonCard function.
-- **Line 42:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
-- **Line 43:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
-- **Line 44:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
-- **Line 45:** Displays the goal section through the shared bullet/expansion formatter.
-- **Line 46:** Adds the visible heading for the activity timeline.
-- **Line 47:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
-- **Line 48:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
-- **Line 49:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
-- **Line 50:** Passes the record to the reviewed-media lookup component.
-- **Line 51:** Renders the suggestion controls on the saved lesson card and disables them while editing or deleting; approval delegates to the dashboard.
-- **Line 52:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
-- **Line 53:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
-- **Line 54:** Shows errors in an accessible alert using the existing error styling.
-- **Line 55:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
-- **Line 56:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
-- **Line 57:** Closes the LessonCard function.
+- **Line 31:** Defines a small drawing helper: it returns a list of MediaItem previews for an array of attachments, or null when there are none.
+- **Line 32:** Human-readable comment: Sends deletion only after confirmation and reports when the server cannot confirm it. This explanation does not execute.
+- **Line 33:** Defines the asynchronous deletion action, called only by the confirmation button.
+- **Line 34:** Ignores another action while a deletion request is in progress.
+- **Line 35:** Shows busy state and clears the previous error before sending.
+- **Line 36:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 37:** Sends an HTTP DELETE for this record's numeric ID and waits for the backend response; no private database settings reach the browser.
+- **Line 38:** Treats successful deletion (204) and an already-absent record (404) as removable from this dashboard; other responses enter error handling.
+- **Line 39:** Notifies App to remove this ID from local dashboard state after the server confirms absence.
+- **Line 40:** Shows a connection/retry message without hiding the card when deletion cannot be confirmed.
+- **Line 41:** Always releases the busy state after success or failure.
+- **Line 42:** Closes the LessonCard function.
+- **Line 43:** Gives each lesson card an id such as lesson-8, so the page can scroll to the card that was just saved.
+- **Line 44:** Groups the discipline and audience badges above the title. Null or absent audience displays Unspecified; React escapes the lesson text.
+- **Line 45:** Shows skill level, the class duration (or Duration not set) and, when the activity headings contain minutes, their total, so a coach can spot lessons whose time plan is incomplete.
+- **Line 46:** Shows a Fitness class label and format on the card, using plain fallback text for omitted details.
+- **Line 47:** Displays the goal section through the shared bullet/expansion formatter.
+- **Line 48:** Adds the visible heading for the activity timeline.
+- **Line 49:** Renders ordered timeline entries from existing activity blocks. Each item retains its original block index for media grouping, separates heading/minutes from cues, and labels untimed content honestly. Empty lessons get a friendly message.
+- **Line 50:** Keeps media not matched to an activity under the whole-lesson heading instead of dropping it.
+- **Line 51:** Uses native expandable details for notes, modifications and safety; the complete saved text is available when expanded.
+- **Line 52:** Passes the record to the reviewed-media lookup component.
+- **Line 53:** Renders the suggestion controls on the saved lesson card and disables them while editing or deleting; approval delegates to the dashboard.
+- **Line 54:** Provides Edit and Delete actions; disabling prevents actions during a request or while another editor is open. Edit calls the parent; Delete only opens confirmation.
+- **Line 55:** Renders an accessible warning naming the lesson. Confirm delete calls remove; Keep lesson closes the warning without contacting the backend. Busy state disables repeat clicks.
+- **Line 56:** Shows errors in an accessible alert using the existing error styling.
+- **Line 57:** Formats the original creation timestamp in local time for display; dateTime retains the machine-readable value.
+- **Line 58:** Closes the preceding JSX element; any following parentheses/braces also finish its surrounding mapping expression.
+- **Line 59:** Closes the LessonCard function.
 
 ## client/src/lesson-draft.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\lesson-draft.js`
 
-Shares AI input, draft-shape and safety rules between the browser and server.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Shares AI input, draft-shape and safety rules between the browser and server.
-2 | export const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
-3 | export const audiences = ['Unspecified', 'Kids', 'Adults'];
-4 | export const sectionGuidance = [['common_mistakes', 'Common mistakes'], ['easier', 'Easier option'], ['harder', 'Harder option']];
-5 | // Uses conservative guidance for Kids and unspecified audiences without collecting children's details.
-6 | export function safetyGuidance(request) {
-7 |   const rules = ['Coach review required. Use consent, stop signals and appropriate supervision.'];
-8 |   if (request.audience !== 'Adults') rules.push('Kids or unspecified audience: no hard sparring, no head contact, no submissions or chokes. Use short drills, games, frequent breaks and praise. Age is not collected, so use these conservative rules for all Kids classes.');
-9 |   if (request.skill_level === 'Beginner') rules.push('Beginner rule at every age: no hard sparring.');
-10 |   return rules.join('\n');
-11 | }
-12 | export const levels = ['Beginner', 'Intermediate', 'Advanced'];
-13 | export const sections = ['Warm-up', 'Technique teaching', 'Progressive drills', 'Partner exercises', 'Cooldown'];
-14 | export const details = ['techniques', 'common_mistakes', 'coaching_corrections', 'modifications', 'safety'];
-15 | export const labels = ['Techniques to teach', 'Common mistakes', 'Coaching corrections', 'Skill-level modifications', 'Safety considerations'];
-16 | // Checks text type and size before it can reach later code.
-17 | const text = (value, limit) => typeof value === 'string' && value.trim().length > 0 && value.length <= limit;
-18 | // Rejects null and arrays where a plain request object is expected.
-19 | const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-20 |
-21 | // Bounds AI inputs and requires the coach's privacy confirmation.
-22 | export function validateRequest(value) {
-23 |   if (!object(value)) return 'Send a lesson request object.';
-24 |   const allowed = ['discipline', 'skill_level', 'duration_minutes', 'students', 'objective', 'techniques', 'equipment', 'privacy_confirmed', 'audience'];
-25 |   if (Object.keys(value).some(key => !allowed.includes(key))) return 'Unsupported request fields.';
-26 |   if (value.audience !== undefined && !audiences.includes(value.audience)) return 'Choose Kids, Adults, or Unspecified.';
-27 |   if (!disciplines.includes(value.discipline) || !levels.includes(value.skill_level)) return 'Choose a supported discipline and skill level.';
-28 |   if (!Number.isInteger(value.duration_minutes) || value.duration_minutes < 15 || value.duration_minutes > 180) return 'Choose 15–180 whole minutes.';
-29 |   if (!Number.isInteger(value.students) || value.students < 1 || value.students > 100) return 'Choose 1–100 students.';
-30 |   if (['objective', 'techniques', 'equipment'].some(key => value[key] !== undefined && (typeof value[key] !== 'string' || value[key].length > 500))) return 'Optional instructions must be text up to 500 characters.';
+2 | import { validateFitness, fitnessFields, fitnessGuidance } from './fitness.js';
+3 | export const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training', 'Fitness'];
+4 | export const newDisciplines = disciplines.filter(value => value !== 'Personal Training');
+5 | export const audiences = ['Unspecified', 'Kids', 'Adults'];
+6 | export const sectionGuidance = [['common_mistakes', 'Common mistakes'], ['easier', 'Easier option'], ['harder', 'Harder option']];
+7 | // Uses conservative guidance for Kids and unspecified audiences without collecting children's details.
+8 | export function safetyGuidance(request) {
+9 |   const rules = ['Coach review required. Use consent, stop signals and appropriate supervision.'];
+10 |   if (request.audience !== 'Adults') rules.push('Kids or unspecified audience: no hard sparring, no head contact, no submissions or chokes. Use short drills, games, frequent breaks and praise. Age is not collected, so use these conservative rules for all Kids classes.');
+11 |   if (request.skill_level === 'Beginner') rules.push('Beginner rule at every age: no hard sparring.');
+12 |   if (request.discipline === 'Fitness') rules.push(fitnessGuidance(request));
+13 |   return rules.join('\n');
+14 | }
+15 | export const levels = ['Beginner', 'Intermediate', 'Advanced'];
+16 | export const sections = ['Warm-up', 'Technique teaching', 'Progressive drills', 'Partner exercises', 'Cooldown'];
+17 | export const details = ['techniques', 'common_mistakes', 'coaching_corrections', 'modifications', 'safety'];
+18 | export const labels = ['Techniques to teach', 'Common mistakes', 'Coaching corrections', 'Skill-level modifications', 'Safety considerations'];
+19 | // Checks text type and size before it can reach later code.
+20 | const text = (value, limit) => typeof value === 'string' && value.trim().length > 0 && value.length <= limit;
+21 | // Rejects null and arrays where a plain request object is expected.
+22 | const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+23 |
+24 | // Bounds AI inputs and requires the coach's privacy confirmation.
+25 | export function validateRequest(value) {
+26 |   if (!object(value)) return 'Send a lesson request object.';
+27 |   const allowed = ['discipline', 'skill_level', 'duration_minutes', 'students', 'objective', 'techniques', 'equipment', 'privacy_confirmed', 'audience', 'class_type', 'class_type_other', 'class_format'];
+28 |   if (Object.keys(value).some(key => !allowed.includes(key))) return 'Unsupported request fields.';
+29 |   if (value.audience !== undefined && !audiences.includes(value.audience)) return 'Choose Kids, Adults, or Unspecified.';
+30 |   if (!disciplines.includes(value.discipline) || !levels.includes(value.skill_level)) return 'Choose a supported discipline and skill level.';
 ```
 
 - **Line 1:** Human-readable comment: Shares AI input, draft-shape and safety rules between the browser and server. This explanation does not execute.
-- **Line 2:** Exports the six exact discipline names as an array; export makes this list available to other modules.
-- **Line 3:** Exports the three allowed audience labels for the form and shared validation.
-- **Line 4:** Exports field-name and display-label pairs for each section’s common mistakes and two progression options.
-- **Line 5:** Human-readable comment: Uses conservative guidance for Kids and unspecified audiences without collecting children's details. This explanation does not execute.
-- **Line 6:** Exports a deterministic safety-rule builder shared by the browser, server prompt and saved coaching notes.
-- **Line 7:** Initializes the rules with coach review, consent, stop signals and supervision for every class.
-- **Line 8:** Adds the strict Kids rules unless the audience is explicitly Adults. With no exact age collected, submissions/chokes are excluded for all Kids and unspecified classes.
-- **Line 9:** Adds the no-hard-sparring rule for every Beginner class, including Adults.
-- **Line 10:** Joins the selected fixed rules with newlines into one message.
-- **Line 11:** Closes toLesson.
-- **Line 12:** Exports the three supported skill levels.
-- **Line 13:** Exports the required order of the five timed activities.
-- **Line 14:** Exports property names for the five coaching guidance fields.
-- **Line 15:** Exports matching human-readable labels; array positions correspond to the detail keys above.
-- **Line 16:** Human-readable comment: Checks text type and size before it can reach later code. This explanation does not execute.
-- **Line 17:** Defines an arrow function that accepts only nonblank strings within the given length; && requires every condition, and trim ignores surrounding whitespace when checking emptiness.
-- **Line 18:** Human-readable comment: Rejects null and arrays where a plain request object is expected. This explanation does not execute.
-- **Line 19:** Defines a helper accepting a non-null object but rejecting arrays; ! means not.
-- **Line 20:** Blank line separates related sections; it performs no operation.
-- **Line 21:** Human-readable comment: Bounds AI inputs and requires the coach's privacy confirmation. This explanation does not execute.
-- **Line 22:** Opens the exported request-validation function; value is the submitted object.
-- **Line 23:** Returns an error immediately when the value is not an object.
-- **Line 24:** Extends the request allowlist to audience while retaining the existing privacy confirmation requirement.
-- **Line 25:** Object.keys enumerates submitted names; some detects any name outside the allowed list and returns a safe error.
-- **Line 26:** Allows older callers to omit audience, but rejects any supplied value outside the three supported labels.
-- **Line 27:** Rejects an unknown discipline or skill level; || means either invalid condition is enough.
-- **Line 28:** Requires an integer duration between 15 and 180 minutes inclusive.
-- **Line 29:** Requires an integer student count between 1 and 100 inclusive.
-- **Line 30:** Allows missing/empty optional preferences but rejects non-text values or more than 500 characters. Array.some returns true if any preference violates the rule.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Defines all API-valid disciplines, including both Fitness and the unchanged legacy Personal Training value.
+- **Line 4:** Builds new-form choices by removing only the legacy Personal Training entry; existing API values remain valid.
+- **Line 5:** Exports the three allowed audience labels for the form and shared validation.
+- **Line 6:** Exports field-name and display-label pairs for each section’s common mistakes and two progression options.
+- **Line 7:** Human-readable comment: Uses conservative guidance for Kids and unspecified audiences without collecting children's details. This explanation does not execute.
+- **Line 8:** Exports a deterministic safety-rule builder shared by the browser, server prompt and saved coaching notes.
+- **Line 9:** Initializes the rules with coach review, consent, stop signals and supervision for every class.
+- **Line 10:** Adds the strict Kids rules unless the audience is explicitly Adults. With no exact age collected, submissions/chokes are excluded for all Kids and unspecified classes.
+- **Line 11:** Adds the no-hard-sparring rule for every Beginner class, including Adults.
+- **Line 12:** Adds Fitness-specific coaching guidance to the existing audience and beginner safety rules.
+- **Line 13:** Joins the selected fixed rules with newlines into one message.
+- **Line 14:** Closes toLesson.
+- **Line 15:** Exports the three supported skill levels.
+- **Line 16:** Exports the required order of the five timed activities.
+- **Line 17:** Exports property names for the five coaching guidance fields.
+- **Line 18:** Exports matching human-readable labels; array positions correspond to the detail keys above.
+- **Line 19:** Human-readable comment: Checks text type and size before it can reach later code. This explanation does not execute.
+- **Line 20:** Defines an arrow function that accepts only nonblank strings within the given length; && requires every condition, and trim ignores surrounding whitespace when checking emptiness.
+- **Line 21:** Human-readable comment: Rejects null and arrays where a plain request object is expected. This explanation does not execute.
+- **Line 22:** Defines a helper accepting a non-null object but rejecting arrays; ! means not.
+- **Line 23:** Blank line separates related sections; it performs no operation.
+- **Line 24:** Human-readable comment: Bounds AI inputs and requires the coach's privacy confirmation. This explanation does not execute.
+- **Line 25:** Opens the exported request-validation function; value is the submitted object.
+- **Line 26:** Returns an error immediately when the value is not an object.
+- **Line 27:** Lists the only allowed AI request keys, adding optional class type, custom label and format.
+- **Line 28:** Object.keys enumerates submitted names; some detects any name outside the allowed list and returns a safe error.
+- **Line 29:** Allows older callers to omit audience, but rejects any supplied value outside the three supported labels.
+- **Line 30:** Rejects an unknown discipline or skill level; || means either invalid condition is enough.
 
-### Lines 31–58
+### Lines 31–60
 
 ```text
-31 |   if (value.privacy_confirmed !== true) return 'Confirm that the request contains no personal or sensitive athlete information.';
-32 |   return null;
-33 | }
-34 |
-35 | // Checks structure, coaching cues and exact timing before an AI draft is accepted.
-36 | export function validateDraft(draft, request) {
-37 |   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
-38 |   if (details.some(key => !text(draft[key], 1000))) return 'Every coaching guidance field requires 1–1000 characters.';
-39 |   if (!Array.isArray(draft.sections) || draft.sections.length !== sections.length) return 'The draft needs all five timed sections.';
-40 |   for (const [index, section] of draft.sections.entries()) {
-41 |     if (!object(section) || section.name !== sections[index] || !text(section.instructions, 1000)) return 'Each timed section needs its expected name and instructions (up to 1000 characters).';
-42 |     if (sectionGuidance.some(([key]) => !text(section[key], 200))) return 'Each section needs common mistakes and easier/harder options (up to 200 characters each).';
-43 |     if ((section.instructions.match(/(?:^|\n)\s*\d+[.)]\s+/g) || []).length < 2) return 'Each section needs at least two numbered coaching steps.';
-44 |     if (!Number.isInteger(section.minutes) || section.minutes < (index === 3 ? 0 : 1) || section.minutes > 180) return 'Section times must be whole minutes; only partner exercises may use zero.';
-45 |   }
-46 |   if (draft.sections.reduce((sum, section) => sum + section.minutes, 0) !== request.duration_minutes) return 'Section times must add up to the requested class duration.';
-47 |   return null;
-48 | }
-49 |
-50 | // Converts the approved structured draft into existing lesson fields, avoiding a second storage format.
-51 | export function toLesson(draft, request) {
-52 |   return {
-53 |     audience: request.audience ?? 'Unspecified', title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,
-54 |     goal: draft.objectives,
-55 |     drills: `Techniques: ${draft.techniques}\n\n${draft.sections.map(section => `${section.name} — ${section.minutes} minutes\n${section.instructions}\n${sectionGuidance.map(([key, label]) => `${label}: ${section[key]}`).join('\n')}`).join('\n\n')}`,
-56 |     coaching_notes: `AI-assisted draft reviewed and approved by coach.\n${safetyGuidance(request)}\nStudents: ${request.students}\nEquipment: ${request.equipment?.trim() || 'AI recommendations are in Techniques; confirm availability.'}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
-57 |   };
-58 | }
+31 |   if (!Number.isInteger(value.duration_minutes) || value.duration_minutes < 15 || value.duration_minutes > 180) return 'Choose 15–180 whole minutes.';
+32 |   if (!Number.isInteger(value.students) || value.students < 1 || value.students > 100) return 'Choose 1–100 students.';
+33 |   if (['objective', 'techniques', 'equipment'].some(key => value[key] !== undefined && (typeof value[key] !== 'string' || value[key].length > 500))) return 'Optional instructions must be text up to 500 characters.';
+34 |   const fitnessError = validateFitness(value);
+35 |   if (fitnessError) return fitnessError;
+36 |   if (value.privacy_confirmed !== true) return 'Confirm that the request contains no personal or sensitive athlete information.';
+37 |   return null;
+38 | }
+39 |
+40 | // Checks structure, coaching cues and exact timing before an AI draft is accepted.
+41 | export function validateDraft(draft, request) {
+42 |   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
+43 |   if (details.some(key => !text(draft[key], 1000))) return 'Every coaching guidance field requires 1–1000 characters.';
+44 |   if (!Array.isArray(draft.sections) || draft.sections.length !== sections.length) return 'The draft needs all five timed sections.';
+45 |   for (const [index, section] of draft.sections.entries()) {
+46 |     if (!object(section) || section.name !== sections[index] || !text(section.instructions, 1000)) return 'Each timed section needs its expected name and instructions (up to 1000 characters).';
+47 |     if (sectionGuidance.some(([key]) => !text(section[key], 200))) return 'Each section needs common mistakes and easier/harder options (up to 200 characters each).';
+48 |     if ((section.instructions.match(/(?:^|\n)\s*\d+[.)]\s+/g) || []).length < 2) return 'Each section needs at least two numbered coaching steps.';
+49 |     if (!Number.isInteger(section.minutes) || section.minutes < (index === 3 ? 0 : 1) || section.minutes > 180) return 'Section times must be whole minutes; only partner exercises may use zero.';
+50 |   }
+51 |   if (draft.sections.reduce((sum, section) => sum + section.minutes, 0) !== request.duration_minutes) return 'Section times must add up to the requested class duration.';
+52 |   return null;
+53 | }
+54 |
+55 | // Converts the approved structured draft into existing lesson fields, avoiding a second storage format.
+56 | export function toLesson(draft, request) {
+57 |   return {
+58 |     ...(request.discipline === 'Fitness' ? fitnessFields(request) : {}),
+59 |     audience: request.audience ?? 'Unspecified', title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,
+60 |     goal: draft.objectives,
 ```
 
-- **Line 31:** Requires the literal boolean true for the privacy confirmation; this is an affirmation, not an automatic detector of personal information.
-- **Line 32:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
-- **Line 33:** Closes toLesson.
-- **Line 34:** Blank line separates related sections; it performs no operation.
-- **Line 35:** Human-readable comment: Checks structure, coaching cues and exact timing before an AI draft is accepted. This explanation does not execute.
-- **Line 36:** Opens the exported draft validator with the generated object and original class request.
-- **Line 37:** Rejects a non-object draft, blank or overlong title, or missing/overlong objectives; short-circuit || avoids reading properties of invalid objects.
-- **Line 38:** Requires nonblank text in every guidance field, each at most 1000 characters.
-- **Line 39:** Requires exactly five timed sections in an array.
-- **Line 40:** Loops over each section with its zero-based index, unpacked with square-bracket destructuring.
-- **Line 41:** Requires each section to be an object with the expected ordered name and nonempty instructions bounded to 1000 characters.
-- **Line 42:** Checks all three section guidance fields using some; a missing, blank or overlong value rejects the draft.
-- **Line 43:** Counts lines beginning with a number followed by a period or closing parenthesis and whitespace. Fewer than two numbered cues rejects the draft; this checks structure, not coaching correctness.
-- **Line 44:** Requires whole-minute times up to 180; the ternary expression allows zero only at index 3, the partner section.
-- **Line 45:** Closes toLesson.
-- **Line 46:** reduce accumulates section minutes from zero; a total different from the requested duration returns an error.
-- **Line 47:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
-- **Line 48:** Closes toLesson.
-- **Line 49:** Blank line separates related sections; it performs no operation.
-- **Line 50:** Human-readable comment: Converts the approved structured draft into existing lesson fields, avoiding a second storage format. This explanation does not execute.
-- **Line 51:** Opens the converter from an approved structured draft to the existing lesson API shape.
-- **Line 52:** Returns an object containing the fixture's helper functions.
-- **Line 53:** Copies audience into the saved lesson, defaulting omitted audience to Unspecified; existing lesson metadata remains intact.
-- **Line 54:** Maps generated objectives into the existing goal column.
-- **Line 55:** Formats all five sections into the existing drills field, preserving headings, minutes, numbered cues, mistakes and easier/harder options without another database column.
-- **Line 56:** Adds fixed safety rules to the approval note before class details and model guidance; this preserves the rules when the approved draft is saved.
-- **Line 57:** Closes the returned object and return statement.
-- **Line 58:** Closes toLesson.
+- **Line 31:** Requires an integer duration between 15 and 180 minutes inclusive.
+- **Line 32:** Requires an integer student count between 1 and 100 inclusive.
+- **Line 33:** Allows missing/empty optional preferences but rejects non-text values or more than 500 characters. Array.some returns true if any preference violates the rule.
+- **Line 34:** Runs the shared Fitness rules so browser, AI and server requests agree about supported choices.
+- **Line 35:** Returns the shared validation failure before an invalid AI request reaches the provider.
+- **Line 36:** Requires the literal boolean true for the privacy confirmation; this is an affirmation, not an automatic detector of personal information.
+- **Line 37:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
+- **Line 38:** Closes toLesson.
+- **Line 39:** Blank line separates related sections; it performs no operation.
+- **Line 40:** Human-readable comment: Checks structure, coaching cues and exact timing before an AI draft is accepted. This explanation does not execute.
+- **Line 41:** Opens the exported draft validator with the generated object and original class request.
+- **Line 42:** Rejects a non-object draft, blank or overlong title, or missing/overlong objectives; short-circuit || avoids reading properties of invalid objects.
+- **Line 43:** Requires nonblank text in every guidance field, each at most 1000 characters.
+- **Line 44:** Requires exactly five timed sections in an array.
+- **Line 45:** Loops over each section with its zero-based index, unpacked with square-bracket destructuring.
+- **Line 46:** Requires each section to be an object with the expected ordered name and nonempty instructions bounded to 1000 characters.
+- **Line 47:** Checks all three section guidance fields using some; a missing, blank or overlong value rejects the draft.
+- **Line 48:** Counts lines beginning with a number followed by a period or closing parenthesis and whitespace. Fewer than two numbered cues rejects the draft; this checks structure, not coaching correctness.
+- **Line 49:** Requires whole-minute times up to 180; the ternary expression allows zero only at index 3, the partner section.
+- **Line 50:** Closes toLesson.
+- **Line 51:** reduce accumulates section minutes from zero; a total different from the requested duration returns an error.
+- **Line 52:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
+- **Line 53:** Closes toLesson.
+- **Line 54:** Blank line separates related sections; it performs no operation.
+- **Line 55:** Human-readable comment: Converts the approved structured draft into existing lesson fields, avoiding a second storage format. This explanation does not execute.
+- **Line 56:** Opens the converter from an approved structured draft to the existing lesson API shape.
+- **Line 57:** Returns an object containing the fixture's helper functions.
+- **Line 58:** Spreads normalized Fitness metadata into the approved lesson; other disciplines keep their existing payload format.
+- **Line 59:** Copies audience into the saved lesson, defaulting omitted audience to Unspecified; existing lesson metadata remains intact.
+- **Line 60:** Maps generated objectives into the existing goal column.
+
+### Lines 61–64
+
+```text
+61 |     drills: `Techniques: ${draft.techniques}\n\n${draft.sections.map(section => `${section.name} — ${section.minutes} minutes\n${section.instructions}\n${sectionGuidance.map(([key, label]) => `${label}: ${section[key]}`).join('\n')}`).join('\n\n')}`,
+62 |     coaching_notes: `AI-assisted draft reviewed and approved by coach.\n${safetyGuidance(request)}\nStudents: ${request.students}\nEquipment: ${request.equipment?.trim() || 'AI recommendations are in Techniques; confirm availability.'}\n\n${details.slice(1).map((key, index) => `${labels[index + 1]}:\n${draft[key]}`).join('\n\n')}`,
+63 |   };
+64 | }
+```
+
+- **Line 61:** Formats all five sections into the existing drills field, preserving headings, minutes, numbered cues, mistakes and easier/harder options without another database column.
+- **Line 62:** Adds fixed safety rules to the approval note before class details and model guidance; this preserves the rules when the approved draft is saved.
+- **Line 63:** Closes the returned object and return statement.
+- **Line 64:** Closes toLesson.
 
 ## server/ai-provider.js
 
@@ -3356,7 +3402,7 @@ Validates AI lesson requests and replies before returning an unsaved draft.
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\AiLessonForm.jsx`
 
-Lets a coach generate, edit and explicitly approve an AI draft before saving it.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
@@ -3366,31 +3412,31 @@ Lets a coach generate, edit and explicitly approve an AI draft before saving it.
 3 | import ActivityEditor from './ActivityEditor.jsx';
 4 | import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
 5 | import { discardUpload, mediaPayload, newKey } from './media.js';
-6 | import { disciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
+6 | import { newDisciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 7 |
-8 | const initial = { audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
-9 | // Separates generation from approval so AI output cannot save itself.
-10 | export default function AiLessonForm({ onSaved, onCancel }) {
-11 |   const [request, setRequest] = useState(initial);
-12 |   const [draft, setDraft] = useState(null);
-13 |   const [approved, setApproved] = useState(false);
-14 |   const [media, setMediaList] = useState([]);
-15 |   const [finding, setFinding] = useState(false);
-16 |   const [findNote, setFindNote] = useState('');
-17 |   const [busy, setBusy] = useState(false);
-18 |   const [error, setError] = useState('');
-19 |   const locked = useRef(false);
-20 |   const [registry] = useState(pendingRegistry);
-21 |   // Updates this draft field without saving to the database.
-22 |   function edit(key, value) {
-23 |     setDraft(current => ({ ...current, [key]: value }));
-24 |     // A newly generated draft always needs the coach's fresh approval.
-25 |     setApproved(false);
-26 |   }
-27 |   // Changing attachments clears approval so the coach reviews the new draft.
-28 |   function setMedia(next) {
-29 |     setMediaList(current => typeof next === 'function' ? next(current) : next);
-30 |     // A newly generated draft always needs the coach's fresh approval.
+8 | import FitnessFields from './FitnessFields.jsx';
+9 | import { emptyFitness } from './fitness.js';
+10 |
+11 | const initial = { ...emptyFitness, audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
+12 | // Separates generation from approval so AI output cannot save itself.
+13 | export default function AiLessonForm({ onSaved, onCancel }) {
+14 |   const [request, setRequest] = useState(initial);
+15 |   const [draft, setDraft] = useState(null);
+16 |   const [approved, setApproved] = useState(false);
+17 |   const [media, setMediaList] = useState([]);
+18 |   const [finding, setFinding] = useState(false);
+19 |   const [findNote, setFindNote] = useState('');
+20 |   const [busy, setBusy] = useState(false);
+21 |   const [error, setError] = useState('');
+22 |   const locked = useRef(false);
+23 |   const [registry] = useState(pendingRegistry);
+24 |   // Updates this draft field without saving to the database.
+25 |   function edit(key, value) {
+26 |     setDraft(current => ({ ...current, [key]: value }));
+27 |     // A newly generated draft always needs the coach's fresh approval.
+28 |     setApproved(false);
+29 |   }
+30 |   // Changing attachments clears approval so the coach reviews the new draft.
 ```
 
 - **Line 1:** Human-readable comment: Lets a coach generate, edit and explicitly approve an AI draft before saving it. This explanation does not execute.
@@ -3400,279 +3446,287 @@ Lets a coach generate, edit and explicitly approve an AI draft before saving it.
 - **Line 5:** Imports the helpers for deleting unsaved uploads, building the request list and making temporary keys.
 - **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 7:** Blank line separates related sections; it performs no operation.
-- **Line 8:** Defines new AI requests with an Unspecified audience and the existing minimal class defaults; no personal age or identity is collected.
-- **Line 9:** Human-readable comment: Separates generation from approval so AI output cannot save itself. This explanation does not execute.
-- **Line 10:** Exports the component and unpacks the parent callbacks onSaved and onCancel from props.
-- **Line 11:** Creates request state and its setter from the initial class details.
-- **Line 12:** Creates draft state, initially null because generation has not happened.
-- **Line 13:** Creates the approval checkbox state, initially false.
-- **Line 14:** State: the draft’s attachments (suggested by CoachLab or added by the coach).
-- **Line 15:** State: true while CoachLab searches for media.
-- **Line 16:** State: a sentence reporting what the search found.
-- **Line 17:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
-- **Line 18:** Stores a safe user-facing error message, initially empty.
-- **Line 19:** Creates a mutable ref that prevents duplicate submissions before React rerenders.
-- **Line 20:** Creates the registry that tracks unfinished media panels in the draft.
-- **Line 21:** Human-readable comment: Updates this draft field without saving to the database. This explanation does not execute.
-- **Line 22:** Opens a helper for editing one draft property.
-- **Line 23:** Copies the current object with spread and replaces the computed property key with the new value.
-- **Line 24:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
-- **Line 25:** Keeps approval unchecked for this newly generated content.
-- **Line 26:** Closes AiLessonForm.
-- **Line 27:** Human-readable comment: Changing attachments clears approval so the coach reviews the new draft. This explanation does not execute.
-- **Line 28:** Wrapper used by the editors: any change to attachments also needs fresh approval, just like editing the text.
-- **Line 29:** The setter used by the media editors now accepts either a new list or a function that receives the newest list, matching the editors’ functional updates.
-- **Line 30:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
+- **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Blank line separates related sections; it performs no operation.
+- **Line 11:** Initializes blank optional Fitness fields alongside the existing form defaults; no class details are required for legacy lessons.
+- **Line 12:** Human-readable comment: Separates generation from approval so AI output cannot save itself. This explanation does not execute.
+- **Line 13:** Exports the component and unpacks the parent callbacks onSaved and onCancel from props.
+- **Line 14:** Creates request state and its setter from the initial class details.
+- **Line 15:** Creates draft state, initially null because generation has not happened.
+- **Line 16:** Creates the approval checkbox state, initially false.
+- **Line 17:** State: the draft’s attachments (suggested by CoachLab or added by the coach).
+- **Line 18:** State: true while CoachLab searches for media.
+- **Line 19:** State: a sentence reporting what the search found.
+- **Line 20:** Tracks whether a request is in progress so the component can show waiting state and disable repeated actions.
+- **Line 21:** Stores a safe user-facing error message, initially empty.
+- **Line 22:** Creates a mutable ref that prevents duplicate submissions before React rerenders.
+- **Line 23:** Creates the registry that tracks unfinished media panels in the draft.
+- **Line 24:** Human-readable comment: Updates this draft field without saving to the database. This explanation does not execute.
+- **Line 25:** Opens a helper for editing one draft property.
+- **Line 26:** Copies the current object with spread and replaces the computed property key with the new value.
+- **Line 27:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
+- **Line 28:** Keeps approval unchecked for this newly generated content.
+- **Line 29:** Closes AiLessonForm.
+- **Line 30:** Human-readable comment: Changing attachments clears approval so the coach reviews the new draft. This explanation does not execute.
 
 ### Lines 31–60
 
 ```text
-31 |     setApproved(false);
-32 |   }
-33 |   // Combines sources and checks links before returning bounded media per activity.
-34 |   async function findMedia(source) {
-35 |     setFinding(true);
-36 |     setFindNote('');
-37 |     try {
-38 |       const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
-39 |       const data = await response.json();
-40 |       if (!response.ok) throw new Error(data.error || 'Media search failed.');
-41 |       setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
-42 |       setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
-43 |     } catch (failure) {
-44 |       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
-45 |     } finally { setFinding(false); }
-46 |   }
-47 |   // Discards temporary uploads when the coach leaves this unsaved draft.
-48 |   function discard() {
-49 |     media.forEach(discardUpload);
-50 |     onCancel();
-51 |   }
-52 |   // Validates inputs, requires approval for saving, and refuses to lose pending attachment edits.
-53 |   async function submit(event) {
-54 |     event.preventDefault();
-55 |     if (locked.current) return;
-56 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
-57 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
-58 |     // Do not save while an attachment editor still contains unfinished work.
-59 |     if (draft && registry.count()) {
-60 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+31 |   function setMedia(next) {
+32 |     setMediaList(current => typeof next === 'function' ? next(current) : next);
+33 |     // A newly generated draft always needs the coach's fresh approval.
+34 |     setApproved(false);
+35 |   }
+36 |   // Combines sources and checks links before returning bounded media per activity.
+37 |   async function findMedia(source) {
+38 |     setFinding(true);
+39 |     setFindNote('');
+40 |     try {
+41 |       const response = await fetch('/api/media/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discipline: request.discipline, sections: source.sections.map(section => ({ name: section.name, instructions: section.instructions.slice(0, 1500), queries: Array.isArray(section.media_queries) ? section.media_queries.filter(query => typeof query === 'string' && query.length <= 80).slice(0, 3) : [] })) }), signal: AbortSignal.timeout(60000) });
+42 |       const data = await response.json();
+43 |       if (!response.ok) throw new Error(data.error || 'Media search failed.');
+44 |       setMediaList(current => [...current.filter(item => item.origin !== 'suggested'), ...data.media.map(item => ({ ...item, clientKey: newKey() }))]);
+45 |       setFindNote(data.media.length ? `CoachLab found ${data.media.length} picture${data.media.length === 1 ? '' : 's'} or video${data.media.length === 1 ? '' : 's'} and checked every link. Remove anything that does not fit your class.${data.notes.length ? ' ' + data.notes.join(' ') : ''}` : (data.notes.join(' ') || 'No matching verified pictures or videos were found.') + ' You can add your own below.');
+46 |     } catch (failure) {
+47 |       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
+48 |     } finally { setFinding(false); }
+49 |   }
+50 |   // Discards temporary uploads when the coach leaves this unsaved draft.
+51 |   function discard() {
+52 |     media.forEach(discardUpload);
+53 |     onCancel();
+54 |   }
+55 |   // Validates inputs, requires approval for saving, and refuses to lose pending attachment edits.
+56 |   async function submit(event) {
+57 |     event.preventDefault();
+58 |     if (locked.current) return;
+59 |     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
+60 |     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
 ```
 
-- **Line 31:** Keeps approval unchecked for this newly generated content.
-- **Line 32:** Closes AiLessonForm.
-- **Line 33:** Human-readable comment: Combines sources and checks links before returning bounded media per activity. This explanation does not execute.
-- **Line 34:** Defines findMedia, which asks the server to find and verify pictures and videos for a draft.
-- **Line 35:** Shows the searching state.
-- **Line 36:** Clears the previous note.
-- **Line 37:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 38:** Sends the discipline and, for each section, its name, instructions (limited to 1500 characters) and the AI’s technique search phrases (text only, at most three of up to 80 characters). A 60-second limit stops a stuck search.
-- **Line 39:** Parses the server's JSON response.
-- **Line 40:** A failed answer becomes an error message.
-- **Line 41:** Replaces earlier suggestions with the new ones while keeping anything the coach added; every new item gets a temporary key.
-- **Line 42:** Writes the summary: how many items were found, that every link was checked, and any per-section notes; or that nothing was found.
-- **Line 43:** Catches request, response or cancellation failures.
-- **Line 44:** On failure shows the server’s friendly message, or a generic one for interruptions. Draft editing and saving still work.
-- **Line 45:** Always ends the searching state.
-- **Line 46:** Closes AiLessonForm.
-- **Line 47:** Human-readable comment: Discards temporary uploads when the coach leaves this unsaved draft. This explanation does not execute.
-- **Line 48:** Defines discard, used by the Discard draft and Cancel buttons.
-- **Line 49:** Deletes any unsaved uploads from this draft.
-- **Line 50:** Then closes the form.
-- **Line 51:** Closes AiLessonForm.
-- **Line 52:** Human-readable comment: Validates inputs, requires approval for saving, and refuses to lose pending attachment edits. This explanation does not execute.
-- **Line 53:** Defines the asynchronous form submission handler receiving the browser event.
-- **Line 54:** Prevents the form's default page navigation.
-- **Line 55:** Returns immediately if another submission is already running.
-- **Line 56:** The ternary chooses draft validation after generation, or request validation before it.
-- **Line 57:** Shows any validation error or missing approval and exits without sending a request.
-- **Line 58:** Human-readable comment: Do not save while an attachment editor still contains unfinished work. This explanation does not execute.
-- **Line 59:** Before saving an approved draft, checks for unfinished media panels.
-- **Line 60:** Explains what to do about the open panel.
+- **Line 31:** Wrapper used by the editors: any change to attachments also needs fresh approval, just like editing the text.
+- **Line 32:** The setter used by the media editors now accepts either a new list or a function that receives the newest list, matching the editors’ functional updates.
+- **Line 33:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
+- **Line 34:** Keeps approval unchecked for this newly generated content.
+- **Line 35:** Closes AiLessonForm.
+- **Line 36:** Human-readable comment: Combines sources and checks links before returning bounded media per activity. This explanation does not execute.
+- **Line 37:** Defines findMedia, which asks the server to find and verify pictures and videos for a draft.
+- **Line 38:** Shows the searching state.
+- **Line 39:** Clears the previous note.
+- **Line 40:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 41:** Sends the discipline and, for each section, its name, instructions (limited to 1500 characters) and the AI’s technique search phrases (text only, at most three of up to 80 characters). A 60-second limit stops a stuck search.
+- **Line 42:** Parses the server's JSON response.
+- **Line 43:** A failed answer becomes an error message.
+- **Line 44:** Replaces earlier suggestions with the new ones while keeping anything the coach added; every new item gets a temporary key.
+- **Line 45:** Writes the summary: how many items were found, that every link was checked, and any per-section notes; or that nothing was found.
+- **Line 46:** Catches request, response or cancellation failures.
+- **Line 47:** On failure shows the server’s friendly message, or a generic one for interruptions. Draft editing and saving still work.
+- **Line 48:** Always ends the searching state.
+- **Line 49:** Closes AiLessonForm.
+- **Line 50:** Human-readable comment: Discards temporary uploads when the coach leaves this unsaved draft. This explanation does not execute.
+- **Line 51:** Defines discard, used by the Discard draft and Cancel buttons.
+- **Line 52:** Deletes any unsaved uploads from this draft.
+- **Line 53:** Then closes the form.
+- **Line 54:** Closes AiLessonForm.
+- **Line 55:** Human-readable comment: Validates inputs, requires approval for saving, and refuses to lose pending attachment edits. This explanation does not execute.
+- **Line 56:** Defines the asynchronous form submission handler receiving the browser event.
+- **Line 57:** Prevents the form's default page navigation.
+- **Line 58:** Returns immediately if another submission is already running.
+- **Line 59:** The ternary chooses draft validation after generation, or request validation before it.
+- **Line 60:** Shows any validation error or missing approval and exits without sending a request.
 
 ### Lines 61–90
 
 ```text
-61 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
-62 |       return;
-63 |     }
-64 |     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
-65 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
-66 |     locked.current = true;
-67 |     setBusy(true);
-68 |     setError('');
-69 |     try {
-70 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
-71 |       const data = await response.json();
-72 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
-73 |       if (draft) {
-74 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
-75 |         onSaved(data, body.media.length);
-76 |       } else {
-77 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
-78 |         setDraft(data.draft);
-79 |         // A newly generated draft always needs the coach's fresh approval.
-80 |         setApproved(false);
-81 |         setMediaList([]);
-82 |         findMedia(data.draft);
-83 |       }
-84 |     } catch (failure) {
-85 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
-86 |     } finally {
-87 |       locked.current = false;
-88 |       setBusy(false);
-89 |     }
-90 |   }
+61 |     // Do not save while an attachment editor still contains unfinished work.
+62 |     if (draft && registry.count()) {
+63 |       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
+64 |       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
+65 |       return;
+66 |     }
+67 |     const body = draft ? { ...toLesson(draft, request), media: mediaPayload(media.map(item => ({ ...item, activity: draft.sections.some(section => section.name === item.activity) ? `${item.activity} — ${draft.sections.find(section => section.name === item.activity).minutes} minutes` : '' }))) } : request;
+68 |     if (new TextEncoder().encode(JSON.stringify(body)).length > 32000) { setError('This lesson is too large. Shorten the instructions before saving.'); return; }
+69 |     locked.current = true;
+70 |     setBusy(true);
+71 |     setError('');
+72 |     try {
+73 |       const response = await fetch(draft ? '/api/lessons' : '/api/ai/lesson-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+74 |       const data = await response.json();
+75 |       if (!response.ok) throw new Error(data.error || 'The request failed. Please try again.');
+76 |       if (draft) {
+77 |         if (response.status !== 201 || !Number.isInteger(data.id)) throw new Error('The server did not confirm the save.');
+78 |         onSaved(data, body.media.length);
+79 |       } else {
+80 |         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
+81 |         setDraft(data.draft);
+82 |         // A newly generated draft always needs the coach's fresh approval.
+83 |         setApproved(false);
+84 |         setMediaList([]);
+85 |         findMedia(data.draft);
+86 |       }
+87 |     } catch (failure) {
+88 |       setError(failure.name === 'Error' ? failure.message : 'Connection interrupted. Your input remains here. After a save interruption, check saved lessons in another tab before retrying to avoid duplicates.');
+89 |     } finally {
+90 |       locked.current = false;
 ```
 
-- **Line 61:** Scrolls to it.
-- **Line 62:** Stops the save.
-- **Line 63:** Closes AiLessonForm.
-- **Line 64:** When saving an approved draft, adds the media list to the lesson. Each attachment’s section name is converted to the exact activity heading that the saved lesson text will contain (“Technique teaching — 12 minutes”), so the attachment finds its activity later; attachments of no section become whole-lesson media.
-- **Line 65:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
-- **Line 66:** Sets the immediate lock before starting asynchronous work.
-- **Line 67:** Marks the UI busy to disable its fieldset.
-- **Line 68:** Clears previous error feedback.
-- **Line 69:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 70:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
-- **Line 71:** Parses the server's JSON response.
-- **Line 72:** Throws the safe server message or a fallback on unsuccessful HTTP status.
-- **Line 73:** Starts the save-success branch when submitting a draft.
-- **Line 74:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
-- **Line 75:** Tells the parent how many attachments were saved with the draft, so the page can confirm they arrived.
-- **Line 76:** Starts the generation-success branch instead.
-- **Line 77:** Checks the returned draft with the same structure/timing validator before displaying it.
-- **Line 78:** Stores the unsaved generated draft in React state.
-- **Line 79:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
-- **Line 80:** Keeps approval unchecked for this newly generated content.
-- **Line 81:** When a new draft arrives, clears old attachments.
-- **Line 82:** Immediately starts the automatic media search. The draft is already visible and editable while the search runs.
-- **Line 83:** Closes AiLessonForm.
-- **Line 84:** Catches request, response or cancellation failures.
-- **Line 85:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
-- **Line 86:** Begins cleanup that always runs.
-- **Line 87:** Releases the immediate submission lock.
-- **Line 88:** Re-enables UI controls by clearing busy.
-- **Line 89:** Closes AiLessonForm.
-- **Line 90:** Closes AiLessonForm.
+- **Line 61:** Human-readable comment: Do not save while an attachment editor still contains unfinished work. This explanation does not execute.
+- **Line 62:** Before saving an approved draft, checks for unfinished media panels.
+- **Line 63:** Explains what to do about the open panel.
+- **Line 64:** Scrolls to it.
+- **Line 65:** Stops the save.
+- **Line 66:** Closes AiLessonForm.
+- **Line 67:** When saving an approved draft, adds the media list to the lesson. Each attachment’s section name is converted to the exact activity heading that the saved lesson text will contain (“Technique teaching — 12 minutes”), so the attachment finds its activity later; attachments of no section become whole-lesson media.
+- **Line 68:** Measures UTF-8 serialized bytes and blocks oversized saves without clearing input.
+- **Line 69:** Sets the immediate lock before starting asynchronous work.
+- **Line 70:** Marks the UI busy to disable its fieldset.
+- **Line 71:** Clears previous error feedback.
+- **Line 72:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 73:** Posts JSON to the save route only when a draft exists, otherwise to the generation route; AbortSignal limits browser waiting to 60 seconds.
+- **Line 74:** Parses the server's JSON response.
+- **Line 75:** Throws the safe server message or a fallback on unsuccessful HTTP status.
+- **Line 76:** Starts the save-success branch when submitting a draft.
+- **Line 77:** Requires both status 201 and an integer saved ID before treating the save as confirmed.
+- **Line 78:** Tells the parent how many attachments were saved with the draft, so the page can confirm they arrived.
+- **Line 79:** Starts the generation-success branch instead.
+- **Line 80:** Checks the returned draft with the same structure/timing validator before displaying it.
+- **Line 81:** Stores the unsaved generated draft in React state.
+- **Line 82:** Human-readable comment: A newly generated draft always needs the coach's fresh approval. This explanation does not execute.
+- **Line 83:** Keeps approval unchecked for this newly generated content.
+- **Line 84:** When a new draft arrives, clears old attachments.
+- **Line 85:** Immediately starts the automatic media search. The draft is already visible and editable while the search runs.
+- **Line 86:** Closes AiLessonForm.
+- **Line 87:** Catches request, response or cancellation failures.
+- **Line 88:** Displays intentional Error messages, otherwise connection guidance. It changes only error state, preserving the request and edited draft; lost save replies can require checking for duplicates.
+- **Line 89:** Begins cleanup that always runs.
+- **Line 90:** Releases the immediate submission lock.
 
 ### Lines 91–120
 
 ```text
-91 |   return (
-92 |     <PendingMedia.Provider value={registry}>
-93 |     <section className="form-panel" aria-labelledby="ai-heading">
-94 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
-95 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
-96 |       <p className="safety-guidance">{safetyGuidance(request)}</p>
-97 |       <form onSubmit={submit}>
-98 |         <fieldset disabled={busy}>
-99 |           <legend className="sr-only">AI lesson details</legend>
-100 |           {!draft ? <>
-101 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
-102 |             <div className="form-row">
-103 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, discipline: event.target.value })}>{disciplines.map(value => <option key={value}>{value}</option>)}</select></label>
-104 |               <label>Audience<select value={request.audience} onChange={event => setRequest({ ...request, audience: event.target.value })}>{audiences.map(value => <option key={value}>{value}</option>)}</select></label>
-105 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
-106 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
-107 |             </div>
-108 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
-109 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
-110 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
-111 |           </> : <>
-112 |             <p>{request.audience} · {request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
-113 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
-114 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
-115 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
-116 |               <h3>{section.name}</h3>
-117 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
-118 |               <ActivityEditor label={section.name + ' instructions'} limit={1000} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
-119 |               {sectionGuidance.map(([key, label]) => <label key={key}>{section.name}: {label}<textarea required maxLength={200} value={section[key]} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, [key]: event.target.value } : item))} /></label>)}
-120 |               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
+91 |       setBusy(false);
+92 |     }
+93 |   }
+94 |   return (
+95 |     <PendingMedia.Provider value={registry}>
+96 |     <section className="form-panel" aria-labelledby="ai-heading">
+97 |       <h2 id="ai-heading">{draft ? 'AI lesson draft — coach review required' : 'Generate a lesson draft'}</h2>
+98 |       <p>AI can make mistakes. A qualified coach must check safety, technique and suitability before using a lesson.</p>
+99 |       <p className="safety-guidance">{safetyGuidance(request)}</p>
+100 |       <form onSubmit={submit}>
+101 |         <fieldset disabled={busy}>
+102 |           <legend className="sr-only">AI lesson details</legend>
+103 |           {!draft ? <>
+104 |             <p>Send generic class details only: no names, contact details, health information or other personal athlete information. Google may use free-tier requests and responses to improve its products.</p>
+105 |             <div className="form-row">
+106 |               <label>Discipline<select value={request.discipline} onChange={event => setRequest({ ...request, ...emptyFitness, discipline: event.target.value })}>{newDisciplines.map(value => <option key={value}>{value}</option>)}</select></label>
+107 |               <label>Audience<select value={request.audience} onChange={event => setRequest({ ...request, audience: event.target.value })}>{audiences.map(value => <option key={value}>{value}</option>)}</select></label>
+108 |               <label>Skill level<select value={request.skill_level} onChange={event => setRequest({ ...request, skill_level: event.target.value })}>{levels.map(value => <option key={value}>{value}</option>)}</select></label>
+109 |               <label>Class duration (minutes)<input required type="number" min="15" max="180" step="1" value={request.duration_minutes} onChange={event => setRequest({ ...request, duration_minutes: Number(event.target.value) })} /></label>
+110 |             </div>
+111 |             <FitnessFields value={request} onChange={patch => setRequest(current => ({ ...current, ...patch }))} />
+112 |             <details><summary>Optional class details and instructions</summary><label>Number of students<input required type="number" min="1" max="100" step="1" value={request.students} onChange={event => setRequest({ ...request, students: Number(event.target.value) })} /></label>
+113 |             {[['objective', 'Training objective'], ['techniques', 'Specific techniques'], ['equipment', 'Available equipment']].map(([key, label]) => <label key={key}>{label}<textarea maxLength={500} value={request[key]} onChange={event => setRequest({ ...request, [key]: event.target.value })} /><small>Optional · leave blank for AI recommendations. Include any detailed preferences here.</small></label>)}
+114 |             </details><label className="check-label"><input type="checkbox" required checked={request.privacy_confirmed} onChange={event => setRequest({ ...request, privacy_confirmed: event.target.checked })} />I confirm these are generic class details without personal or sensitive athlete information.</label>
+115 |           </> : <>
+116 |             <p>{request.class_type && `${request.class_type === 'Other' ? request.class_type_other : request.class_type} · ${request.class_format || 'Format not specified'} · `}{request.audience} · {request.discipline} · {request.skill_level} · {request.students} students · {request.duration_minutes} minutes requested. Edits require fresh approval.</p>
+117 |             <label>Lesson title<input required maxLength={200} value={draft.title} onChange={event => edit('title', event.target.value)} /></label>
+118 |             <label>Training objectives<textarea required maxLength={1500} value={draft.objectives} onChange={event => edit('objectives', event.target.value)} /></label>
+119 |             {draft.sections.map((section, index) => <div key={section.name} className="draft-section">
+120 |               <h3>{section.name}</h3>
 ```
 
-- **Line 91:** Begins returning JSX, React's HTML-like UI description.
-- **Line 92:** Wraps the form so media components can report to the registry.
-- **Line 93:** Opens a styled section associated with its heading for accessibility.
-- **Line 94:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
-- **Line 95:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
-- **Line 96:** Displays the application-authored safety rules separately from editable model output so the coach can always see them.
-- **Line 97:** Opens a form whose submission uses the asynchronous handler.
-- **Line 98:** Opens a fieldset that disables all enclosed controls while busy.
-- **Line 99:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
-- **Line 100:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
-- **Line 101:** Shows the privacy warning and free-tier data-use disclosure before submission.
-- **Line 102:** Opens the existing responsive three-column input row.
-- **Line 103:** Renders a labelled discipline select. map creates keyed options; onChange copies request state and replaces discipline with the selected text.
-- **Line 104:** Renders an audience dropdown. Spreading request preserves other fields while updating the selected audience in React state.
-- **Line 105:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
-- **Line 106:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
-- **Line 107:** Closes the responsive input row.
-- **Line 108:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
-- **Line 109:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
-- **Line 110:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
-- **Line 111:** Closes the request fragment and opens the alternative draft-review fragment.
-- **Line 112:** Shows audience alongside the other requested class details and reminds the coach that edits require renewed approval.
-- **Line 113:** Renders a required editable title capped at 200 characters through the edit helper.
-- **Line 114:** Renders required editable training objectives capped at 1500 characters.
-- **Line 115:** Maps draft sections into keyed styled containers, opening one div for each section.
-- **Line 116:** Displays that section's name in an h3 heading.
-- **Line 117:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
-- **Line 118:** Keeps each section editable with a 1000-character limit. map replaces only the selected section; edit clears approval after a change.
-- **Line 119:** Renders one required text area per guidance field in each section. A computed property [key] updates mistakes, easier or harder without replacing other section details; each is capped at 200 characters.
-- **Line 120:** Under each section’s instructions, adds an editor for that section’s pictures and videos, filtered by the section name.
+- **Line 91:** Re-enables UI controls by clearing busy.
+- **Line 92:** Closes AiLessonForm.
+- **Line 93:** Closes AiLessonForm.
+- **Line 94:** Begins returning JSX, React's HTML-like UI description.
+- **Line 95:** Wraps the form so media components can report to the registry.
+- **Line 96:** Opens a styled section associated with its heading for accessibility.
+- **Line 97:** Displays the request heading or explicit coach-review draft heading using a ternary inside JSX braces.
+- **Line 98:** Explains AI fallibility and the qualified coach's responsibility in a paragraph.
+- **Line 99:** Displays the application-authored safety rules separately from editable model output so the coach can always see them.
+- **Line 100:** Opens a form whose submission uses the asynchronous handler.
+- **Line 101:** Opens a fieldset that disables all enclosed controls while busy.
+- **Line 102:** Adds an accessible legend, visually hidden by the existing sr-only CSS class.
+- **Line 103:** Starts conditional rendering: when there is no draft, open a React fragment for the request inputs.
+- **Line 104:** Shows the privacy warning and free-tier data-use disclosure before submission.
+- **Line 105:** Opens the existing responsive three-column input row.
+- **Line 106:** Shows only current choices for new AI drafts and clears hidden class fields when the discipline changes.
+- **Line 107:** Renders an audience dropdown. Spreading request preserves other fields while updating the selected audience in React state.
+- **Line 108:** Renders a labelled skill select using the same controlled-input pattern and supported level options.
+- **Line 109:** Renders a required whole-number duration from 15 to 180; Number converts the browser input string into a numeric state value.
+- **Line 110:** Closes the responsive input row.
+- **Line 111:** Uses the shared Fitness controls and merges their changed fields into the AI request.
+- **Line 112:** Groups optional AI class details in an expandable area. Student count still has a valid default and is constrained to whole numbers from 1 to 100.
+- **Line 113:** Maps the three optional AI preference fields to controlled textareas limited to 500 characters; blank values intentionally ask the provider for recommendations.
+- **Line 114:** Closes optional details and renders the required privacy checkbox outside them. checked reads state; onChange stores the boolean confirmation.
+- **Line 115:** Closes the request fragment and opens the alternative draft-review fragment.
+- **Line 116:** Shows the chosen class type (or custom Other label), format and original class details above the editable AI draft.
+- **Line 117:** Renders a required editable title capped at 200 characters through the edit helper.
+- **Line 118:** Renders required editable training objectives capped at 1500 characters.
+- **Line 119:** Maps draft sections into keyed styled containers, opening one div for each section.
+- **Line 120:** Displays that section's name in an h3 heading.
 
-### Lines 121–140
+### Lines 121–144
 
 ```text
-121 |             </div>)}
-122 |             <div className="draft-section">
-123 |               <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
-124 |               {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
-125 |               {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
-126 |               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
-127 |             </div>
-128 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
-129 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
-130 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
-131 |           </>}
-132 |           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
-133 |         </fieldset>
-134 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
-135 |         {error && <p role="alert" className="error">{error}</p>}
-136 |       </form>
-137 |     </section>
-138 |     </PendingMedia.Provider>
-139 |   );
-140 | }
+121 |               <label>{section.name} minutes<input required type="number" min={index === 3 ? 0 : 1} max="180" step="1" value={section.minutes} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, minutes: Number(event.target.value) } : item))} /></label>
+122 |               <ActivityEditor label={section.name + ' instructions'} limit={1000} value={section.instructions} onChange={instructions => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, instructions } : item))} />
+123 |               {sectionGuidance.map(([key, label]) => <label key={key}>{section.name}: {label}<textarea required maxLength={200} value={section[key]} onChange={event => edit('sections', draft.sections.map((item, position) => position === index ? { ...item, [key]: event.target.value } : item))} /></label>)}
+124 |               <MediaEditor media={media} onChange={setMedia} activity={section.name} headings={draft.sections.map(item => item.name)} label={`${section.name} pictures and videos`} items={media.filter(item => item.activity === section.name)} />
+125 |             </div>)}
+126 |             <div className="draft-section">
+127 |               <MediaEditor media={media} onChange={setMedia} activity="" headings={draft.sections.map(item => item.name)} label="Whole-lesson pictures and videos" items={media.filter(item => !draft.sections.some(section => section.name === item.activity))} />
+128 |               {finding && <p role="status">Finding pictures and videos and checking every link…</p>}
+129 |               {findNote && !finding && <p role="status" className="metadata">{findNote}</p>}
+130 |               {!finding && <button type="button" className="secondary" onClick={() => findMedia(draft)}>Search for media again</button>}
+131 |             </div>
+132 |             <p role="status">Section total: {draft.sections.reduce((sum, section) => sum + section.minutes, 0)} / {request.duration_minutes} minutes</p>
+133 |             {details.map((key, index) => <label key={key}>{labels[index]}<textarea required maxLength={1000} value={draft[key]} onChange={event => edit(key, event.target.value)} /></label>)}
+134 |             <label className="check-label"><input type="checkbox" required checked={approved} onChange={event => setApproved(event.target.checked)} />I have reviewed and edited this draft for safe, appropriate coaching and approve saving it.</label>
+135 |           </>}
+136 |           <div className="actions"><button type="submit" disabled={!!draft && (!approved || finding)}>{busy ? 'Working…' : draft ? 'Approve and save lesson' : 'Generate draft'}</button><button type="button" className="secondary" onClick={discard}>{draft ? 'Discard draft' : 'Cancel'}</button></div>
+137 |         </fieldset>
+138 |         {busy && <p role="status">{draft ? 'Saving approved lesson…' : 'Generating an unsaved draft…'}</p>}
+139 |         {error && <p role="alert" className="error">{error}</p>}
+140 |       </form>
+141 |     </section>
+142 |     </PendingMedia.Provider>
+143 |   );
+144 | }
 ```
 
-- **Line 121:** Closes the section div, map callback and JSX expression.
-- **Line 122:** Starts a block for whole-lesson media.
-- **Line 123:** Editor for attachments that belong to no section.
-- **Line 124:** While searching, a status message says so.
-- **Line 125:** When finished, shows the summary note.
-- **Line 126:** Button to run the search again.
-- **Line 127:** Closes the responsive input row.
-- **Line 128:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
-- **Line 129:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
-- **Line 130:** Renders the explicit coach approval checkbox, controlled by approved state.
-- **Line 131:** Closes the draft fragment and conditional JSX expression.
-- **Line 132:** The save button is also disabled while a media search runs, so a lesson is never saved with a half-finished list. Cancel/Discard now uses discard to clean up uploads.
-- **Line 133:** Closes the fieldset of controls.
-- **Line 134:** Conditionally announces saving or generation progress in a status paragraph.
-- **Line 135:** Conditionally displays an alert containing the current error.
-- **Line 136:** Closes the form element.
-- **Line 137:** Closes the outer section.
-- **Line 138:** Closes the wrapper.
-- **Line 139:** Closes the grouped JSX return expression.
-- **Line 140:** Closes AiLessonForm.
+- **Line 121:** Renders an integer time input; only partner time may be zero. The nested map copies just the selected section and edit stores the new sections array while clearing approval.
+- **Line 122:** Keeps each section editable with a 1000-character limit. map replaces only the selected section; edit clears approval after a change.
+- **Line 123:** Renders one required text area per guidance field in each section. A computed property [key] updates mistakes, easier or harder without replacing other section details; each is capped at 200 characters.
+- **Line 124:** Under each section’s instructions, adds an editor for that section’s pictures and videos, filtered by the section name.
+- **Line 125:** Closes the section div, map callback and JSX expression.
+- **Line 126:** Starts a block for whole-lesson media.
+- **Line 127:** Editor for attachments that belong to no section.
+- **Line 128:** While searching, a status message says so.
+- **Line 129:** When finished, shows the summary note.
+- **Line 130:** Button to run the search again.
+- **Line 131:** Closes the responsive input row.
+- **Line 132:** Shows an accessible status paragraph with reduce-calculated total minutes alongside the requested total.
+- **Line 133:** Maps the five guidance keys to labelled, required editable textareas, each capped at 1000 characters.
+- **Line 134:** Renders the explicit coach approval checkbox, controlled by approved state.
+- **Line 135:** Closes the draft fragment and conditional JSX expression.
+- **Line 136:** The save button is also disabled while a media search runs, so a lesson is never saved with a half-finished list. Cancel/Discard now uses discard to clean up uploads.
+- **Line 137:** Closes the fieldset of controls.
+- **Line 138:** Conditionally announces saving or generation progress in a status paragraph.
+- **Line 139:** Conditionally displays an alert containing the current error.
+- **Line 140:** Closes the form element.
+- **Line 141:** Closes the outer section.
+- **Line 142:** Closes the wrapper.
+- **Line 143:** Closes the grouped JSX return expression.
+- **Line 144:** Closes AiLessonForm.
 
 ## server/ai.test.js
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\ai.test.js`
 
-Checks ai behavior with controlled fixtures; read each test name for its expected outcome.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
@@ -3700,7 +3754,7 @@ Checks ai behavior with controlled fixtures; read each test name for its expecte
 21 | // Wraps a fake AI answer in the provider response shape so no live request is needed.
 22 | const envelope = value => ({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(value) }] } }] });
 23 |
-24 | test('contract accepts six disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
+24 | test('contract accepts supported and legacy disciplines and rejects invalid inputs and incomplete or mistimed drafts', () => {
 25 |   for (const discipline of disciplines) assert.equal(validateRequest({ ...request, discipline }), null);
 26 |   for (const change of [{ discipline: 'Other' }, { skill_level: 'Expert' }, { duration_minutes: 0 }, { duration_minutes: 60.5 }, { students: 101 }, { objective: null }, { techniques: 'x'.repeat(501) }, { privacy_confirmed: false }, { athlete: 'private' }]) assert.ok(validateRequest({ ...request, ...change }));
 27 |   assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);
@@ -3732,7 +3786,7 @@ Checks ai behavior with controlled fixtures; read each test name for its expecte
 - **Line 21:** Human-readable comment: Wraps a fake AI answer in the provider response shape so no live request is needed. This explanation does not execute.
 - **Line 22:** Defines a helper wrapping a draft in the provider's expected candidate/parts JSON shape.
 - **Line 23:** Blank line separates related sections; it performs no operation.
-- **Line 24:** Starts the contract-validation test.
+- **Line 24:** Checks the expanded discipline contract alongside existing invalid-input and timing cases.
 - **Line 25:** Loops through every discipline and asserts that its request is accepted with null error.
 - **Line 26:** Iterates malformed request variants and requires validation to reject each, including null optional text; this prevents optional from meaning unvalidated.
 - **Line 27:** Checks the stated expectation using Node strict assertions: `assert.equal(validateRequest({ ...request, objective: '', techniques: '', equipment: '' }), null);`. equal compares scalar values, deepEqual compares all object/array contents, ok requires a truthy condition, and rejects requires the awaited operation to fail. A failed check fails this test rather than reporting a pass.
@@ -3900,7 +3954,7 @@ Checks ai behavior with controlled fixtures; read each test name for its expecte
 113 |   release();
 114 |   assert.equal((await pending).status, 200);
 115 |   mode = 'ok';
-116 |   for (let attempt = 0; attempt < 11; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
+116 |   for (let attempt = 0; attempt < 10; attempt++) { time += 60001; assert.equal((await generate(request)).status, 200); }
 117 |   time += 60001;
 118 |   assert.equal((await generate(request)).status, 429);
 119 |   time += 86400000;
@@ -3932,7 +3986,7 @@ Checks ai behavior with controlled fixtures; read each test name for its expecte
 - **Line 113:** Resolves the pending provider promise.
 - **Line 114:** Requires the original pending request to succeed.
 - **Line 115:** Restores successful provider mode.
-- **Line 116:** Adds eleven accepted attempts, advancing the fake clock each time; combined with earlier attempts these reach twenty in the day.
+- **Line 116:** Uses ten remaining allowed attempts because the extra Fitness request already consumed one of the unchanged twenty-request draft cap.
 - **Line 117:** Advances the fake clock slightly beyond one minute without waiting in real time.
 - **Line 118:** Requires the next request to hit the twenty-per-day limit.
 - **Line 119:** Advances a full day so all previous attempts expire.
@@ -4436,7 +4490,7 @@ Checks ai behavior with controlled fixtures; read each test name for its expecte
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\schema.prisma`
 
-// Describes stored records for Prisma; changes reach the database only through reviewed migrations.
+Fitness integration: describes optional PostgreSQL lesson metadata for Prisma Client.
 
 ### Lines 1–30
 
@@ -4458,19 +4512,19 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\pris
 15 |   id               Int      @id @default(autoincrement())
 16 |   title            String   @db.Text
 17 |   discipline       String   @db.Text
-18 |   audience         String?  @default("Unspecified") @db.Text
-19 |   skill_level      String   @default("Beginner") @db.Text
-20 |   duration_minutes Int?
-21 |   goal             String   @default("") @db.Text
-22 |   drills           String   @default("") @db.Text
-23 |   coaching_notes   String   @default("") @db.Text
-24 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
-25 |   media            LessonMedia[]
-26 |   owner_id         String?
-27 |   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
-28 |
-29 |   @@index([owner_id])
-30 |   @@map("lessons")
+18 |   // Optional Fitness metadata; legacy records need no rewriting.
+19 |   class_type       String?  @db.Text
+20 |   class_type_other String?  @db.VarChar(40)
+21 |   class_format     String?  @db.Text
+22 |   audience         String?  @default("Unspecified") @db.Text
+23 |   skill_level      String   @default("Beginner") @db.Text
+24 |   duration_minutes Int?
+25 |   goal             String   @default("") @db.Text
+26 |   drills           String   @default("") @db.Text
+27 |   coaching_notes   String   @default("") @db.Text
+28 |   created_at       DateTime @default(now()) @db.Timestamptz(3)
+29 |   media            LessonMedia[]
+30 |   owner_id         String?
 ```
 
 - **Line 1:** Human-readable comment: Describes stored records for Prisma; changes reach the database only through reviewed migrations. This explanation does not execute.
@@ -4490,249 +4544,257 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\pris
 - **Line 15:** Defines a required integer primary key with automatically allocated IDs. SQLite ID ranges must be checked before any future import.
 - **Line 16:** Defines required unrestricted PostgreSQL text for the title.
 - **Line 17:** Defines required text for the discipline; allowed values are enforced by reviewed migration SQL and existing API validation.
-- **Line 18:** Adds a nullable Prisma text field. The question mark allows older clients to omit it; the database default is Unspecified. No existing field is removed.
-- **Line 19:** Defines required skill-level text with Beginner as the default.
-- **Line 20:** The question mark makes integer duration nullable, preserving an omitted manual duration.
-- **Line 21:** Defines required goal text with an empty-string default.
-- **Line 22:** Defines required drill text with an empty-string default.
-- **Line 23:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
-- **Line 24:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
-- **Line 25:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
-- **Line 26:** Adds owner_id to Lesson: the id of the coach who owns it. It is optional (String?) because lessons created before accounts existed have no owner yet.
-- **Line 27:** Declares the relation to User through owner_id. onDelete: Restrict means an account that still owns lessons cannot be deleted by accident.
-- **Line 28:** Blank line separates related sections and performs no operation.
-- **Line 29:** Adds an index on owner_id for attachments.
-- **Line 30:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 18:** Human-readable comment: Optional Fitness metadata; legacy records need no rewriting. It does not execute.
+- **Line 19:** Adds an optional text property to the Prisma Lesson model; the question mark permits old rows with null metadata.
+- **Line 20:** Adds a nullable custom label limited to 40 characters by PostgreSQL.
+- **Line 21:** Adds an optional text property for the one-on-one or group format.
+- **Line 22:** Adds a nullable Prisma text field. The question mark allows older clients to omit it; the database default is Unspecified. No existing field is removed.
+- **Line 23:** Defines required skill-level text with Beginner as the default.
+- **Line 24:** The question mark makes integer duration nullable, preserving an omitted manual duration.
+- **Line 25:** Defines required goal text with an empty-string default.
+- **Line 26:** Defines required drill text with an empty-string default.
+- **Line 27:** Defines required coaching-note text with an empty-string default, preserving formatted AI notes.
+- **Line 28:** Defines a timestamp with time zone and millisecond precision, defaulting to now; a future API serializer must emit the existing UTC string form.
+- **Line 29:** Adds the reverse side of the relationship: a Lesson can have many LessonMedia rows. It is a Prisma-level description only and adds no column to lessons.
+- **Line 30:** Adds owner_id to Lesson: the id of the coach who owns it. It is optional (String?) because lessons created before accounts existed have no owner yet.
 
 ### Lines 31–60
 
 ```text
-31 | }
+31 |   owner            User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
 32 |
-33 | // Attachments can stay pending until a lesson save assigns them to a lesson.
-34 | model LessonMedia {
-35 |   id          Int      @id @default(autoincrement())
-36 |   lesson_id   Int?
-37 |   position    Int      @default(0)
-38 |   kind        String   @db.Text
-39 |   origin      String   @db.Text
-40 |   url         String?  @db.Text
-41 |   title       String   @default("") @db.Text
-42 |   activity    String   @default("") @db.Text
-43 |   mime        String?  @db.Text
-44 |   size_bytes  Int?
-45 |   data        Bytes?
-46 |   credit      String   @default("") @db.Text
-47 |   source_page String?  @db.Text
-48 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
-49 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
-50 |   owner_id    String?
-51 |   owner       User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
-52 |
-53 |   @@index([lesson_id])
-54 |   @@index([owner_id])
-55 |   @@map("lesson_media")
-56 | }
-57 |
-58 | // Better Auth uses this coach identity to connect sessions and owned lessons.
-59 | model User {
-60 |   id            String         @id
+33 |   @@index([owner_id])
+34 |   @@map("lessons")
+35 | }
+36 |
+37 | // Attachments can stay pending until a lesson save assigns them to a lesson.
+38 | model LessonMedia {
+39 |   id          Int      @id @default(autoincrement())
+40 |   lesson_id   Int?
+41 |   position    Int      @default(0)
+42 |   kind        String   @db.Text
+43 |   origin      String   @db.Text
+44 |   url         String?  @db.Text
+45 |   title       String   @default("") @db.Text
+46 |   activity    String   @default("") @db.Text
+47 |   mime        String?  @db.Text
+48 |   size_bytes  Int?
+49 |   data        Bytes?
+50 |   credit      String   @default("") @db.Text
+51 |   source_page String?  @db.Text
+52 |   created_at  DateTime @default(now()) @db.Timestamptz(3)
+53 |   lesson      Lesson?  @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+54 |   owner_id    String?
+55 |   owner       User?    @relation(fields: [owner_id], references: [id], onDelete: Restrict)
+56 |
+57 |   @@index([lesson_id])
+58 |   @@index([owner_id])
+59 |   @@map("lesson_media")
+60 | }
 ```
 
-- **Line 31:** Closes the generator block.
+- **Line 31:** Declares the relation to User through owner_id. onDelete: Restrict means an account that still owns lessons cannot be deleted by accident.
 - **Line 32:** Blank line separates related sections and performs no operation.
-- **Line 33:** Human-readable comment: Attachments can stay pending until a lesson save assigns them to a lesson. This explanation does not execute.
-- **Line 34:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
-- **Line 35:** Auto-incrementing whole-number primary key.
-- **Line 36:** Optional (?) lesson id: empty for uploads not saved yet.
-- **Line 37:** Order within the lesson, defaulting to 0.
-- **Line 38:** Text column for the kind of attachment.
-- **Line 39:** Text column for where the attachment came from.
-- **Line 40:** Optional web address for linked media.
-- **Line 41:** Caption text, empty by default.
-- **Line 42:** Activity heading the attachment belongs to.
-- **Line 43:** Optional MIME type of an upload.
-- **Line 44:** Optional size in bytes.
-- **Line 45:** Optional binary file contents (Bytes maps to BYTEA).
-- **Line 46:** Credit text, empty by default.
-- **Line 47:** Optional link to the source page.
-- **Line 48:** Creation time with timezone, set automatically.
-- **Line 49:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
-- **Line 50:** Adds owner_id to LessonMedia so every attachment, even an unsaved upload, belongs to a coach.
-- **Line 51:** Relation from an attachment to its owner, with the same Restrict rule.
-- **Line 52:** Blank line separates related sections and performs no operation.
-- **Line 53:** Asks Prisma for an index on lesson_id.
-- **Line 54:** Adds an index on owner_id for attachments.
-- **Line 55:** Maps the model to the existing table name lesson_media.
-- **Line 56:** Closes the generator block.
-- **Line 57:** Blank line separates related sections and performs no operation.
-- **Line 58:** Human-readable comment: Better Auth uses this coach identity to connect sessions and owned lessons. This explanation does not execute.
-- **Line 59:** Declares the User model: one coach account. Better Auth reads and writes it.
-- **Line 60:** Text primary key; Better Auth creates random ids.
+- **Line 33:** Adds an index on owner_id for attachments.
+- **Line 34:** Maps the model to the physical lessons table; snake_case properties already match existing column names.
+- **Line 35:** Closes the generator block.
+- **Line 36:** Blank line separates related sections and performs no operation.
+- **Line 37:** Human-readable comment: Attachments can stay pending until a lesson save assigns them to a lesson. This explanation does not execute.
+- **Line 38:** Declares the LessonMedia model, which Prisma maps to the lesson_media table (see @@map below).
+- **Line 39:** Auto-incrementing whole-number primary key.
+- **Line 40:** Optional (?) lesson id: empty for uploads not saved yet.
+- **Line 41:** Order within the lesson, defaulting to 0.
+- **Line 42:** Text column for the kind of attachment.
+- **Line 43:** Text column for where the attachment came from.
+- **Line 44:** Optional web address for linked media.
+- **Line 45:** Caption text, empty by default.
+- **Line 46:** Activity heading the attachment belongs to.
+- **Line 47:** Optional MIME type of an upload.
+- **Line 48:** Optional size in bytes.
+- **Line 49:** Optional binary file contents (Bytes maps to BYTEA).
+- **Line 50:** Credit text, empty by default.
+- **Line 51:** Optional link to the source page.
+- **Line 52:** Creation time with timezone, set automatically.
+- **Line 53:** Defines the relation to Lesson through lesson_id. onDelete: Cascade matches the database rule so deleting a lesson removes its attachments.
+- **Line 54:** Adds owner_id to LessonMedia so every attachment, even an unsaved upload, belongs to a coach.
+- **Line 55:** Relation from an attachment to its owner, with the same Restrict rule.
+- **Line 56:** Blank line separates related sections and performs no operation.
+- **Line 57:** Asks Prisma for an index on lesson_id.
+- **Line 58:** Adds an index on owner_id for attachments.
+- **Line 59:** Maps the model to the existing table name lesson_media.
+- **Line 60:** Closes the generator block.
 
 ### Lines 61–90
 
 ```text
-61 |   name          String
-62 |   email         String         @unique
-63 |   emailVerified Boolean        @default(false) @map("email_verified")
-64 |   image         String?
-65 |   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-66 |   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-67 |   sessions      Session[]
-68 |   accounts      Account[]
-69 |   lessons       Lesson[]
-70 |   media         LessonMedia[]
-71 |
-72 |   @@map("auth_users")
-73 | }
-74 |
-75 | // Sessions let the server recognize a signed-in coach without resending their password.
-76 | model Session {
-77 |   id        String   @id
-78 |   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
-79 |   token     String   @unique
-80 |   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-81 |   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-82 |   ipAddress String?  @map("ip_address")
-83 |   userAgent String?  @map("user_agent")
-84 |   userId    String   @map("user_id")
-85 |   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-86 |
-87 |   @@index([userId])
-88 |   @@map("auth_sessions")
-89 | }
+61 |
+62 | // Better Auth uses this coach identity to connect sessions and owned lessons.
+63 | model User {
+64 |   id            String         @id
+65 |   name          String
+66 |   email         String         @unique
+67 |   emailVerified Boolean        @default(false) @map("email_verified")
+68 |   image         String?
+69 |   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+70 |   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+71 |   sessions      Session[]
+72 |   accounts      Account[]
+73 |   lessons       Lesson[]
+74 |   media         LessonMedia[]
+75 |
+76 |   @@map("auth_users")
+77 | }
+78 |
+79 | // Sessions let the server recognize a signed-in coach without resending their password.
+80 | model Session {
+81 |   id        String   @id
+82 |   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+83 |   token     String   @unique
+84 |   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+85 |   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+86 |   ipAddress String?  @map("ip_address")
+87 |   userAgent String?  @map("user_agent")
+88 |   userId    String   @map("user_id")
+89 |   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 90 |
 ```
 
-- **Line 61:** The coach’s display name.
-- **Line 62:** The email address; @unique means no two accounts can share it. Better Auth lowercases it.
-- **Line 63:** Whether the email was verified (not enforced in this local version); stored as email_verified in the database.
-- **Line 64:** Optional profile picture address (used by Google sign-in).
-- **Line 65:** When the account was created.
-- **Line 66:** When the account was last changed; @updatedAt refreshes it automatically.
-- **Line 67:** The coach’s login sessions (reverse side of Session.user).
-- **Line 68:** The coach’s sign-in methods (password, Google).
-- **Line 69:** The lessons this coach owns.
-- **Line 70:** The attachments this coach owns.
-- **Line 71:** Blank line separates related sections and performs no operation.
-- **Line 72:** Maps the model to the auth_users table.
-- **Line 73:** Closes the generator block.
-- **Line 74:** Blank line separates related sections and performs no operation.
-- **Line 75:** Human-readable comment: Sessions let the server recognize a signed-in coach without resending their password. This explanation does not execute.
-- **Line 76:** Declares Session: one signed-in browser. The browser holds only a random token; everything else is here on the server.
-- **Line 77:** Text primary key.
-- **Line 78:** When the session stops working (seven days after sign-in, refreshed daily).
-- **Line 79:** The secret session token; unique so one token means one session.
-- **Line 80:** When the session started.
-- **Line 81:** When the session was last refreshed.
-- **Line 82:** The network address the session was created from (for the coach’s own audit).
-- **Line 83:** The browser description the session was created with.
-- **Line 84:** The coach this session belongs to.
-- **Line 85:** Relation to User. onDelete: Cascade removes sessions when an account is removed.
-- **Line 86:** Blank line separates related sections and performs no operation.
-- **Line 87:** Index for finding a coach’s sign-in methods.
-- **Line 88:** Maps the model to the auth_sessions table.
-- **Line 89:** Closes the generator block.
+- **Line 61:** Blank line separates related sections and performs no operation.
+- **Line 62:** Human-readable comment: Better Auth uses this coach identity to connect sessions and owned lessons. This explanation does not execute.
+- **Line 63:** Declares the User model: one coach account. Better Auth reads and writes it.
+- **Line 64:** Text primary key; Better Auth creates random ids.
+- **Line 65:** The coach’s display name.
+- **Line 66:** The email address; @unique means no two accounts can share it. Better Auth lowercases it.
+- **Line 67:** Whether the email was verified (not enforced in this local version); stored as email_verified in the database.
+- **Line 68:** Optional profile picture address (used by Google sign-in).
+- **Line 69:** When the account was created.
+- **Line 70:** When the account was last changed; @updatedAt refreshes it automatically.
+- **Line 71:** The coach’s login sessions (reverse side of Session.user).
+- **Line 72:** The coach’s sign-in methods (password, Google).
+- **Line 73:** The lessons this coach owns.
+- **Line 74:** The attachments this coach owns.
+- **Line 75:** Blank line separates related sections and performs no operation.
+- **Line 76:** Maps the model to the auth_users table.
+- **Line 77:** Closes the generator block.
+- **Line 78:** Blank line separates related sections and performs no operation.
+- **Line 79:** Human-readable comment: Sessions let the server recognize a signed-in coach without resending their password. This explanation does not execute.
+- **Line 80:** Declares Session: one signed-in browser. The browser holds only a random token; everything else is here on the server.
+- **Line 81:** Text primary key.
+- **Line 82:** When the session stops working (seven days after sign-in, refreshed daily).
+- **Line 83:** The secret session token; unique so one token means one session.
+- **Line 84:** When the session started.
+- **Line 85:** When the session was last refreshed.
+- **Line 86:** The network address the session was created from (for the coach’s own audit).
+- **Line 87:** The browser description the session was created with.
+- **Line 88:** The coach this session belongs to.
+- **Line 89:** Relation to User. onDelete: Cascade removes sessions when an account is removed.
 - **Line 90:** Blank line separates related sections and performs no operation.
 
 ### Lines 91–120
 
 ```text
-91 | // Account records belong to the authentication library, not the lesson editor.
-92 | model Account {
-93 |   id                    String    @id
-94 |   accountId             String    @map("account_id")
-95 |   providerId            String    @map("provider_id")
-96 |   userId                String    @map("user_id")
-97 |   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-98 |   accessToken           String?   @map("access_token")
-99 |   refreshToken          String?   @map("refresh_token")
-100 |   idToken               String?   @map("id_token")
-101 |   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
-102 |   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
-103 |   scope                 String?
-104 |   password              String?
-105 |   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-106 |   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-107 |
-108 |   @@index([userId])
-109 |   @@map("auth_accounts")
-110 | }
+91 |   @@index([userId])
+92 |   @@map("auth_sessions")
+93 | }
+94 |
+95 | // Account records belong to the authentication library, not the lesson editor.
+96 | model Account {
+97 |   id                    String    @id
+98 |   accountId             String    @map("account_id")
+99 |   providerId            String    @map("provider_id")
+100 |   userId                String    @map("user_id")
+101 |   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+102 |   accessToken           String?   @map("access_token")
+103 |   refreshToken          String?   @map("refresh_token")
+104 |   idToken               String?   @map("id_token")
+105 |   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+106 |   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+107 |   scope                 String?
+108 |   password              String?
+109 |   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+110 |   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 111 |
-112 | // Time-limited verification records support authentication flows.
-113 | model Verification {
-114 |   id         String   @id
-115 |   identifier String
-116 |   value      String
-117 |   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
-118 |   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-119 |   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-120 |
+112 |   @@index([userId])
+113 |   @@map("auth_accounts")
+114 | }
+115 |
+116 | // Time-limited verification records support authentication flows.
+117 | model Verification {
+118 |   id         String   @id
+119 |   identifier String
+120 |   value      String
 ```
 
-- **Line 91:** Human-readable comment: Account records belong to the authentication library, not the lesson editor. This explanation does not execute.
-- **Line 92:** Declares Account: one way a coach can sign in (the password credential, or Google).
-- **Line 93:** Text primary key.
-- **Line 94:** The id of the account at the provider (for passwords it is the coach’s own id).
-- **Line 95:** Which provider: credential for email and password, or google.
-- **Line 96:** The coach this sign-in method belongs to.
-- **Line 97:** Relation to User with Cascade deletion.
-- **Line 98:** Google access token, if Google sign-in is used.
-- **Line 99:** Google refresh token, if used.
-- **Line 100:** Google identity token, if used.
-- **Line 101:** When the Google access token expires.
-- **Line 102:** When the Google refresh token expires.
-- **Line 103:** Permissions granted by Google.
-- **Line 104:** The password HASH (salted scrypt, never the password itself) for the credential provider.
-- **Line 105:** When this sign-in method was added.
-- **Line 106:** When it was last changed.
-- **Line 107:** Blank line separates related sections and performs no operation.
-- **Line 108:** Index for finding a coach’s sign-in methods.
-- **Line 109:** Maps the model to the auth_accounts table.
-- **Line 110:** Closes the generator block.
+- **Line 91:** Index for finding a coach’s sign-in methods.
+- **Line 92:** Maps the model to the auth_sessions table.
+- **Line 93:** Closes the generator block.
+- **Line 94:** Blank line separates related sections and performs no operation.
+- **Line 95:** Human-readable comment: Account records belong to the authentication library, not the lesson editor. This explanation does not execute.
+- **Line 96:** Declares Account: one way a coach can sign in (the password credential, or Google).
+- **Line 97:** Text primary key.
+- **Line 98:** The id of the account at the provider (for passwords it is the coach’s own id).
+- **Line 99:** Which provider: credential for email and password, or google.
+- **Line 100:** The coach this sign-in method belongs to.
+- **Line 101:** Relation to User with Cascade deletion.
+- **Line 102:** Google access token, if Google sign-in is used.
+- **Line 103:** Google refresh token, if used.
+- **Line 104:** Google identity token, if used.
+- **Line 105:** When the Google access token expires.
+- **Line 106:** When the Google refresh token expires.
+- **Line 107:** Permissions granted by Google.
+- **Line 108:** The password HASH (salted scrypt, never the password itself) for the credential provider.
+- **Line 109:** When this sign-in method was added.
+- **Line 110:** When it was last changed.
 - **Line 111:** Blank line separates related sections and performs no operation.
-- **Line 112:** Human-readable comment: Time-limited verification records support authentication flows. This explanation does not execute.
-- **Line 113:** Declares Verification: short-lived one-time tokens, such as the password reset token.
-- **Line 114:** Text primary key.
-- **Line 115:** What the token is for, for example a reset request for one coach.
-- **Line 116:** The token value or data stored with it.
-- **Line 117:** When the token expires (one hour for reset links).
-- **Line 118:** When it was created.
-- **Line 119:** When it was last changed.
-- **Line 120:** Blank line separates related sections and performs no operation.
+- **Line 112:** Index for finding a coach’s sign-in methods.
+- **Line 113:** Maps the model to the auth_accounts table.
+- **Line 114:** Closes the generator block.
+- **Line 115:** Blank line separates related sections and performs no operation.
+- **Line 116:** Human-readable comment: Time-limited verification records support authentication flows. This explanation does not execute.
+- **Line 117:** Declares Verification: short-lived one-time tokens, such as the password reset token.
+- **Line 118:** Text primary key.
+- **Line 119:** What the token is for, for example a reset request for one coach.
+- **Line 120:** The token value or data stored with it.
 
-### Lines 121–133
+### Lines 121–137
 
 ```text
-121 |   @@index([identifier])
-122 |   @@map("auth_verifications")
-123 | }
+121 |   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+122 |   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+123 |   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 124 |
-125 | // Authentication throttling is stored separately from in-memory AI and video quotas.
-126 | model RateLimit {
-127 |   id          String @id
-128 |   key         String @unique
-129 |   count       Int
-130 |   lastRequest BigInt @map("last_request")
-131 |
-132 |   @@map("auth_rate_limits")
-133 | }
+125 |   @@index([identifier])
+126 |   @@map("auth_verifications")
+127 | }
+128 |
+129 | // Authentication throttling is stored separately from in-memory AI and video quotas.
+130 | model RateLimit {
+131 |   id          String @id
+132 |   key         String @unique
+133 |   count       Int
+134 |   lastRequest BigInt @map("last_request")
+135 |
+136 |   @@map("auth_rate_limits")
+137 | }
 ```
 
-- **Line 121:** Index for looking tokens up by what they are for.
-- **Line 122:** Maps the model to the auth_verifications table.
-- **Line 123:** Closes the generator block.
+- **Line 121:** When the token expires (one hour for reset links).
+- **Line 122:** When it was created.
+- **Line 123:** When it was last changed.
 - **Line 124:** Blank line separates related sections and performs no operation.
-- **Line 125:** Human-readable comment: Authentication throttling is stored separately from in-memory AI and video quotas. This explanation does not execute.
-- **Line 126:** Declares RateLimit: counters that slow down repeated requests (for example guessing passwords). Keeping them in the database means a restart does not reset them.
-- **Line 127:** Text primary key.
-- **Line 128:** A key made from the request path and the client address; unique so each has one counter.
-- **Line 129:** How many requests were made in the current window.
-- **Line 130:** When the last request happened, in milliseconds (BigInt because it is a large number).
-- **Line 131:** Blank line separates related sections and performs no operation.
-- **Line 132:** Maps the model to the auth_rate_limits table.
-- **Line 133:** Closes the generator block.
+- **Line 125:** Index for looking tokens up by what they are for.
+- **Line 126:** Maps the model to the auth_verifications table.
+- **Line 127:** Closes the generator block.
+- **Line 128:** Blank line separates related sections and performs no operation.
+- **Line 129:** Human-readable comment: Authentication throttling is stored separately from in-memory AI and video quotas. This explanation does not execute.
+- **Line 130:** Declares RateLimit: counters that slow down repeated requests (for example guessing passwords). Keeping them in the database means a restart does not reset them.
+- **Line 131:** Text primary key.
+- **Line 132:** A key made from the request path and the client address; unique so each has one counter.
+- **Line 133:** How many requests were made in the current window.
+- **Line 134:** When the last request happened, in milliseconds (BigInt because it is a large number).
+- **Line 135:** Blank line separates related sections and performs no operation.
+- **Line 136:** Maps the model to the auth_rate_limits table.
+- **Line 137:** Closes the generator block.
 
 ## prisma.config.js
 
@@ -5830,323 +5892,325 @@ Stores the reviewed demonstration catalog; unknown techniques get no invented li
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\lesson-store.js`
 
-Gives SQLite and Prisma the same owner-scoped lesson and attachment operations.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Gives SQLite and Prisma the same owner-scoped lesson and attachment operations.
-2 | export class MediaReferenceError extends Error {}
-3 |
-4 | const lessonColumns = "id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at, COALESCE(audience, 'Unspecified') AS audience";
-5 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
-6 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
-7 | // Returns a useful attachment error without revealing another owner's record.
-8 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
-9 |
-10 | // Keeps SQLite values bound to prepared statements and scopes records to their owner.
-11 | export function sqliteLessons(database) {
-12 |   database.pragma('foreign_keys = ON');
-13 |   const list = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE owner_id = ? ORDER BY created_at DESC, id DESC`);
-14 |   const find = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE id = ?`);
-15 |   // Bind lesson values as parameters so text cannot become SQL commands.
-16 |   const insert = database.prepare(`INSERT INTO lessons
-17 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id, audience)
-18 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId, @audience)`);
-19 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
-20 |   const findMedia = database.prepare('SELECT id, lesson_id, owner_id FROM lesson_media WHERE id = ?');
-21 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
-22 |   const addLink = database.prepare(`INSERT INTO lesson_media (lesson_id, owner_id, position, kind, origin, url, title, activity, credit, source_page)
-23 |     VALUES (@lessonId, @ownerId, @position, @kind, @origin, @url, @title, @activity, @credit, @source_page)`);
-24 |   const dropMedia = database.prepare('DELETE FROM lesson_media WHERE id = ?');
-25 |   // Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction.
-26 |   function attach(ownerId, lessonId, items) {
-27 |     const before = attachedIds.all(lessonId).map(row => row.id);
-28 |     const keep = new Set();
-29 |     items.forEach((item, position) => {
-30 |       if (item.id) {
+2 | import { fitnessFields } from '../client/src/fitness.js';
+3 | export class MediaReferenceError extends Error {}
+4 |
+5 | const lessonColumns = "id, title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, created_at, COALESCE(audience, 'Unspecified') AS audience";
+6 | const publicColumns = 'id, lesson_id, position, kind, origin, url, title, activity, mime, size_bytes, credit, source_page, created_at';
+7 | const publicSelect = { id: true, lesson_id: true, position: true, kind: true, origin: true, url: true, title: true, activity: true, mime: true, size_bytes: true, credit: true, source_page: true, created_at: true };
+8 | // Returns a useful attachment error without revealing another owner's record.
+9 | const missingMedia = () => new MediaReferenceError('An attached picture or video no longer exists. Remove it and add it again.');
+10 |
+11 | // Keeps SQLite values bound to prepared statements and scopes records to their owner.
+12 | export function sqliteLessons(database) {
+13 |   database.pragma('foreign_keys = ON');
+14 |   const list = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE owner_id = ? ORDER BY created_at DESC, id DESC`);
+15 |   const find = database.prepare(`SELECT ${lessonColumns} FROM lessons WHERE id = ?`);
+16 |   // Bind lesson values as parameters so text cannot become SQL commands.
+17 |   const insert = database.prepare(`INSERT INTO lessons
+18 |     (title, discipline, skill_level, duration_minutes, goal, drills, coaching_notes, owner_id, audience)
+19 |     VALUES (@title, @discipline, @skill_level, @duration_minutes, @goal, @drills, @coaching_notes, @ownerId, @audience)`);
+20 |   const attachedIds = database.prepare('SELECT id FROM lesson_media WHERE lesson_id = ?');
+21 |   const findMedia = database.prepare('SELECT id, lesson_id, owner_id FROM lesson_media WHERE id = ?');
+22 |   const claim = database.prepare('UPDATE lesson_media SET lesson_id=@lessonId, position=@position, title=@title, activity=@activity WHERE id=@id');
+23 |   const addLink = database.prepare(`INSERT INTO lesson_media (lesson_id, owner_id, position, kind, origin, url, title, activity, credit, source_page)
+24 |     VALUES (@lessonId, @ownerId, @position, @kind, @origin, @url, @title, @activity, @credit, @source_page)`);
+25 |   const dropMedia = database.prepare('DELETE FROM lesson_media WHERE id = ?');
+26 |   // Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction.
+27 |   function attach(ownerId, lessonId, items) {
+28 |     const before = attachedIds.all(lessonId).map(row => row.id);
+29 |     const keep = new Set();
+30 |     items.forEach((item, position) => {
 ```
 
 - **Line 1:** Human-readable comment: Gives SQLite and Prisma the same owner-scoped lesson and attachment operations. This explanation does not execute.
-- **Line 2:** Defines MediaReferenceError, thrown when a lesson refers to an attachment that does not exist or belongs to another lesson; the API turns it into a 400 message.
-- **Line 3:** Blank line separating related statements; it has no runtime effect.
-- **Line 4:** Lists public lesson columns. SQL COALESCE returns Unspecified for a null audience; AS names the resulting API field audience.
-- **Line 5:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
-- **Line 6:** The same list in Prisma’s select format.
-- **Line 7:** Human-readable comment: Returns a useful attachment error without revealing another owner's record. This explanation does not execute.
-- **Line 8:** Creates the standard error for a missing attachment.
-- **Line 9:** Blank line separating related statements; it has no runtime effect.
-- **Line 10:** Human-readable comment: Keeps SQLite values bound to prepared statements and scopes records to their owner. This explanation does not execute.
-- **Line 11:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
-- **Line 12:** Turns on SQLite foreign key enforcement for this connection (it is off by default), so the attachments table’s link to lessons is checked.
-- **Line 13:** Listing now needs an owner: only that coach’s lessons are returned.
-- **Line 14:** Finding a lesson by id returns only the nine public columns.
-- **Line 15:** Human-readable comment: Bind lesson values as parameters so text cannot become SQL commands. This explanation does not execute.
-- **Line 16:** Begins a multiline template string defining the parameterized INSERT command.
-- **Line 17:** Lists the INSERT columns, now including audience alongside the existing fields and owner ID.
-- **Line 18:** Binds each INSERT value by name, including audience, so user input is never concatenated into SQL.
-- **Line 19:** Prepared query: the ids already attached to a lesson.
-- **Line 20:** When looking up an attachment, also reads who owns it.
-- **Line 21:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
-- **Line 22:** The insert for a new link attachment now includes owner_id.
-- **Line 23:** The matching named values.
-- **Line 24:** Prepared delete of one attachment.
-- **Line 25:** Human-readable comment: Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction. This explanation does not execute.
-- **Line 26:** attach now takes the owner as its first argument.
-- **Line 27:** Remembers which attachments the lesson had before.
-- **Line 28:** Will hold the ids that stay.
-- **Line 29:** Goes through the new list with each item’s position.
-- **Line 30:** An item with an id is an existing attachment.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Defines MediaReferenceError, thrown when a lesson refers to an attachment that does not exist or belongs to another lesson; the API turns it into a 400 message.
+- **Line 4:** Blank line separating related statements; it has no runtime effect.
+- **Line 5:** Lists public lesson columns. SQL COALESCE returns Unspecified for a null audience; AS names the resulting API field audience.
+- **Line 6:** Column names that may be returned to the browser. The file bytes (data) are deliberately left out so lists stay small.
+- **Line 7:** The same list in Prisma’s select format.
+- **Line 8:** Human-readable comment: Returns a useful attachment error without revealing another owner's record. This explanation does not execute.
+- **Line 9:** Creates the standard error for a missing attachment.
+- **Line 10:** Blank line separating related statements; it has no runtime effect.
+- **Line 11:** Human-readable comment: Keeps SQLite values bound to prepared statements and scopes records to their owner. This explanation does not execute.
+- **Line 12:** Builds a SQLite-backed store implementing the same methods as Prisma so Express does not need database-specific SQL.
+- **Line 13:** Turns on SQLite foreign key enforcement for this connection (it is off by default), so the attachments table’s link to lessons is checked.
+- **Line 14:** Listing now needs an owner: only that coach’s lessons are returned.
+- **Line 15:** Finding a lesson by id returns only the nine public columns.
+- **Line 16:** Human-readable comment: Bind lesson values as parameters so text cannot become SQL commands. This explanation does not execute.
+- **Line 17:** Begins a multiline template string defining the parameterized INSERT command.
+- **Line 18:** Lists the INSERT columns, now including audience alongside the existing fields and owner ID.
+- **Line 19:** Binds each INSERT value by name, including audience, so user input is never concatenated into SQL.
+- **Line 20:** Prepared query: the ids already attached to a lesson.
+- **Line 21:** When looking up an attachment, also reads who owns it.
+- **Line 22:** Prepared update: attaches an existing (uploaded or stored) file to a lesson with its position, caption and activity.
+- **Line 23:** The insert for a new link attachment now includes owner_id.
+- **Line 24:** The matching named values.
+- **Line 25:** Prepared delete of one attachment.
+- **Line 26:** Human-readable comment: Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction. This explanation does not execute.
+- **Line 27:** attach now takes the owner as its first argument.
+- **Line 28:** Remembers which attachments the lesson had before.
+- **Line 29:** Will hold the ids that stay.
+- **Line 30:** Goes through the new list with each item’s position.
 
 ### Lines 31–60
 
 ```text
-31 |         const row = findMedia.get(item.id);
-32 |         // Reject attachments from another owner or lesson before changing any saved media.
-33 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-34 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
-35 |         keep.add(item.id);
-36 |       } else {
-37 |         keep.add(Number(addLink.run({ lessonId, ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
-38 |       }
-39 |     });
-40 |     for (const id of before) if (!keep.has(id)) dropMedia.run(id);
-41 |   }
-42 |   // A failed attachment change must roll back the lesson write as well.
-43 |   const create = database.transaction((ownerId, lesson, media) => {
-44 |     const result = insert.run({ ...lesson, ownerId });
-45 |     if (media) attach(ownerId, Number(result.lastInsertRowid), media);
-46 |     return find.get(result.lastInsertRowid);
-47 |   });
-48 |   const update = database.transaction((ownerId, id, lesson, media) => {
-49 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes, audience=@audience WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
-50 |     if (!result.changes) return null;
-51 |     if (media) attach(ownerId, id, media);
-52 |     return find.get(id);
-53 |   });
-54 |   const remove = database.transaction((ownerId, id) => {
-55 |     if (!database.prepare('SELECT 1 FROM lessons WHERE id=? AND owner_id=?').get(id, ownerId)) return false;
-56 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
-57 |     return database.prepare('DELETE FROM lessons WHERE id=? AND owner_id=?').run(id, ownerId).changes > 0;
-58 |   });
-59 |   const media = {
-60 |     // Lists only this owner's records, preventing one account from seeing another's data.
+31 |       if (item.id) {
+32 |         const row = findMedia.get(item.id);
+33 |         // Reject attachments from another owner or lesson before changing any saved media.
+34 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+35 |         claim.run({ lessonId, position, title: item.title, activity: item.activity, id: item.id });
+36 |         keep.add(item.id);
+37 |       } else {
+38 |         keep.add(Number(addLink.run({ lessonId, ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }).lastInsertRowid));
+39 |       }
+40 |     });
+41 |     for (const id of before) if (!keep.has(id)) dropMedia.run(id);
+42 |   }
+43 |   // A failed attachment change must roll back the lesson write as well.
+44 |   const create = database.transaction((ownerId, lesson, media) => {
+45 |     const result = insert.run({ ...lesson, ownerId });
+46 |     if (media) attach(ownerId, Number(result.lastInsertRowid), media);
+47 |     return find.get(result.lastInsertRowid);
+48 |   });
+49 |   const update = database.transaction((ownerId, id, lesson, media) => {
+50 |     const result = database.prepare('UPDATE lessons SET title=@title, discipline=@discipline, skill_level=@skill_level, duration_minutes=@duration_minutes, goal=@goal, drills=@drills, coaching_notes=@coaching_notes, audience=@audience WHERE id=@id AND owner_id=@ownerId').run({ ...lesson, id, ownerId });
+51 |     if (!result.changes) return null;
+52 |     if (media) attach(ownerId, id, media);
+53 |     return find.get(id);
+54 |   });
+55 |   const remove = database.transaction((ownerId, id) => {
+56 |     if (!database.prepare('SELECT 1 FROM lessons WHERE id=? AND owner_id=?').get(id, ownerId)) return false;
+57 |     database.prepare('DELETE FROM lesson_media WHERE lesson_id=?').run(id);
+58 |     return database.prepare('DELETE FROM lessons WHERE id=? AND owner_id=?').run(id, ownerId).changes > 0;
+59 |   });
+60 |   const media = {
 ```
 
-- **Line 31:** Looks it up.
-- **Line 32:** Human-readable comment: Reject attachments from another owner or lesson before changing any saved media. This explanation does not execute.
-- **Line 33:** Same ownership rule as the SQLite store.
-- **Line 34:** Attaches it and updates its caption, activity and position.
-- **Line 35:** Remembers to keep it.
-- **Line 36:** Otherwise it is a new link.
-- **Line 37:** New link attachments are stored with the owner.
-- **Line 38:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 31:** An item with an id is an existing attachment.
+- **Line 32:** Looks it up.
+- **Line 33:** Human-readable comment: Reject attachments from another owner or lesson before changing any saved media. This explanation does not execute.
+- **Line 34:** Same ownership rule as the SQLite store.
+- **Line 35:** Attaches it and updates its caption, activity and position.
+- **Line 36:** Remembers to keep it.
+- **Line 37:** Otherwise it is a new link.
+- **Line 38:** New link attachments are stored with the owner.
 - **Line 39:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 40:** Deletes attachments that were attached before but are not in the new list.
-- **Line 41:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 42:** Human-readable comment: A failed attachment change must roll back the lesson write as well. This explanation does not execute.
-- **Line 43:** Create now takes the owner as its first argument.
-- **Line 44:** Inserts the lesson with its owner.
-- **Line 45:** Attaches media for the same owner.
-- **Line 46:** Reads back the new row using its database-assigned ID, including the generated timestamp.
-- **Line 47:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 48:** Update now takes the owner first.
-- **Line 49:** Updates the existing lesson and audience using bound parameters. Both ID and owner must match; it cannot edit another account’s lesson.
-- **Line 50:** If no row matched, returns null (lesson not found) without touching media.
-- **Line 51:** Media is attached for the same owner.
-- **Line 52:** Returns the updated lesson.
-- **Line 53:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 54:** Delete now takes the owner first.
-- **Line 55:** First checks that the lesson exists and belongs to this owner; otherwise returns false and deletes nothing, including attachments.
-- **Line 56:** Deletes the lesson’s attachments first.
-- **Line 57:** Deletes the lesson only when it is owned by this coach.
-- **Line 58:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 59:** Starts the media functions exposed to the API.
-- **Line 60:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
+- **Line 40:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 41:** Deletes attachments that were attached before but are not in the new list.
+- **Line 42:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 43:** Human-readable comment: A failed attachment change must roll back the lesson write as well. This explanation does not execute.
+- **Line 44:** Create now takes the owner as its first argument.
+- **Line 45:** Inserts the lesson with its owner.
+- **Line 46:** Attaches media for the same owner.
+- **Line 47:** Reads back the new row using its database-assigned ID, including the generated timestamp.
+- **Line 48:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 49:** Update now takes the owner first.
+- **Line 50:** Updates the existing lesson and audience using bound parameters. Both ID and owner must match; it cannot edit another account’s lesson.
+- **Line 51:** If no row matched, returns null (lesson not found) without touching media.
+- **Line 52:** Media is attached for the same owner.
+- **Line 53:** Returns the updated lesson.
+- **Line 54:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 55:** Delete now takes the owner first.
+- **Line 56:** First checks that the lesson exists and belongs to this owner; otherwise returns false and deletes nothing, including attachments.
+- **Line 57:** Deletes the lesson’s attachments first.
+- **Line 58:** Deletes the lesson only when it is owned by this coach.
+- **Line 59:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 60:** Starts the media functions exposed to the API.
 
 ### Lines 61–90
 
 ```text
-61 |     list: ownerId => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE owner_id = ? AND lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(ownerId),
-62 |     // Stores an upload as pending until it is attached to a saved lesson.
-63 |     addUpload: (ownerId, { kind, mime, title, data }) => {
-64 |       const id = database.prepare('INSERT INTO lesson_media (owner_id, kind, origin, title, mime, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?, ?)').run(ownerId, kind, 'upload', title, mime, data.length, data).lastInsertRowid;
-65 |       return database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE id = ?`).get(id);
-66 |     },
-67 |     // Returns upload bytes only when the requested file belongs to this owner.
-68 |     getFile: (ownerId, id) => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND owner_id = ? AND origin = 'upload'").get(id, ownerId) || null,
-69 |     // Deletes only a pending upload owned by the caller, not a saved lesson attachment.
-70 |     removeOrphan: (ownerId, id) => database.prepare("DELETE FROM lesson_media WHERE id = ? AND owner_id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id, ownerId).changes > 0,
-71 |     // Removes old unattached uploads so abandoned drafts do not grow storage forever.
-72 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
-73 |   };
-74 |   return { list: ownerId => list.all(ownerId), create, update, remove, media };
-75 | }
-76 |
-77 | // Uses Prisma operations with the same ownership and atomic-save rules as SQLite.
-78 | export function prismaLessons(client) {
-79 |   // Converts database dates to API text and removes the internal owner field.
-80 |   const serialize = ({ owner_id, ...row }) => ({ ...row, audience: row.audience ?? 'Unspecified', created_at: row.created_at.toISOString() });
-81 |   // Converts attachment dates to API text without exposing the internal owner field.
-82 |   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
-83 |   // Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction.
-84 |   async function attach(tx, ownerId, lessonId, items) {
-85 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
-86 |     const keep = new Set();
-87 |     for (const [position, item] of items.entries()) {
-88 |       if (item.id) {
-89 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true, owner_id: true } });
-90 |         // Reject attachments from another owner or lesson before changing any saved media.
+61 |     // Lists only this owner's records, preventing one account from seeing another's data.
+62 |     list: ownerId => database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE owner_id = ? AND lesson_id IS NOT NULL ORDER BY lesson_id, position, id`).all(ownerId),
+63 |     // Stores an upload as pending until it is attached to a saved lesson.
+64 |     addUpload: (ownerId, { kind, mime, title, data }) => {
+65 |       const id = database.prepare('INSERT INTO lesson_media (owner_id, kind, origin, title, mime, size_bytes, data) VALUES (?, ?, ?, ?, ?, ?, ?)').run(ownerId, kind, 'upload', title, mime, data.length, data).lastInsertRowid;
+66 |       return database.prepare(`SELECT ${publicColumns} FROM lesson_media WHERE id = ?`).get(id);
+67 |     },
+68 |     // Returns upload bytes only when the requested file belongs to this owner.
+69 |     getFile: (ownerId, id) => database.prepare("SELECT mime, data FROM lesson_media WHERE id = ? AND owner_id = ? AND origin = 'upload'").get(id, ownerId) || null,
+70 |     // Deletes only a pending upload owned by the caller, not a saved lesson attachment.
+71 |     removeOrphan: (ownerId, id) => database.prepare("DELETE FROM lesson_media WHERE id = ? AND owner_id = ? AND lesson_id IS NULL AND origin = 'upload'").run(id, ownerId).changes > 0,
+72 |     // Removes old unattached uploads so abandoned drafts do not grow storage forever.
+73 |     purgeOrphans: maxAgeMs => database.prepare('DELETE FROM lesson_media WHERE lesson_id IS NULL AND created_at < ?').run(new Date(Date.now() - maxAgeMs).toISOString()).changes,
+74 |   };
+75 |   return { list: ownerId => list.all(ownerId), create, update, remove, media };
+76 | }
+77 |
+78 | // Uses Prisma operations with the same ownership and atomic-save rules as SQLite.
+79 | export function prismaLessons(client) {
+80 |   // Converts database dates to API text and removes the internal owner field.
+81 |   const serialize = ({ owner_id, ...row }) => ({ ...row, audience: row.audience ?? 'Unspecified', created_at: row.created_at.toISOString() });
+82 |   // Converts attachment dates to API text without exposing the internal owner field.
+83 |   const serializeMedia = ({ owner_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
+84 |   // Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction.
+85 |   async function attach(tx, ownerId, lessonId, items) {
+86 |     const before = (await tx.lessonMedia.findMany({ where: { lesson_id: lessonId }, select: { id: true } })).map(row => row.id);
+87 |     const keep = new Set();
+88 |     for (const [position, item] of items.entries()) {
+89 |       if (item.id) {
+90 |         const row = await tx.lessonMedia.findUnique({ where: { id: item.id }, select: { lesson_id: true, owner_id: true } });
 ```
 
-- **Line 61:** Lists attachments of saved lessons belonging to the owner only.
-- **Line 62:** Human-readable comment: Stores an upload as pending until it is attached to a saved lesson. This explanation does not execute.
-- **Line 63:** Stores a new upload for an owner.
-- **Line 64:** Inserts the upload with its owner.
-- **Line 65:** Returns the new row without its bytes.
-- **Line 66:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 67:** Human-readable comment: Returns upload bytes only when the requested file belongs to this owner. This explanation does not execute.
-- **Line 68:** Fetches an uploaded file only if the owner matches.
-- **Line 69:** Human-readable comment: Deletes only a pending upload owned by the caller, not a saved lesson attachment. This explanation does not execute.
-- **Line 70:** Deletes an unsaved upload only if the owner matches.
-- **Line 71:** Human-readable comment: Removes old unattached uploads so abandoned drafts do not grow storage forever. This explanation does not execute.
-- **Line 72:** Deletes unattached uploads older than the given age and reports how many.
-- **Line 73:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 74:** The store’s list now needs an owner.
-- **Line 75:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 76:** Blank line separating related statements; it has no runtime effect.
-- **Line 77:** Human-readable comment: Uses Prisma operations with the same ownership and atomic-save rules as SQLite. This explanation does not execute.
-- **Line 78:** Builds the PostgreSQL-backed store from the guarded Prisma client.
-- **Line 79:** Human-readable comment: Converts database dates to API text and removes the internal owner field. This explanation does not execute.
-- **Line 80:** Removes the private owner field, normalizes null audience to Unspecified, and serializes the timestamp as ISO text for React.
-- **Line 81:** Human-readable comment: Converts attachment dates to API text without exposing the internal owner field. This explanation does not execute.
-- **Line 82:** Same for attachments.
-- **Line 83:** Human-readable comment: Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction. This explanation does not execute.
-- **Line 84:** PostgreSQL attach also takes the owner.
-- **Line 85:** Remembers the lesson’s current attachments.
-- **Line 86:** Will hold the ids that stay.
-- **Line 87:** Goes through the new list with positions.
-- **Line 88:** An item with an id is an existing attachment.
-- **Line 89:** Reads the attachment’s lesson and owner.
-- **Line 90:** Human-readable comment: Reject attachments from another owner or lesson before changing any saved media. This explanation does not execute.
+- **Line 61:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
+- **Line 62:** Lists attachments of saved lessons belonging to the owner only.
+- **Line 63:** Human-readable comment: Stores an upload as pending until it is attached to a saved lesson. This explanation does not execute.
+- **Line 64:** Stores a new upload for an owner.
+- **Line 65:** Inserts the upload with its owner.
+- **Line 66:** Returns the new row without its bytes.
+- **Line 67:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 68:** Human-readable comment: Returns upload bytes only when the requested file belongs to this owner. This explanation does not execute.
+- **Line 69:** Fetches an uploaded file only if the owner matches.
+- **Line 70:** Human-readable comment: Deletes only a pending upload owned by the caller, not a saved lesson attachment. This explanation does not execute.
+- **Line 71:** Deletes an unsaved upload only if the owner matches.
+- **Line 72:** Human-readable comment: Removes old unattached uploads so abandoned drafts do not grow storage forever. This explanation does not execute.
+- **Line 73:** Deletes unattached uploads older than the given age and reports how many.
+- **Line 74:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 75:** The store’s list now needs an owner.
+- **Line 76:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 77:** Blank line separating related statements; it has no runtime effect.
+- **Line 78:** Human-readable comment: Uses Prisma operations with the same ownership and atomic-save rules as SQLite. This explanation does not execute.
+- **Line 79:** Builds the PostgreSQL-backed store from the guarded Prisma client.
+- **Line 80:** Human-readable comment: Converts database dates to API text and removes the internal owner field. This explanation does not execute.
+- **Line 81:** Removes the private owner field, normalizes null audience to Unspecified, and serializes the timestamp as ISO text for React.
+- **Line 82:** Human-readable comment: Converts attachment dates to API text without exposing the internal owner field. This explanation does not execute.
+- **Line 83:** Same for attachments.
+- **Line 84:** Human-readable comment: Verifies attachment ownership and updates the chosen set inside the enclosing lesson transaction. This explanation does not execute.
+- **Line 85:** PostgreSQL attach also takes the owner.
+- **Line 86:** Remembers the lesson’s current attachments.
+- **Line 87:** Will hold the ids that stay.
+- **Line 88:** Goes through the new list with positions.
+- **Line 89:** An item with an id is an existing attachment.
+- **Line 90:** Reads the attachment’s lesson and owner.
 
 ### Lines 91–120
 
 ```text
-91 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
-92 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
-93 |         keep.add(item.id);
-94 |       } else {
-95 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, owner_id: ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
-96 |         keep.add(created.id);
-97 |       }
-98 |     }
-99 |     const stale = before.filter(id => !keep.has(id));
-100 |     if (stale.length) await tx.lessonMedia.deleteMany({ where: { id: { in: stale } } });
-101 |   }
-102 |   // Bounds how long an atomic database operation can wait or run.
-103 |   const transaction = work => client.$transaction(work, { timeout: 30000, maxWait: 10000 });
-104 |   return {
-105 |     // Lists only this owner's records, preventing one account from seeing another's data.
-106 |     list: async ownerId => (await client.lesson.findMany({ where: { owner_id: ownerId }, orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
-107 |     // Creates the lesson and its attachments together so a partial save cannot survive.
-108 |     create: (ownerId, lesson, media) => transaction(async tx => {
-109 |       const created = await tx.lesson.create({ data: { ...lesson, owner_id: ownerId } });
-110 |       if (media) await attach(tx, ownerId, created.id, media);
-111 |       return serialize(created);
-112 |     }),
-113 |     // Updates the cards and sends their combined text back to the parent form.
-114 |     update: (ownerId, id, lesson, media) => transaction(async tx => {
-115 |       let updated;
-116 |       try { updated = await tx.lesson.update({ where: { id, owner_id: ownerId }, data: lesson }); }
-117 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
-118 |       if (media) await attach(tx, ownerId, id, media);
-119 |       return serialize(updated);
-120 |     }),
+91 |         // Reject attachments from another owner or lesson before changing any saved media.
+92 |         if (!row || row.owner_id !== ownerId || (row.lesson_id !== null && row.lesson_id !== lessonId)) throw missingMedia();
+93 |         await tx.lessonMedia.update({ where: { id: item.id }, data: { lesson_id: lessonId, position, title: item.title, activity: item.activity } });
+94 |         keep.add(item.id);
+95 |       } else {
+96 |         const created = await tx.lessonMedia.create({ data: { lesson_id: lessonId, owner_id: ownerId, position, kind: item.kind, origin: item.origin, url: item.url, title: item.title, activity: item.activity, credit: item.credit || '', source_page: item.source_page || null }, select: { id: true } });
+97 |         keep.add(created.id);
+98 |       }
+99 |     }
+100 |     const stale = before.filter(id => !keep.has(id));
+101 |     if (stale.length) await tx.lessonMedia.deleteMany({ where: { id: { in: stale } } });
+102 |   }
+103 |   // Bounds how long an atomic database operation can wait or run.
+104 |   const transaction = work => client.$transaction(work, { timeout: 30000, maxWait: 10000 });
+105 |   return {
+106 |     // Lists only this owner's records, preventing one account from seeing another's data.
+107 |     list: async ownerId => (await client.lesson.findMany({ where: { owner_id: ownerId }, orderBy: [{ created_at: 'desc' }, { id: 'desc' }] })).map(serialize),
+108 |     // Creates the lesson and its attachments together so a partial save cannot survive.
+109 |     create: (ownerId, lesson, media) => transaction(async tx => {
+110 |       const created = await tx.lesson.create({ data: { ...lesson, ...fitnessFields(lesson), owner_id: ownerId } });
+111 |       if (media) await attach(tx, ownerId, created.id, media);
+112 |       return serialize(created);
+113 |     }),
+114 |     // Updates the same owned lesson and its optional metadata in one transaction.
+115 |     update: (ownerId, id, lesson, media) => transaction(async tx => {
+116 |       let updated;
+117 |       try { updated = await tx.lesson.update({ where: { id, owner_id: ownerId }, data: { ...lesson, ...fitnessFields(lesson) } }); }
+118 |       catch (error) { if (error.code === 'P2025') return null; throw error; }
+119 |       if (media) await attach(tx, ownerId, id, media);
+120 |       return serialize(updated);
 ```
 
-- **Line 91:** Same ownership rule as the SQLite store.
-- **Line 92:** Attaches it and updates caption, activity and position.
-- **Line 93:** Remembers to keep it.
-- **Line 94:** Otherwise it is a new link.
-- **Line 95:** Creates the link attachment with its owner.
-- **Line 96:** Remembers its id.
-- **Line 97:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 91:** Human-readable comment: Reject attachments from another owner or lesson before changing any saved media. This explanation does not execute.
+- **Line 92:** Same ownership rule as the SQLite store.
+- **Line 93:** Attaches it and updates caption, activity and position.
+- **Line 94:** Remembers to keep it.
+- **Line 95:** Otherwise it is a new link.
+- **Line 96:** Creates the link attachment with its owner.
+- **Line 97:** Remembers its id.
 - **Line 98:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 99:** Works out which previous attachments are no longer wanted.
-- **Line 100:** Deletes them if there are any.
-- **Line 101:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 102:** Human-readable comment: Bounds how long an atomic database operation can wait or run. This explanation does not execute.
-- **Line 103:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
-- **Line 104:** Returns an object containing the fixture's helper functions.
-- **Line 105:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
-- **Line 106:** Lists only the owner’s lessons.
-- **Line 107:** Human-readable comment: Creates the lesson and its attachments together so a partial save cannot survive. This explanation does not execute.
-- **Line 108:** Create now takes the owner first.
-- **Line 109:** Creates the lesson with its owner id.
-- **Line 110:** Attaches media for the same owner.
-- **Line 111:** Returns the lesson in the API format.
-- **Line 112:** Ends the transaction callback.
-- **Line 113:** Human-readable comment: Updates the cards and sends their combined text back to the parent form. This explanation does not execute.
-- **Line 114:** Update now takes the owner first.
-- **Line 115:** Will hold the updated lesson.
-- **Line 116:** Updates the lesson only where both the id and the owner match; Prisma reports “record not found” (turned into null) otherwise.
-- **Line 117:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
-- **Line 118:** Attaches media for the owner.
-- **Line 119:** Returns the updated lesson.
-- **Line 120:** Ends the transaction callback.
+- **Line 99:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 100:** Works out which previous attachments are no longer wanted.
+- **Line 101:** Deletes them if there are any.
+- **Line 102:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 103:** Human-readable comment: Bounds how long an atomic database operation can wait or run. This explanation does not execute.
+- **Line 104:** Helper that runs work in a Prisma transaction with generous time limits, because uploads of large files can take a while.
+- **Line 105:** Returns an object containing the fixture's helper functions.
+- **Line 106:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
+- **Line 107:** Lists only the owner’s lessons.
+- **Line 108:** Human-readable comment: Creates the lesson and its attachments together so a partial save cannot survive. This explanation does not execute.
+- **Line 109:** Create now takes the owner first.
+- **Line 110:** Creates an owned PostgreSQL lesson with normalized optional Fitness fields inside the existing transaction.
+- **Line 111:** Attaches media for the same owner.
+- **Line 112:** Returns the lesson in the API format.
+- **Line 113:** Ends the transaction callback.
+- **Line 114:** Human-readable comment: Updates the same owned lesson and its optional metadata in one transaction. It does not execute.
+- **Line 115:** Update now takes the owner first.
+- **Line 116:** Will hold the updated lesson.
+- **Line 117:** Updates the same owned record and clears stale Fitness metadata when saving a different discipline.
+- **Line 118:** Translates Prisma's missing-record error into null; other database failures are rethrown for generic API error handling.
+- **Line 119:** Attaches media for the owner.
+- **Line 120:** Returns the updated lesson.
 
-### Lines 121–143
+### Lines 121–144
 
 ```text
-121 |     // Removes the selected item only through this explicit handler.
-122 |     remove: (ownerId, id) => transaction(async tx => {
-123 |       if (!await tx.lesson.findFirst({ where: { id, owner_id: ownerId }, select: { id: true } })) return false;
-124 |       await tx.lessonMedia.deleteMany({ where: { lesson_id: id } });
-125 |       return (await tx.lesson.deleteMany({ where: { id, owner_id: ownerId } })).count > 0;
-126 |     }),
-127 |     media: {
-128 |       // Lists only this owner's records, preventing one account from seeing another's data.
-129 |       list: async ownerId => (await client.lessonMedia.findMany({ where: { owner_id: ownerId, lesson_id: { not: null } }, orderBy: [{ lesson_id: 'asc' }, { position: 'asc' }, { id: 'asc' }], select: publicSelect })).map(serializeMedia),
-130 |       // Stores an upload as pending until it is attached to a saved lesson.
-131 |       addUpload: async (ownerId, { kind, mime, title, data }) => serializeMedia(await client.lessonMedia.create({ data: { owner_id: ownerId, kind, origin: 'upload', title, mime, size_bytes: data.length, data }, select: publicSelect })),
-132 |       // Returns upload bytes only when the requested file belongs to this owner.
-133 |       getFile: async (ownerId, id) => {
-134 |         const row = await client.lessonMedia.findFirst({ where: { id, owner_id: ownerId, origin: 'upload' }, select: { mime: true, data: true } });
-135 |         return row ? { mime: row.mime, data: Buffer.from(row.data) } : null;
-136 |       },
-137 |       // Deletes only a pending upload owned by the caller, not a saved lesson attachment.
-138 |       removeOrphan: async (ownerId, id) => (await client.lessonMedia.deleteMany({ where: { id, owner_id: ownerId, lesson_id: null, origin: 'upload' } })).count > 0,
-139 |       // Removes old unattached uploads so abandoned drafts do not grow storage forever.
-140 |       purgeOrphans: async maxAgeMs => (await client.lessonMedia.deleteMany({ where: { lesson_id: null, created_at: { lt: new Date(Date.now() - maxAgeMs) } } })).count,
-141 |     },
-142 |   };
-143 | }
+121 |     }),
+122 |     // Removes the selected item only through this explicit handler.
+123 |     remove: (ownerId, id) => transaction(async tx => {
+124 |       if (!await tx.lesson.findFirst({ where: { id, owner_id: ownerId }, select: { id: true } })) return false;
+125 |       await tx.lessonMedia.deleteMany({ where: { lesson_id: id } });
+126 |       return (await tx.lesson.deleteMany({ where: { id, owner_id: ownerId } })).count > 0;
+127 |     }),
+128 |     media: {
+129 |       // Lists only this owner's records, preventing one account from seeing another's data.
+130 |       list: async ownerId => (await client.lessonMedia.findMany({ where: { owner_id: ownerId, lesson_id: { not: null } }, orderBy: [{ lesson_id: 'asc' }, { position: 'asc' }, { id: 'asc' }], select: publicSelect })).map(serializeMedia),
+131 |       // Stores an upload as pending until it is attached to a saved lesson.
+132 |       addUpload: async (ownerId, { kind, mime, title, data }) => serializeMedia(await client.lessonMedia.create({ data: { owner_id: ownerId, kind, origin: 'upload', title, mime, size_bytes: data.length, data }, select: publicSelect })),
+133 |       // Returns upload bytes only when the requested file belongs to this owner.
+134 |       getFile: async (ownerId, id) => {
+135 |         const row = await client.lessonMedia.findFirst({ where: { id, owner_id: ownerId, origin: 'upload' }, select: { mime: true, data: true } });
+136 |         return row ? { mime: row.mime, data: Buffer.from(row.data) } : null;
+137 |       },
+138 |       // Deletes only a pending upload owned by the caller, not a saved lesson attachment.
+139 |       removeOrphan: async (ownerId, id) => (await client.lessonMedia.deleteMany({ where: { id, owner_id: ownerId, lesson_id: null, origin: 'upload' } })).count > 0,
+140 |       // Removes old unattached uploads so abandoned drafts do not grow storage forever.
+141 |       purgeOrphans: async maxAgeMs => (await client.lessonMedia.deleteMany({ where: { lesson_id: null, created_at: { lt: new Date(Date.now() - maxAgeMs) } } })).count,
+142 |     },
+143 |   };
+144 | }
 ```
 
-- **Line 121:** Human-readable comment: Removes the selected item only through this explicit handler. This explanation does not execute.
-- **Line 122:** Delete now runs in a transaction and takes the owner first.
-- **Line 123:** Returns false without changing anything when the lesson is not this owner’s.
-- **Line 124:** Deletes the lesson’s attachments.
-- **Line 125:** Deletes the lesson where the id and owner match.
-- **Line 126:** Ends the transaction callback.
-- **Line 127:** Starts the media functions for the PostgreSQL store.
-- **Line 128:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
-- **Line 129:** Lists the owner’s attachments.
-- **Line 130:** Human-readable comment: Stores an upload as pending until it is attached to a saved lesson. This explanation does not execute.
-- **Line 131:** Stores an upload for the owner.
-- **Line 132:** Human-readable comment: Returns upload bytes only when the requested file belongs to this owner. This explanation does not execute.
-- **Line 133:** Fetches a file for the owner.
-- **Line 134:** Finds the file only if the owner matches.
-- **Line 135:** Returns them with the bytes as a Buffer, or null when it does not exist.
-- **Line 136:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
-- **Line 137:** Human-readable comment: Deletes only a pending upload owned by the caller, not a saved lesson attachment. This explanation does not execute.
-- **Line 138:** Deletes an unsaved upload only if the owner matches.
-- **Line 139:** Human-readable comment: Removes old unattached uploads so abandoned drafts do not grow storage forever. This explanation does not execute.
-- **Line 140:** Deletes unattached uploads older than a given age.
-- **Line 141:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 121:** Ends the transaction callback.
+- **Line 122:** Human-readable comment: Removes the selected item only through this explicit handler. This explanation does not execute.
+- **Line 123:** Delete now runs in a transaction and takes the owner first.
+- **Line 124:** Returns false without changing anything when the lesson is not this owner’s.
+- **Line 125:** Deletes the lesson’s attachments.
+- **Line 126:** Deletes the lesson where the id and owner match.
+- **Line 127:** Ends the transaction callback.
+- **Line 128:** Starts the media functions for the PostgreSQL store.
+- **Line 129:** Human-readable comment: Lists only this owner's records, preventing one account from seeing another's data. This explanation does not execute.
+- **Line 130:** Lists the owner’s attachments.
+- **Line 131:** Human-readable comment: Stores an upload as pending until it is attached to a saved lesson. This explanation does not execute.
+- **Line 132:** Stores an upload for the owner.
+- **Line 133:** Human-readable comment: Returns upload bytes only when the requested file belongs to this owner. This explanation does not execute.
+- **Line 134:** Fetches a file for the owner.
+- **Line 135:** Finds the file only if the owner matches.
+- **Line 136:** Returns them with the bytes as a Buffer, or null when it does not exist.
+- **Line 137:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 138:** Human-readable comment: Deletes only a pending upload owned by the caller, not a saved lesson attachment. This explanation does not execute.
+- **Line 139:** Deletes an unsaved upload only if the owner matches.
+- **Line 140:** Human-readable comment: Removes old unattached uploads so abandoned drafts do not grow storage forever. This explanation does not execute.
+- **Line 141:** Deletes unattached uploads older than a given age.
 - **Line 142:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 - **Line 143:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
+- **Line 144:** Closes the preceding block, callback, object or array. A following parenthesis closes the function call and a semicolon ends the statement; no new operation runs here.
 
 ## server/lesson-ui.test.js
 
@@ -13170,16 +13234,16 @@ Audience support: this file connects the optional class-group field to validatio
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\lesson-view.js`
 
-Builds dashboard filters and readable timelines from existing lesson fields.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–14
 
 ```text
 1 | // Builds dashboard filters and readable timelines from existing lesson fields.
-2 | export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Personal Training'];
+2 | export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Fitness', 'Personal Training'];
 3 | // Combines discipline and audience filters without changing the saved list.
-4 | export function filterLessons(lessons, audience, discipline) {
-5 |   return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline));
+4 | export function filterLessons(lessons, audience, discipline, classType = 'All') {
+5 |   return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline) && (discipline !== 'Fitness' || classType === 'All' || (lesson.class_type || 'Unspecified') === classType));
 6 | }
 7 | // Separates heading, minutes and cues while preserving each activity's media index.
 8 | export function timelineEntries(blocks) {
@@ -13192,10 +13256,10 @@ Builds dashboard filters and readable timelines from existing lesson fields.
 ```
 
 - **Line 1:** Human-readable comment: Builds dashboard filters and readable timelines from existing lesson fields. This explanation does not execute.
-- **Line 2:** Exports the six discipline values in the requested navigation order. BJJ uses its full stored name.
+- **Line 2:** Keeps legacy navigation available and adds the new Fitness tab.
 - **Line 3:** Human-readable comment: Combines discipline and audience filters without changing the saved list. This explanation does not execute.
-- **Line 4:** Exports a pure filtering function receiving lessons and both selections.
-- **Line 5:** Keeps a lesson only when both filters match. All bypasses a filter; ?? normalizes missing audience without mutating the record.
+- **Line 4:** Adds an optional class-type filter while retaining the original three-argument behavior through its All default.
+- **Line 5:** Filters a new array by audience and discipline; the class-type condition applies only inside Fitness and treats missing metadata as Unspecified.
 - **Line 6:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 7:** Human-readable comment: Separates heading, minutes and cues while preserving each activity's media index. This explanation does not execute.
 - **Line 8:** Exports a display-only timeline parser for existing activity text.
@@ -13644,41 +13708,41 @@ Keeps search results open for multi-selection; approval opens the editor rather 
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\video-suggestions.js`
 
-Builds lesson-based video searches, checks candidates and enforces owner access and limits.
+Fitness integration: connects optional Fitness metadata to the existing lesson workflow while retaining legacy Personal Training support.
 
 ### Lines 1–30
 
 ```text
 1 | // Builds lesson-based video searches, checks candidates and enforces owner access and limits.
-2 | import { catalogCandidates, youtubeCandidates } from './media-finder.js';
-3 | import { verifyLink } from './media-verify.js';
-4 | import { youtubeId } from '../client/src/media.js';
-5 | import { youtubeQuota as defaultQuota, YouTubeQuotaError } from './youtube-quota.js';
-6 |
-7 | const techniques = ['jab', 'cross', 'hook', 'uppercut', 'footwork', 'slip', 'parry', 'roundhouse', 'teep', 'clinch', 'knee strike', 'elbow strike', 'double leg', 'single leg', 'sprawl', 'pummel', 'breakfall', 'shrimp', 'bridge', 'guard pass', 'knee cut', 'half guard', 'kimura', 'armbar', 'triangle', 'squat', 'lunge', 'deadlift', 'push up', 'pull up', 'plank', 'row', 'balance', 'mobility'];
-8 | const filler = new Set('a an the and or to of for with from using use used on in at by is are be this that lesson class training goal objective techniques technique activity activities section sections cues coaching notes minutes minute drills drill practice slowly carefully please learn teach demonstrate common mistakes easier harder option avoid no not opponent students student coach'.split(' '));
-9 | // Extracts useful phrases from lesson text while keeping audience context and Kids exclusions.
-10 | export function lessonVideoQuery(lesson) {
-11 |   const fields = [lesson.title, lesson.goal, lesson.techniques, lesson.drills, lesson.coaching_notes];
-12 |   const ranked = new Map();
-13 |   for (const [index, field] of fields.entries()) {
-14 |     const text = String(field || '').slice(0, 16000).toLowerCase().replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.\w+|\b\d[\d ()+-]{7,}\d\b/g, ' ').replace(/\b(?:named|name is)\s+[a-z]+(?:\s+[a-z]+)?/g, ' ').replace(/[-–—]/g, ' ');
-15 |     for (const sentence of text.split(/[\n.!?;:,]+/)) {
-16 |       let words = [];
-17 |       // Scores a bounded phrase so useful lesson terms survive filler removal.
-18 |       const keep = () => {
-19 |         if (!words.length) return;
-20 |         const phrase = words.slice(0, 4).join(' ');
-21 |         const score = (index === 0 ? 12 : index === 1 ? 9 : 5) + words.length + (techniques.some(name => phrase.includes(name)) ? 3 : 0);
-22 |         ranked.set(phrase, Math.max(ranked.get(phrase) || 0, score));
-23 |         words = [];
-24 |       };
-25 |       for (const word of sentence.match(/[a-z]+/g) || []) { if (['a', 'an', 'the'].includes(word)) continue; if (filler.has(word) || word.length < 2) keep(); else { words.push(word); if (words.length === 4) keep(); } }
-26 |       keep();
-27 |     }
-28 |   }
-29 |   // Keep Kids exclusions before selecting the phrases sent to YouTube.
-30 |   const eligible = [...ranked].filter(([phrase]) => lesson.audience !== 'Kids' || !/\b(kimuras?|armbars?|triangles?|chokes?|submissions?|sparring|clinch|elbows?|head|contact|knee strike|heel hook|kneebar)\b/.test(phrase));
+2 | import { fitnessLabel } from '../client/src/fitness.js';
+3 | import { catalogCandidates, youtubeCandidates } from './media-finder.js';
+4 | import { verifyLink } from './media-verify.js';
+5 | import { youtubeId } from '../client/src/media.js';
+6 | import { youtubeQuota as defaultQuota, YouTubeQuotaError } from './youtube-quota.js';
+7 |
+8 | const techniques = ['jab', 'cross', 'hook', 'uppercut', 'footwork', 'slip', 'parry', 'roundhouse', 'teep', 'clinch', 'knee strike', 'elbow strike', 'double leg', 'single leg', 'sprawl', 'pummel', 'breakfall', 'shrimp', 'bridge', 'guard pass', 'knee cut', 'half guard', 'kimura', 'armbar', 'triangle', 'squat', 'lunge', 'deadlift', 'push up', 'pull up', 'plank', 'row', 'balance', 'mobility'];
+9 | const filler = new Set('a an the and or to of for with from using use used on in at by is are be this that lesson class training goal objective techniques technique activity activities section sections cues coaching notes minutes minute drills drill practice slowly carefully please learn teach demonstrate common mistakes easier harder option avoid no not opponent students student coach'.split(' '));
+10 | // Extracts useful phrases from lesson text while keeping audience context and Kids exclusions.
+11 | export function lessonVideoQuery(lesson) {
+12 |   const fields = [lesson.title, lesson.goal, lesson.techniques, lesson.drills, lesson.coaching_notes, lesson.discipline === 'Fitness' ? fitnessLabel(lesson) : ''];
+13 |   const ranked = new Map();
+14 |   for (const [index, field] of fields.entries()) {
+15 |     const text = String(field || '').slice(0, 16000).toLowerCase().replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.\w+|\b\d[\d ()+-]{7,}\d\b/g, ' ').replace(/\b(?:named|name is)\s+[a-z]+(?:\s+[a-z]+)?/g, ' ').replace(/[-–—]/g, ' ');
+16 |     for (const sentence of text.split(/[\n.!?;:,]+/)) {
+17 |       let words = [];
+18 |       // Scores a bounded phrase so useful lesson terms survive filler removal.
+19 |       const keep = () => {
+20 |         if (!words.length) return;
+21 |         const phrase = words.slice(0, 4).join(' ');
+22 |         const score = (index === 0 ? 12 : index === 1 ? 9 : 5) + words.length + (techniques.some(name => phrase.includes(name)) ? 3 : 0);
+23 |         ranked.set(phrase, Math.max(ranked.get(phrase) || 0, score));
+24 |         words = [];
+25 |       };
+26 |       for (const word of sentence.match(/[a-z]+/g) || []) { if (['a', 'an', 'the'].includes(word)) continue; if (filler.has(word) || word.length < 2) keep(); else { words.push(word); if (words.length === 4) keep(); } }
+27 |       keep();
+28 |     }
+29 |   }
+30 |   // Keep Kids exclusions before selecting the phrases sent to YouTube.
 ```
 
 - **Line 1:** Human-readable comment: Builds lesson-based video searches, checks candidates and enforces owner access and limits. This explanation does not execute.
@@ -13686,179 +13750,185 @@ Builds lesson-based video searches, checks candidates and enforces owner access 
 - **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
-- **Line 6:** Blank line separates related operations for readability.
-- **Line 7:** Lists recognized generic technique names across the six disciplines. This allowlist prevents arbitrary raw lesson text or personal information being sent to search; unsupported names produce a friendly no-results path.
-- **Line 8:** Defines filler words that separate meaningful phrases, including common lesson-section labels; the set supports fast membership checks.
-- **Line 9:** Human-readable comment: Extracts useful phrases from lesson text while keeping audience context and Kids exclusions. This explanation does not execute.
-- **Line 10:** Exports the deterministic query builder, which does not call AI or any external service.
-- **Line 11:** Collects title, training goal, optional techniques, activity text with names/cues, and coaching notes for local extraction.
-- **Line 12:** Creates a map from candidate phrase to its highest score, deduplicating repeated text.
-- **Line 13:** Iterates over fields with their positions so title and goal can receive greater ranking weight.
-- **Line 14:** Bounds each field to 16000 characters, lowercases it, removes obvious links/emails/phone-like numbers and explicit name introductions, and normalizes dashes. This is heuristic redaction, not a guarantee that all personal information is detected.
-- **Line 15:** Splits each field at line breaks and sentence punctuation to keep phrases within short passages.
-- **Line 16:** Starts a temporary list of meaningful words for the current sentence.
-- **Line 17:** Human-readable comment: Scores a bounded phrase so useful lesson terms survive filler removal. This explanation does not execute.
-- **Line 18:** Defines a local function that scores and retains the current phrase.
-- **Line 19:** Does nothing when no meaningful words have accumulated.
-- **Line 20:** Joins at most four words to form a bounded candidate phrase.
-- **Line 21:** Scores title phrases highest, then goal phrases, with smaller weights elsewhere; length and recognized technique hints add bonuses without excluding unknown terms.
-- **Line 22:** Stores the greater score for a repeated phrase rather than duplicating it.
-- **Line 23:** Clears the word buffer after retaining a phrase.
-- **Line 24:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 25:** Extracts alphabetic words, skips articles without breaking phrases, ends a phrase at other filler/short words, and stores each four-word chunk. This keeps close the distance together as close distance.
-- **Line 26:** Stores any final words remaining at the sentence end.
-- **Line 27:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Blank line separates related operations for readability.
+- **Line 8:** Lists recognized generic technique names across the six disciplines. This allowlist prevents arbitrary raw lesson text or personal information being sent to search; unsupported names produce a friendly no-results path.
+- **Line 9:** Defines filler words that separate meaningful phrases, including common lesson-section labels; the set supports fast membership checks.
+- **Line 10:** Human-readable comment: Extracts useful phrases from lesson text while keeping audience context and Kids exclusions. This explanation does not execute.
+- **Line 11:** Exports the deterministic query builder, which does not call AI or any external service.
+- **Line 12:** Includes Fitness class type or custom label among the existing lesson-text sources for search phrase extraction.
+- **Line 13:** Creates a map from candidate phrase to its highest score, deduplicating repeated text.
+- **Line 14:** Iterates over fields with their positions so title and goal can receive greater ranking weight.
+- **Line 15:** Bounds each field to 16000 characters, lowercases it, removes obvious links/emails/phone-like numbers and explicit name introductions, and normalizes dashes. This is heuristic redaction, not a guarantee that all personal information is detected.
+- **Line 16:** Splits each field at line breaks and sentence punctuation to keep phrases within short passages.
+- **Line 17:** Starts a temporary list of meaningful words for the current sentence.
+- **Line 18:** Human-readable comment: Scores a bounded phrase so useful lesson terms survive filler removal. This explanation does not execute.
+- **Line 19:** Defines a local function that scores and retains the current phrase.
+- **Line 20:** Does nothing when no meaningful words have accumulated.
+- **Line 21:** Joins at most four words to form a bounded candidate phrase.
+- **Line 22:** Scores title phrases highest, then goal phrases, with smaller weights elsewhere; length and recognized technique hints add bonuses without excluding unknown terms.
+- **Line 23:** Stores the greater score for a repeated phrase rather than duplicating it.
+- **Line 24:** Clears the word buffer after retaining a phrase.
+- **Line 25:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 26:** Extracts alphabetic words, skips articles without breaking phrases, ends a phrase at other filler/short words, and stores each four-word chunk. This keeps close the distance together as close distance.
+- **Line 27:** Stores any final words remaining at the sentence end.
 - **Line 28:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 29:** Human-readable comment: Keep Kids exclusions before selecting the phrases sent to YouTube. This explanation does not execute.
-- **Line 30:** Removes risky submission/contact phrases for Kids, including plurals and the prior knee-strike restriction, before selecting queries. Video suitability still needs coach review.
+- **Line 29:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 30:** Human-readable comment: Keep Kids exclusions before selecting the phrases sent to YouTube. This explanation does not execute.
 
 ### Lines 31–60
 
 ```text
-31 |   const phrases = eligible.filter(([phrase]) => !eligible.some(([other]) => other !== phrase && (' ' + other + ' ').includes(' ' + phrase + ' '))).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([phrase]) => phrase);
-32 |   if (!phrases.length) return null;
-33 |   return { phrases, technique: phrases.slice(0, 2).join(' '), audience: lesson.audience === 'Kids' ? 'kids non contact' : lesson.audience === 'Adults' ? 'adults' : 'beginners' };
-34 | }
-35 |
-36 | // Logs only explicit safe fields; never pass keys, full request URLs or raw errors here.
-37 | export const videoDiagnostic = (event, fields) => console.info('[CoachLab videos]', event, JSON.stringify(fields));
-38 | // Checks catalog matches first, then searches once and keeps reviewed choices separate from saving.
-39 | export async function suggestLessonVideos(lesson, { env = process.env, verify = verifyLink, search, reserveSearch, diagnostic = videoDiagnostic } = {}) {
-40 |   const query = lessonVideoQuery(lesson);
-41 |   const key = (env.YOUTUBE_API_KEY || '').trim();
-42 |   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
-43 |   // Lead with technique words; audience and goal context should not bury the main search subject.
-44 |   const searchTerms = query ? `${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
-45 |   diagnostic('start', { key_present: !!key, search_terms: searchTerms, match_terms: matchTerms });
-46 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
-47 |   const videos = [];
-48 |   let checked = 0;
-49 |   // Verifies the best candidates and keeps failed playback checks as clearly unverified watch links.
-50 |   const check = async candidates => {
-51 |     for (const candidate of candidates.slice(0, 5)) {
-52 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
-53 |       checked++;
-54 |       try {
-55 |         const info = await verify(candidate.url);
-56 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
-57 |       // An unavailable playback check is not proof of a playable video; show a clearly unverified watch link.
-58 |       } catch {
-59 |         const url = `https://www.youtube.com/watch?v=${youtubeId(candidate.url)}`;
-60 |         videos.push({ kind: 'youtube', origin: 'suggested', url, title: candidate.title, activity: '', link_only: true });
+31 |   const eligible = [...ranked].filter(([phrase]) => lesson.audience !== 'Kids' || !/\b(kimuras?|armbars?|triangles?|chokes?|submissions?|sparring|clinch|elbows?|head|contact|knee strike|heel hook|kneebar)\b/.test(phrase));
+32 |   const phrases = eligible.filter(([phrase]) => !eligible.some(([other]) => other !== phrase && (' ' + other + ' ').includes(' ' + phrase + ' '))).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([phrase]) => phrase);
+33 |   if (!phrases.length) return null;
+34 |   return { phrases, technique: phrases.slice(0, 2).join(' '), audience: lesson.audience === 'Kids' ? 'kids non contact' : lesson.audience === 'Adults' ? 'adults' : 'beginners' };
+35 | }
+36 |
+37 | // Logs only explicit safe fields; never pass keys, full request URLs or raw errors here.
+38 | export const videoDiagnostic = (event, fields) => console.info('[CoachLab videos]', event, JSON.stringify(fields));
+39 | // Checks catalog matches first, then searches once and keeps reviewed choices separate from saving.
+40 | export async function suggestLessonVideos(lesson, { env = process.env, verify = verifyLink, search, reserveSearch, diagnostic = videoDiagnostic } = {}) {
+41 |   const query = lessonVideoQuery(lesson);
+42 |   const key = (env.YOUTUBE_API_KEY || '').trim();
+43 |   const matchTerms = query ? [...query.phrases].sort((a, b) => b.split(' ').length - a.split(' ').length)[0] : '';
+44 |   // Lead with technique words; audience and goal context should not bury the main search subject.
+45 |   const classTerms = lesson.class_type === 'Other' ? lessonVideoQuery({ title: fitnessLabel(lesson), audience: lesson.audience })?.technique || '' : fitnessLabel(lesson);
+46 |   const fitnessContext = lesson.discipline === 'Fitness' ? `${classTerms} ${lesson.skill_level || 'Beginner'} ${lesson.class_format || ''} ${/kickboxing|boxing fitness/i.test(lesson.class_type || '') ? 'non contact' : ''}`.trim() : '';
+47 |   const searchTerms = query ? `${fitnessContext ? fitnessContext + ' ' : ''}${matchTerms} ${lesson.discipline} drill ${query.audience} ${query.phrases.filter(phrase => phrase !== matchTerms).slice(0, 1).join(' ')}`.trim() : '';
+48 |   diagnostic('start', { key_present: !!key, search_terms: searchTerms, match_terms: matchTerms });
+49 |   if (!query) return { videos: [], message: 'No useful technique details found. Add a clear title or activity description, then save and try again. You can also paste a video link in Edit lesson.' };
+50 |   const videos = [];
+51 |   let checked = 0;
+52 |   // Verifies the best candidates and keeps failed playback checks as clearly unverified watch links.
+53 |   const check = async candidates => {
+54 |     for (const candidate of candidates.slice(0, 5)) {
+55 |       if (!youtubeId(candidate.url) || videos.some(item => youtubeId(item.url) === youtubeId(candidate.url))) continue;
+56 |       checked++;
+57 |       try {
+58 |         const info = await verify(candidate.url);
+59 |         if (info.kind === 'youtube') videos.push({ ...info, origin: 'suggested', title: info.title || candidate.title, activity: '', credit: info.credit || candidate.credit, source_page: candidate.source_page });
+60 |       // An unavailable playback check is not proof of a playable video; show a clearly unverified watch link.
 ```
 
-- **Line 31:** Drops a shorter phrase wholly contained within another candidate, sorts by descending score, and retains up to four distinct phrases.
-- **Line 32:** Returns null when no useful eligible phrase remains.
-- **Line 33:** Returns the ranked phrases, combines the top two for a compact search, and adds fixed Kids/non-contact, Adults or unspecified/beginner audience context.
-- **Line 34:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 35:** Blank line separates related operations for readability.
-- **Line 36:** Human-readable comment: Logs only explicit safe fields; never pass keys, full request URLs or raw errors here. This explanation does not execute.
-- **Line 37:** Defines the server console diagnostic writer with a consistent prefix, event label and JSON fields. Callers supply only the explicitly selected safe data.
-- **Line 38:** Human-readable comment: Checks catalog matches first, then searches once and keeps reviewed choices separate from saving. This explanation does not execute.
-- **Line 39:** Adds an injectable diagnostic sink to the existing finder, defaulting to the prefixed server logger.
-- **Line 40:** Builds a safe query description from the saved lesson.
-- **Line 41:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
-- **Line 42:** Selects the longest extracted phrase for title matching, preferring inside leg kicks over the higher-ranked but generic close distance in the reported example.
-- **Line 43:** Human-readable comment: Lead with technique words; audience and goal context should not bury the main search subject. This explanation does not execute.
-- **Line 44:** Builds technique-first search text followed by discipline, drill, audience and at most one additional context phrase; trim removes leftover end spaces, and absent query yields empty text.
-- **Line 45:** Logs only key presence and the derived search/match terms through the existing diagnostic helper.
-- **Line 46:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
-- **Line 47:** Creates an empty result array for verified video metadata.
-- **Line 48:** Initializes the number of playback checks actually attempted.
-- **Line 49:** Human-readable comment: Verifies the best candidates and keeps failed playback checks as clearly unverified watch links. This explanation does not execute.
-- **Line 50:** Defines an asynchronous helper to check a bounded candidate list.
-- **Line 51:** Checks no more than the first five candidates serially to limit requests and memory.
-- **Line 52:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
-- **Line 53:** Counts each unique valid candidate immediately before trying its playback check.
-- **Line 54:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
-- **Line 55:** Runs the existing safe link verification, including YouTube oEmbed validation.
-- **Line 56:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
-- **Line 57:** Human-readable comment: An unavailable playback check is not proof of a playable video; show a clearly unverified watch link. This explanation does not execute.
-- **Line 58:** Catches failure without including private exception details in public hosting logs.
-- **Line 59:** Reconstructs a canonical public YouTube watch URL from the validated video ID after a playback-check failure.
-- **Line 60:** Keeps failed-check candidates as suggested link-only metadata; the frontend cannot approve these as verified attachments.
+- **Line 31:** Removes risky submission/contact phrases for Kids, including plurals and the prior knee-strike restriction, before selecting queries. Video suitability still needs coach review.
+- **Line 32:** Drops a shorter phrase wholly contained within another candidate, sorts by descending score, and retains up to four distinct phrases.
+- **Line 33:** Returns null when no useful eligible phrase remains.
+- **Line 34:** Returns the ranked phrases, combines the top two for a compact search, and adds fixed Kids/non-contact, Adults or unspecified/beginner audience context.
+- **Line 35:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 36:** Blank line separates related operations for readability.
+- **Line 37:** Human-readable comment: Logs only explicit safe fields; never pass keys, full request URLs or raw errors here. This explanation does not execute.
+- **Line 38:** Defines the server console diagnostic writer with a consistent prefix, event label and JSON fields. Callers supply only the explicitly selected safe data.
+- **Line 39:** Human-readable comment: Checks catalog matches first, then searches once and keeps reviewed choices separate from saving. This explanation does not execute.
+- **Line 40:** Adds an injectable diagnostic sink to the existing finder, defaulting to the prefixed server logger.
+- **Line 41:** Builds a safe query description from the saved lesson.
+- **Line 42:** Reads and trims the existing server-side key for runtime use; only its boolean presence is exposed in diagnostics.
+- **Line 43:** Selects the longest extracted phrase for title matching, preferring inside leg kicks over the higher-ranked but generic close distance in the reported example.
+- **Line 44:** Human-readable comment: Lead with technique words; audience and goal context should not bury the main search subject. This explanation does not execute.
+- **Line 45:** Runs custom Other labels through existing phrase cleanup and Kids exclusions; fixed class-type labels use the known option text.
+- **Line 46:** Adds class type, skill level and format for Fitness searches, explicitly adding non-contact context for boxing fitness and cardio kickboxing.
+- **Line 47:** Puts Fitness context before existing technique, discipline, audience and goal terms; other disciplines keep the established search order.
+- **Line 48:** Logs only key presence and the derived search/match terms through the existing diagnostic helper.
+- **Line 49:** Returns a friendly empty result for lessons without useful details, inviting clearer activity text or manual link entry rather than demanding a recognized technique.
+- **Line 50:** Creates an empty result array for verified video metadata.
+- **Line 51:** Initializes the number of playback checks actually attempted.
+- **Line 52:** Human-readable comment: Verifies the best candidates and keeps failed playback checks as clearly unverified watch links. This explanation does not execute.
+- **Line 53:** Defines an asynchronous helper to check a bounded candidate list.
+- **Line 54:** Checks no more than the first five candidates serially to limit requests and memory.
+- **Line 55:** Skips non-YouTube URLs and duplicate YouTube IDs already accepted into the result list.
+- **Line 56:** Counts each unique valid candidate immediately before trying its playback check.
+- **Line 57:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 58:** Runs the existing safe link verification, including YouTube oEmbed validation.
+- **Line 59:** Accepts only verified YouTube results, marks them suggested, prefers verified title/credit and assigns them to the whole lesson; no save operation occurs.
+- **Line 60:** Human-readable comment: An unavailable playback check is not proof of a playable video; show a clearly unverified watch link. This explanation does not execute.
 
 ### Lines 61–90
 
 ```text
-61 |       }
-62 |     }
-63 |   };
-64 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
-65 |   diagnostic('catalog', { candidates: curated.length, skipped_for_kids: lesson.audience === 'Kids' });
-66 |   if (lesson.audience !== 'Kids') await check(curated);
-67 |   if (!videos.some(item => !item.link_only) && key) {
-68 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
-69 |     await check(await find(searchTerms, lesson.discipline, key));
-70 |   }
-71 |   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
-72 |   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });
-73 |   return { videos: selected, message: selected.length ? 'Review relevance and age suitability. Videos with unconfirmed playback can be opened with Watch on YouTube but cannot be attached until verified. Add opens the editor; Save changes keeps verified videos.' : key ? 'No matches found. Try a simpler technique description or paste a video link.' : 'YouTube search unavailable: the server has no configured YouTube key. You can still paste a video link.' };
-74 | }
-75 |
-76 | // Requires lesson ownership and rate limits before searching on a coach's behalf.
-77 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
-78 |   const users = new Map();
-79 |   let busy = false;
-80 |   // Checks ownership and request limits before suggesting videos for a saved lesson.
-81 |   app.post('/api/lessons/:id/videos', async (request, response) => {
-82 |     videoDiagnostic('request_received', {});
-83 |     // Look up the lesson inside this owner's list to avoid exposing another coach's records.
-84 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
-85 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
-86 |     const time = now();
-87 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
-88 |     const times = users.get(request.user.id) || [];
-89 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
-90 |     users.set(request.user.id, [...times, time]); busy = true;
+61 |       } catch {
+62 |         const url = `https://www.youtube.com/watch?v=${youtubeId(candidate.url)}`;
+63 |         videos.push({ kind: 'youtube', origin: 'suggested', url, title: candidate.title, activity: '', link_only: true });
+64 |       }
+65 |     }
+66 |   };
+67 |   const curated = catalogCandidates(lesson.discipline, {}, [query.technique]).filter(item => youtubeId(item.url));
+68 |   diagnostic('catalog', { candidates: curated.length, skipped_for_kids: lesson.audience === 'Kids' });
+69 |   if (lesson.audience !== 'Kids') await check(curated);
+70 |   if (!videos.some(item => !item.link_only) && key) {
+71 |     const find = search || ((text, discipline, key) => youtubeCandidates(text, discipline, key, fetch, matchTerms, reserveSearch, diagnostic));
+72 |     await check(await find(searchTerms, lesson.discipline, key));
+73 |   }
+74 |   const selected = videos.sort((a, b) => Number(!!a.link_only) - Number(!!b.link_only)).slice(0, 5);
+75 |   diagnostic('playback_checks', { checked, passed: videos.filter(item => !item.link_only).length, link_only: videos.filter(item => item.link_only).length, shown: selected.length });
+76 |   return { videos: selected, message: selected.length ? 'Review relevance and age suitability. Videos with unconfirmed playback can be opened with Watch on YouTube but cannot be attached until verified. Add opens the editor; Save changes keeps verified videos.' : key ? 'No matches found. Try a simpler technique description or paste a video link.' : 'YouTube search unavailable: the server has no configured YouTube key. You can still paste a video link.' };
+77 | }
+78 |
+79 | // Requires lesson ownership and rate limits before searching on a coach's behalf.
+80 | export function registerVideoSuggestions(app, lessons, { videoFinder = suggestLessonVideos, now = Date.now, youtubeQuota = defaultQuota } = {}) {
+81 |   const users = new Map();
+82 |   let busy = false;
+83 |   // Checks ownership and request limits before suggesting videos for a saved lesson.
+84 |   app.post('/api/lessons/:id/videos', async (request, response) => {
+85 |     videoDiagnostic('request_received', {});
+86 |     // Look up the lesson inside this owner's list to avoid exposing another coach's records.
+87 |     const lesson = (await lessons.list(request.user.id)).find(item => item.id === request.lessonId);
+88 |     if (!lesson) return response.status(404).json({ error: 'Lesson not found.' });
+89 |     const time = now();
+90 |     for (const [id, times] of users) { const recent = times.filter(start => time - start < 60000); if (recent.length) users.set(id, recent); else users.delete(id); }
 ```
 
-- **Line 61:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 62:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 63:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 64:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
-- **Line 65:** Logs catalog candidate count and whether Kids context skipped age-unclassified catalog entries.
-- **Line 66:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
-- **Line 67:** Attempts YouTube fallback when no verified video exists and a key is present; link-only catalog results do not masquerade as verified successes.
-- **Line 68:** Wraps existing YouTube search with the selected specific match phrase, shared quota reservation and safe diagnostic callback; tests can still inject search.
-- **Line 69:** Calls the search with the same ordered terms shown in diagnostics, then verifies the highest-ranked returned candidates.
-- **Line 70:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 71:** Sorts verified videos before link-only candidates and caps the displayed list at five.
-- **Line 72:** Logs attempted playback checks, successful checks, link-only fallbacks and displayed result count, without candidate URLs or raw errors.
-- **Line 73:** Returns clear review instructions for candidates, No matches found for a successful empty search, or YouTube search unavailable when no key is configured. Unverified playback cannot bypass attachment verification.
-- **Line 74:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 75:** Blank line separates related operations for readability.
-- **Line 76:** Human-readable comment: Requires lesson ownership and rate limits before searching on a coach's behalf. This explanation does not execute.
-- **Line 77:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
-- **Line 78:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
-- **Line 79:** Tracks whether this route has an external-provider operation in flight.
-- **Line 80:** Human-readable comment: Checks ownership and request limits before suggesting videos for a saved lesson. This explanation does not execute.
-- **Line 81:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
-- **Line 82:** Logs that an authenticated request reached this route without recording user IDs, lesson IDs or request data.
-- **Line 83:** Human-readable comment: Look up the lesson inside this owner's list to avoid exposing another coach's records. This explanation does not execute.
-- **Line 84:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
-- **Line 85:** Returns the same 404 for a missing lesson or one owned by someone else.
-- **Line 86:** Reads the clock once so cleanup and response calculations use a consistent time.
-- **Line 87:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
-- **Line 88:** Loads this coach's recent attempts or uses an empty list for a new coach.
-- **Line 89:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
-- **Line 90:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
+- **Line 61:** Catches failure without including private exception details in public hosting logs.
+- **Line 62:** Reconstructs a canonical public YouTube watch URL from the validated video ID after a playback-check failure.
+- **Line 63:** Keeps failed-check candidates as suggested link-only metadata; the frontend cannot approve these as verified attachments.
+- **Line 64:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 65:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 66:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 67:** Finds discipline-matching catalog candidates using recognized technique names and removes picture URLs.
+- **Line 68:** Logs catalog candidate count and whether Kids context skipped age-unclassified catalog entries.
+- **Line 69:** Verifies catalog candidates for non-kids lessons. Existing catalog entries lack kids suitability metadata, so kids queries skip these adult-oriented entries and use explicit kids search context.
+- **Line 70:** Attempts YouTube fallback when no verified video exists and a key is present; link-only catalog results do not masquerade as verified successes.
+- **Line 71:** Wraps existing YouTube search with the selected specific match phrase, shared quota reservation and safe diagnostic callback; tests can still inject search.
+- **Line 72:** Calls the search with the same ordered terms shown in diagnostics, then verifies the highest-ranked returned candidates.
+- **Line 73:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 74:** Sorts verified videos before link-only candidates and caps the displayed list at five.
+- **Line 75:** Logs attempted playback checks, successful checks, link-only fallbacks and displayed result count, without candidate URLs or raw errors.
+- **Line 76:** Returns clear review instructions for candidates, No matches found for a successful empty search, or YouTube search unavailable when no key is configured. Unverified playback cannot bypass attachment verification.
+- **Line 77:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 78:** Blank line separates related operations for readability.
+- **Line 79:** Human-readable comment: Requires lesson ownership and rate limits before searching on a coach's behalf. This explanation does not execute.
+- **Line 80:** Registers suggestions with an injectable shared quota; production defaults to the single module-level process instance also used by the older media route.
+- **Line 81:** Stores per-user attempt timestamps in memory; no lesson or conversation content is stored here.
+- **Line 82:** Tracks whether this route has an external-provider operation in flight.
+- **Line 83:** Human-readable comment: Checks ownership and request limits before suggesting videos for a saved lesson. This explanation does not execute.
+- **Line 84:** Defines the POST endpoint for a saved lesson ID; shared middleware has already authenticated the caller and validated the ID.
+- **Line 85:** Logs that an authenticated request reached this route without recording user IDs, lesson IDs or request data.
+- **Line 86:** Human-readable comment: Look up the lesson inside this owner's list to avoid exposing another coach's records. This explanation does not execute.
+- **Line 87:** Reads only lessons belonging to the signed-in user and finds the requested ID, so other accounts' lessons cannot be searched.
+- **Line 88:** Returns the same 404 for a missing lesson or one owned by someone else.
+- **Line 89:** Reads the clock once so cleanup and response calculations use a consistent time.
+- **Line 90:** Expires per-coach minute timestamps and removes inactive map entries, bounding the short-term limiter separately from the daily search counter.
 
-### Lines 91–95
+### Lines 91–98
 
 ```text
-91 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
-92 |     catch (error) { videoDiagnostic('request_failed', { reason: error instanceof YouTubeQuotaError ? 'local_quota' : 'search_unavailable' }); response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'YouTube search unavailable. Try later or paste a link in Edit lesson.' }); }
-93 |     finally { busy = false; }
-94 |   });
-95 | }
+91 |     const times = users.get(request.user.id) || [];
+92 |     if (busy || times.length >= 5 || (!users.has(request.user.id) && users.size >= 128)) return response.status(429).json({ error: 'Video search is busy or five requests per minute were used. Try shortly; you can still paste a video link.' });
+93 |     users.set(request.user.id, [...times, time]); busy = true;
+94 |     try { response.json(await videoFinder(lesson, { reserveSearch: () => youtubeQuota.take(request.user.id) })); }
+95 |     catch (error) { videoDiagnostic('request_failed', { reason: error instanceof YouTubeQuotaError ? 'local_quota' : 'search_unavailable' }); response.status(error instanceof YouTubeQuotaError ? 429 : 502).json({ error: error instanceof YouTubeQuotaError ? error.message : 'YouTube search unavailable. Try later or paste a link in Edit lesson.' }); }
+96 |     finally { busy = false; }
+97 |   });
+98 | }
 ```
 
-- **Line 91:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
-- **Line 92:** Logs a fixed local_quota or search_unavailable reason, then returns the existing safe 429 quota message or a clearer YouTube-unavailable 502 message.
-- **Line 93:** Always clears the in-flight flag after success or failure.
-- **Line 94:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 95:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 91:** Loads this coach's recent attempts or uses an empty list for a new coach.
+- **Line 92:** Returns 429 for another in-flight suggestion, five requests in one minute or the bounded user-map capacity. Catalog-only requests count toward this short-term protection, not the daily search quota.
+- **Line 93:** Records the short-term request and marks the finder busy without spending daily YouTube quota.
+- **Line 94:** Invokes the finder with a callback tied to the signed-in coach. Only a real YouTube fallback invokes this callback; catalog-only results remain available after daily exhaustion.
+- **Line 95:** Logs a fixed local_quota or search_unavailable reason, then returns the existing safe 429 quota message or a clearer YouTube-unavailable 502 message.
+- **Line 96:** Always clears the in-flight flag after success or failure.
+- **Line 97:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 98:** Closes this function, conditional block or object; execution continues after the block.
 
 ## server/youtube-quota.js
 
@@ -13913,3 +13983,499 @@ Shares a small in-memory YouTube search allowance across both search routes; res
 - **Line 19:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 20:** Blank line separates related operations for readability.
 - **Line 21:** Exports one shared module instance for both media routes. Its memory resets on process restart and is not shared across multiple Render processes.
+
+## client/src/FitnessFields.jsx
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\FitnessFields.jsx`
+
+Fitness integration: supplies reusable Fitness-only controls to manual and AI forms.
+
+### Lines 1–12
+
+```text
+1 | // Reuses the same optional Fitness controls in manual and AI lesson forms.
+2 | import React from 'react';
+3 | import { fitnessClassTypes, fitnessFormats } from './fitness.js';
+4 | // The parent owns values so changing discipline can clear hidden Fitness details.
+5 | export default function FitnessFields({ value, onChange }) {
+6 |   if (value.discipline !== 'Fitness') return null;
+7 |   return <div className="form-row">
+8 |     <label>Class type<select value={value.class_type || ''} onChange={event => onChange({ class_type: event.target.value, class_type_other: '' })}><option value="">Not specified</option>{fitnessClassTypes.map(type => <option key={type}>{type}</option>)}</select></label>
+9 |     {value.class_type === 'Other' && <label>Other class type<input required maxLength={40} value={value.class_type_other || ''} onChange={event => onChange({ class_type_other: event.target.value })} /><small>Up to 40 characters. No personal information.</small></label>}
+10 |     <label>Format<select value={value.class_format || ''} onChange={event => onChange({ class_format: event.target.value })}><option value="">Not specified</option>{fitnessFormats.map(format => <option key={format}>{format}</option>)}</select></label>
+11 |   </div>;
+12 | }
+```
+
+- **Line 1:** Human-readable comment: Reuses the same optional Fitness controls in manual and AI lesson forms. It does not execute.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Human-readable comment: The parent owns values so changing discipline can clear hidden Fitness details. It does not execute.
+- **Line 5:** Defines reusable controlled React fields; the parent owns the current values and receives changed fields.
+- **Line 6:** Renders nothing for other disciplines, so hidden Fitness fields do not clutter their forms.
+- **Line 7:** Groups the class controls using the existing responsive form layout.
+- **Line 8:** Renders an optional class selector and clears old custom text when choosing a different type.
+- **Line 9:** Shows the short required custom label only for Other; browser maxLength enforces the same 40-character limit as server validation.
+- **Line 10:** Renders an optional format selector with the three shared choices.
+- **Line 11:** Closes the React group and completes the returned JSX expression.
+- **Line 12:** Closes this function, conditional block or object; execution continues after the block.
+
+## client/src/fitness.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\fitness.js`
+
+Fitness integration: shares class choices, validation, normalization and safety guidance between forms and server.
+
+### Lines 1–30
+
+```text
+1 | // Shares optional Fitness choices and checks without changing legacy Personal Training records.
+2 | export const fitnessClassTypes = ['Personal training', 'Cardio kickboxing', 'Boxing fitness (non-contact)', 'Zumba / dance fitness', 'Rebounding (mini trampoline)', 'Bootcamp', 'HIIT', 'Circuit / strength', 'Spin / cycling', 'Yoga', 'Pilates', 'Other'];
+3 | export const fitnessFormats = ['One-on-one', 'Small group', 'Group class'];
+4 | export const fitnessKeys = ['class_type', 'class_type_other', 'class_format'];
+5 | export const emptyFitness = { class_type: '', class_type_other: '', class_format: '' };
+6 | // Reject unsupported choices and hidden stale values; omitted fields remain valid for older clients.
+7 | export function validateFitness(value) {
+8 |   for (const key of fitnessKeys) if (value[key] != null && typeof value[key] !== 'string') return 'Fitness fields must be text.';
+9 |   const type = value.class_type || '', other = value.class_type_other || '', format = value.class_format || '';
+10 |   if (value.discipline !== 'Fitness') return type || other || format ? 'Class type and format apply only to Fitness.' : null;
+11 |   if (type && !fitnessClassTypes.includes(type)) return 'Choose a supported Fitness class type.';
+12 |   if (format && !fitnessFormats.includes(format)) return 'Choose One-on-one, Small group, or Group class.';
+13 |   if (other.length > 40 || /[\r\n]/.test(other)) return 'Other class type must be one line of at most 40 characters.';
+14 |   if (type === 'Other' && !other.trim()) return 'Describe the Other class type in up to 40 characters.';
+15 |   if (type !== 'Other' && other.trim()) return 'Custom class text is only allowed for Other.';
+16 |   return null;
+17 | }
+18 | // Normalize optional PostgreSQL fields; changing away from Fitness clears stale metadata on explicit save.
+19 | export function fitnessFields(value) {
+20 |   return Object.fromEntries(fitnessKeys.map(key => [key, value.discipline === 'Fitness' ? value[key]?.trim() || null : null]));
+21 | }
+22 | // Use the coach's short custom label when Other is selected.
+23 | export const fitnessLabel = lesson => lesson.class_type === 'Other' ? lesson.class_type_other || 'Other' : lesson.class_type || '';
+24 | // Guide the provider without claiming that generated exercises are medically safe.
+25 | export function fitnessGuidance(request) {
+26 |   if (request.discipline !== 'Fitness') return '';
+27 |   return `Fitness class type: ${fitnessLabel(request) || 'General fitness'}. Format: ${request.class_format || 'Unspecified'}.
+28 | No medical claims, diagnoses or promises of injury prevention. Give low-impact options and beginner pacing; adapt to skill and audience.
+29 | For cardio kickboxing and boxing fitness: NO-CONTACT, no sparring and no hitting another person. For dance fitness and kickboxing, include simple music/tempo cues without requiring copyrighted songs.
+30 | Respect available equipment: rebounders/mini trampolines, bikes, mats or weights only when available; offer practical alternatives and explain safe setup without assuming readiness.
+```
+
+- **Line 1:** Human-readable comment: Shares optional Fitness choices and checks without changing legacy Personal Training records. It does not execute.
+- **Line 2:** Defines all twelve supported Fitness types, using Personal training as a class type rather than rewriting the old discipline.
+- **Line 3:** Defines the three supported class formats shared by forms and validation.
+- **Line 4:** Centralizes the three API field names so validation and normalization stay in sync.
+- **Line 5:** Provides blank form defaults that also clear stale values when the discipline changes.
+- **Line 6:** Human-readable comment: Reject unsupported choices and hidden stale values; omitted fields remain valid for older clients. It does not execute.
+- **Line 7:** Validates optional Fitness metadata independently of other lesson fields.
+- **Line 8:** Allows omitted or null metadata for old clients but rejects non-text supplied values.
+- **Line 9:** Uses empty strings for optional values during checks, without mutating the request.
+- **Line 10:** Rejects nonempty class metadata on other disciplines, while empty or absent fields remain compatible.
+- **Line 11:** Rejects any nonempty class type outside the fixed choices.
+- **Line 12:** Rejects unsupported formats instead of accepting arbitrary strings.
+- **Line 13:** Rejects custom labels over 40 characters or containing line breaks.
+- **Line 14:** Requires a meaningful short label when the coach explicitly chooses Other.
+- **Line 15:** Rejects hidden custom text when a fixed class type was selected.
+- **Line 16:** Returns null when no fixed guard reply applies, allowing the model prompt to handle the question.
+- **Line 17:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 18:** Human-readable comment: Normalize optional PostgreSQL fields; changing away from Fitness clears stale metadata on explicit save. It does not execute.
+- **Line 19:** Creates the database-ready metadata object without changing the input.
+- **Line 20:** Trims optional Fitness text and converts missing values to null; non-Fitness saves clear all three metadata fields.
+- **Line 21:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 22:** Human-readable comment: Use the coach's short custom label when Other is selected. It does not execute.
+- **Line 23:** Chooses the custom label for Other or the fixed class label, with safe empty fallbacks.
+- **Line 24:** Human-readable comment: Guide the provider without claiming that generated exercises are medically safe. It does not execute.
+- **Line 25:** Builds Fitness-specific provider guidance while leaving other disciplines unchanged.
+- **Line 26:** Adds no extra Fitness prompt text for other disciplines.
+- **Line 27:** Starts a template string naming the requested class type and format, with generic fallbacks.
+- **Line 28:** Prompt text requires low-impact choices, beginner pacing and no unsupported medical promises.
+- **Line 29:** Prompt text prohibits contact and sparring in fitness boxing/kickboxing and asks for simple tempo cues.
+- **Line 30:** Prompt text requires equipment-aware setup and alternatives rather than assuming bikes, rebounders, mats or weights are available.
+
+### Lines 31–33
+
+```text
+31 | Group class and Small group formats need short demonstrations and cues the whole room can follow. One-on-one can personalize pace and options using generic goals, never personal or medical details.
+32 | Keep the same five timed sections. Partner exercises may use zero minutes and a solo alternative; never invent contact drills just to fill that section. Keep all audience safety rules.`;
+33 | }
+```
+
+- **Line 31:** Prompt text asks for room-wide group cues or appropriate individual pacing without collecting sensitive details.
+- **Line 32:** Ends the template string while preserving the five-section contract, solo alternatives and existing audience safety rules.
+- **Line 33:** Closes this function, conditional block or object; execution continues after the block.
+
+## prisma/migrations/20261029000100_add_fitness/migration.sql
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\prisma\migrations\20261029000100_add_fitness\migration.sql`
+
+Fitness integration: atomically expands the PostgreSQL discipline check and adds nullable class fields; SQLite is untouched.
+
+### Lines 1–10
+
+```text
+1 | -- Expand the allowed discipline values without rewriting any lesson records.
+2 | BEGIN;
+3 | SET LOCAL lock_timeout = '5s';
+4 | ALTER TABLE "lessons" DROP CONSTRAINT "lessons_discipline_check";
+5 | ALTER TABLE "lessons" ADD CONSTRAINT "lessons_discipline_check" CHECK ("discipline" IN ('Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training', 'Fitness'));
+6 | -- Nullable fields leave old clients and existing lessons valid.
+7 | ALTER TABLE "lessons" ADD COLUMN "class_type" TEXT DEFAULT NULL CHECK ("class_type" IN ('Personal training', 'Cardio kickboxing', 'Boxing fitness (non-contact)', 'Zumba / dance fitness', 'Rebounding (mini trampoline)', 'Bootcamp', 'HIIT', 'Circuit / strength', 'Spin / cycling', 'Yoga', 'Pilates', 'Other'));
+8 | ALTER TABLE "lessons" ADD COLUMN "class_type_other" VARCHAR(40) DEFAULT NULL;
+9 | ALTER TABLE "lessons" ADD COLUMN "class_format" TEXT DEFAULT NULL CHECK ("class_format" IN ('One-on-one', 'Small group', 'Group class'));
+10 | COMMIT;
+```
+
+- **Line 1:** Human-readable comment: Expand the allowed discipline values without rewriting any lesson records. It does not execute.
+- **Line 2:** Begins the PostgreSQL transaction so migration changes commit together.
+- **Line 3:** Limits how long this migration waits for a table lock; failure rolls back rather than waiting indefinitely.
+- **Line 4:** Removes only the old discipline check inside the transaction so its expanded replacement can be installed; no table or record is dropped.
+- **Line 5:** Reinstates the discipline check with every previous value plus Fitness, preserving legacy validity.
+- **Line 6:** Human-readable comment: Nullable fields leave old clients and existing lessons valid. It does not execute.
+- **Line 7:** Adds nullable class-type text with a fixed-choice database check; existing rows receive null.
+- **Line 8:** Adds a nullable custom label with a database-enforced 40-character limit; no existing content is rewritten.
+- **Line 9:** Adds nullable format text with a three-choice database check.
+- **Line 10:** Commits the successful PostgreSQL schema change.
+
+## server/fitness.test.js
+
+Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\server\fitness.test.js`
+
+Fitness integration: verifies migration preservation, validation, mocked providers, API wiring and rendered React controls without real data.
+
+### Lines 1–30
+
+```text
+1 | // Exercises Fitness without real credentials, provider calls or production data.
+2 | import test from 'node:test';
+3 | import assert from 'node:assert/strict';
+4 | import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+5 | import { tmpdir } from 'node:os';
+6 | import path from 'node:path';
+7 | import { pathToFileURL } from 'node:url';
+8 | import { once } from 'node:events';
+9 | import { PGlite } from '@electric-sql/pglite';
+10 | import { fitnessClassTypes, fitnessFormats, validateFitness, fitnessFields } from '../client/src/fitness.js';
+11 | import { disciplines, newDisciplines, sections, details, validateRequest, toLesson } from '../client/src/lesson-draft.js';
+12 | import { filterLessons } from '../client/src/lesson-view.js';
+13 | import { validateLesson } from './validate-lesson.js';
+14 | import { generateDraft } from './ai-provider.js';
+15 | import { suggestLessonVideos } from './video-suggestions.js';
+16 | import { prismaLessons } from './lesson-store.js';
+17 | import { createApp } from './app.js';
+18 | import { testOptions, authedFetch } from './test-auth.js';
+19 |
+20 | const base = { title: 'Generic fitness lesson', discipline: 'Fitness', skill_level: 'Beginner', duration_minutes: 60, students: 4, privacy_confirmed: true, audience: 'Adults' };
+21 | const migration = '20261029000100_add_fitness';
+22 | // Applies real PostgreSQL SQL only inside a disposable in-memory engine.
+23 | test('Fitness migration preserves all old disciplines, IDs and timestamps and accepts nullable class fields', async () => {
+24 |   const db = new PGlite();
+25 |   try {
+26 |     const root = new URL('../prisma/migrations/', import.meta.url);
+27 |     for (const name of readdirSync(root).filter(name => /^\d/.test(name) && name < migration).sort()) await db.exec(readFileSync(new URL(name + '/migration.sql', root), 'utf8'));
+28 |     for (const discipline of disciplines.filter(value => value !== 'Fitness')) await db.query('INSERT INTO lessons (title, discipline, created_at) VALUES ($1, $2, $3)', ['Legacy ' + discipline, discipline, '2026-01-01T00:00:00.000Z']);
+29 |     const before = (await db.query('SELECT * FROM lessons ORDER BY id')).rows;
+30 |     const sql = readFileSync(new URL(migration + '/migration.sql', root), 'utf8');
+```
+
+- **Line 1:** Human-readable comment: Exercises Fitness without real credentials, provider calls or production data. It does not execute.
+- **Line 2:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 5:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 6:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 7:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 8:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 9:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 10:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 11:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 12:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 13:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 14:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 15:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 16:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 17:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 18:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
+- **Line 19:** Blank line separates related operations for readability.
+- **Line 20:** Defines generic test input without real coach or student information.
+- **Line 21:** Names the new migration so tests separate earlier schema setup from this change.
+- **Line 22:** Human-readable comment: Applies real PostgreSQL SQL only inside a disposable in-memory engine. It does not execute.
+- **Line 23:** Registers a test of real PostgreSQL migration SQL and preservation of legacy records.
+- **Line 24:** Creates a disposable PostgreSQL engine in memory; no Neon connection is used.
+- **Line 25:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 26:** Locates migration folders relative to this test file.
+- **Line 27:** Sorts and executes all earlier versioned SQL migrations to reproduce the old schema.
+- **Line 28:** Inserts one synthetic lesson for each old discipline, with a fixed timestamp and parameterized values.
+- **Line 29:** Reads an ordered snapshot of the old rows before changing the schema.
+- **Line 30:** Reads the new migration SQL into a string for inspection and execution.
+
+### Lines 31–60
+
+```text
+31 |     assert.doesNotMatch(sql, /DROP TABLE|DELETE FROM|TRUNCATE|UPDATE lessons/i);
+32 |     await db.exec(sql);
+33 |     const after = (await db.query('SELECT * FROM lessons ORDER BY id')).rows;
+34 |     assert.deepEqual(after.map(({ class_type, class_type_other, class_format, ...row }) => row), before);
+35 |     assert.ok(after.every(row => row.class_type === null && row.class_type_other === null && row.class_format === null));
+36 |     for (const type of fitnessClassTypes) for (const format of fitnessFormats) await db.query('INSERT INTO lessons (title, discipline, class_type, class_type_other, class_format) VALUES ($1, $2, $3, $4, $5)', ['Fitness test', 'Fitness', type, type === 'Other' ? 'Balance class' : null, format]);
+37 |     await db.query('INSERT INTO lessons (title, discipline) VALUES ($1, $2)', ['Optional metadata', 'Fitness']);
+38 |     for (const [column, value] of [['discipline', 'Unknown'], ['class_type', 'Invalid'], ['class_format', 'Crowd'], ['class_type_other', 'x'.repeat(41)]]) await assert.rejects(db.query(`UPDATE lessons SET ${column} = $1 WHERE id = 1`, [value]));
+39 |     const legacy = after.find(row => row.discipline === 'Personal Training');
+40 |     await db.query('UPDATE lessons SET title = $1 WHERE id = $2', ['Edited legacy lesson', legacy.id]);
+41 |     const saved = (await db.query('SELECT * FROM lessons WHERE id = $1', [legacy.id])).rows[0];
+42 |     assert.equal(saved.discipline, 'Personal Training');
+43 |     assert.deepEqual(saved.created_at, legacy.created_at);
+44 |     assert.equal(saved.title, 'Edited legacy lesson');
+45 |   } finally { await db.close(); }
+46 | });
+47 |
+48 | test('Fitness validates optional fields, every class/format, Other text and legacy values', () => {
+49 |   assert.ok(!newDisciplines.includes('Personal Training') && newDisciplines.includes('Fitness'));
+50 |   assert.equal(validateFitness(base), null);
+51 |   for (const class_type of fitnessClassTypes) for (const class_format of fitnessFormats) {
+52 |     const value = { ...base, class_type, class_format, class_type_other: class_type === 'Other' ? ' Balance class ' : '' };
+53 |     const { title, ...request } = value;
+54 |     assert.equal(validateRequest(request), null);
+55 |     const { students, privacy_confirmed, ...lesson } = value;
+56 |     assert.equal(validateLesson(lesson).error, undefined);
+57 |   }
+58 |   for (const patch of [{ class_type: 'Invalid' }, { class_format: 'Crowd' }, { class_type: 'Other' }, { class_type: 'Other', class_type_other: ' ' }, { class_type: 'Other', class_type_other: 'x'.repeat(41) }, { class_type: 'Other', class_type_other: 'two\nlines' }, { class_type: 'Yoga', class_type_other: 'Hidden text' }, { class_type: 1 }, { class_format: {} }]) assert.ok(validateFitness({ ...base, ...patch }));
+59 |   assert.equal(validateLesson({ title: 'Old plan', discipline: 'Personal Training' }).lesson.discipline, 'Personal Training');
+60 |   assert.ok(validateLesson({ title: 'Old plan', discipline: 'Personal Training', class_type: 'Yoga' }).error);
+```
+
+- **Line 31:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 32:** Executes the reviewed migration inside the disposable engine.
+- **Line 33:** Reads the same ordered rows after migration so fields can be compared.
+- **Line 34:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 35:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 36:** Inserts every supported type/format combination; Other gets a custom label.
+- **Line 37:** Checks that a Fitness lesson can omit all optional metadata.
+- **Line 38:** Tests database rejection of unsupported values and overlong text; column names come only from this fixed test list, while values are parameterized.
+- **Line 39:** Finds the synthetic legacy Personal Training record.
+- **Line 40:** Edits only that test record title through a parameterized query.
+- **Line 41:** Reads back the edited test record by its preserved ID.
+- **Line 42:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 43:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 44:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 45:** Closes the disposable database even if an assertion fails.
+- **Line 46:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 47:** Blank line separates related operations for readability.
+- **Line 48:** Registers validation tests for optional metadata and backward compatibility.
+- **Line 49:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 50:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 51:** Iterates through every class type and format combination.
+- **Line 52:** Builds a test value, including whitespace to exercise Other normalization.
+- **Line 53:** Removes title from AI input because title is generated, not an allowed request field.
+- **Line 54:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 55:** Removes AI-only fields before testing saved-lesson validation.
+- **Line 56:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 57:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 58:** Checks invalid types, labels, multiline text and stale hidden values are rejected.
+- **Line 59:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 60:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+
+### Lines 61–90
+
+```text
+61 |   assert.deepEqual(fitnessFields({ discipline: 'Boxing', class_type: 'Yoga' }), { class_type: null, class_type_other: null, class_format: null });
+62 | });
+63 |
+64 | test('Fitness AI sends class type and format with non-contact, equipment, audience and five-section rules', async () => {
+65 |   const draft = { title: 'Mock fitness class', objectives: 'Practice balance', ...Object.fromEntries(details.map(key => [key, 'Generic test guidance'])), sections: sections.map(name => ({ name, minutes: 12, instructions: '1. Demonstrate slowly.\n2. Practice with control.', common_mistakes: 'Rushing', easier: 'Slow down', harder: 'Add coordination' })) };
+66 |   for (const class_type of fitnessClassTypes) {
+67 |     const request = { ...base, class_type, class_type_other: class_type === 'Other' ? 'Balance flow' : '', class_format: 'Group class', audience: 'Kids' };
+68 |     const answer = await generateDraft(request, { env: { GEMINI_API_KEY: 'fake' }, fetcher: async (url, options) => {
+69 |       const body = JSON.parse(options.body), prompt = body.systemInstruction.parts[0].text;
+70 |       for (const phrase of ['NO-CONTACT', 'low-impact', 'beginner pacing', 'music/tempo', 'rebounders', 'bikes', 'mats', 'whole room', 'One-on-one', 'five timed sections', 'no head contact', 'no submissions or chokes', 'No medical claims']) assert.ok(prompt.includes(phrase), phrase);
+71 |       const data = JSON.parse(body.contents[0].parts[0].text);
+72 |       assert.equal(data.class_type, class_type); assert.equal(data.class_format, 'Group class');
+73 |       assert.equal(body.generationConfig.responseJsonSchema.properties.sections.minItems, 5);
+74 |       return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(draft) }] } }] });
+75 |     } });
+76 |     const lesson = toLesson(answer, request);
+77 |     assert.equal(lesson.class_type, class_type); assert.equal(lesson.class_format, 'Group class');
+78 |     assert.equal(validateLesson(lesson).error, undefined);
+79 |   }
+80 | });
+81 |
+82 | test('Fitness video search keeps class type, format, beginner and kids/non-contact context', async () => {
+83 |   for (const class_type of ['Rebounding (mini trampoline)', 'Cardio kickboxing', 'Boxing fitness (non-contact)', 'Other']) {
+84 |     const lesson = { ...base, title: 'Balance drills', class_type, class_type_other: class_type === 'Other' ? 'Balance flow' : '', class_format: 'Group class', audience: 'Kids' };
+85 |     let calls = 0;
+86 |     await suggestLessonVideos(lesson, { env: { YOUTUBE_API_KEY: 'fake' }, diagnostic: () => {}, search: async query => {
+87 |       calls++; assert.ok(query.includes(class_type === 'Other' ? 'balance flow' : class_type));
+88 |       assert.match(query, /Beginner/); assert.match(query, /Group class/); assert.match(query, /kids non contact/);
+89 |       if (/boxing/i.test(class_type)) assert.match(query, /non contact/);
+90 |       return [];
+```
+
+- **Line 61:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 62:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 63:** Blank line separates related operations for readability.
+- **Line 64:** Registers a mocked provider test for Fitness guidance and the unchanged five-section contract.
+- **Line 65:** Constructs a complete synthetic five-section answer, with twelve minutes per section and required coaching details.
+- **Line 66:** Tests every class type rather than only Personal training.
+- **Line 67:** Builds a Kids group request, including custom text for Other.
+- **Line 68:** Injects a fake provider key and fetch function; no external Gemini request occurs.
+- **Line 69:** Parses the outgoing request and reads the system guidance sent to the mock.
+- **Line 70:** Requires every listed Fitness and Kids safety instruction to appear in the provider prompt.
+- **Line 71:** Parses the user-data portion of the mocked provider request.
+- **Line 72:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 73:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 74:** Returns a successful simulated Gemini response containing the complete synthetic draft.
+- **Line 75:** Closes the injected fetch function, options object and generateDraft call.
+- **Line 76:** Converts the returned draft into the existing approved-lesson payload.
+- **Line 77:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 78:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 79:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 80:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 81:** Blank line separates related operations for readability.
+- **Line 82:** Registers tests of Fitness video query context without YouTube calls.
+- **Line 83:** Exercises equipment-based, non-contact and custom class types.
+- **Line 84:** Builds a generic Kids group lesson for query testing.
+- **Line 85:** Counts fake migration invocations to prove invalid configuration never launches the CLI.
+- **Line 86:** Runs suggestion construction with a fake key, silent diagnostics and an injected search callback that checks the generated query.
+- **Line 87:** Counts the injected search call and checks it contains the correct fixed or cleaned custom label.
+- **Line 88:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 89:** Requires explicit non-contact context for boxing-related fitness searches.
+- **Line 90:** Returns no candidates from the test callback so this query-only check never verifies external links.
+
+### Lines 91–120
+
+```text
+91 |     } });
+92 |     assert.equal(calls, 1);
+93 |   }
+94 | });
+95 |
+96 | // The Prisma double tests API wiring and exact fields; SQL execution is tested separately above.
+97 | test('Prisma lesson API preserves legacy IDs and saves Fitness metadata without duplicates', async t => {
+98 |   const rows = [{ id: 1, title: 'Legacy plan', discipline: 'Personal Training', owner_id: 'user-a', created_at: new Date('2026-01-01Z') }];
+99 |   const model = {
+100 |     findMany: async ({ where }) => rows.filter(row => row.owner_id === where.owner_id),
+101 |     create: async ({ data }) => { const row = { ...data, id: rows.length + 1, created_at: new Date() }; rows.push(row); return row; },
+102 |     update: async ({ where, data }) => { const row = rows.find(row => row.id === where.id && row.owner_id === where.owner_id); if (!row) throw { code: 'P2025' }; Object.assign(row, data); return row; },
+103 |   };
+104 |   const client = { lesson: model, $transaction: work => work(client) };
+105 |   const server = createApp(prismaLessons(client), testOptions).listen(0, '127.0.0.1');
+106 |   await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
+107 |   const url = 'http://127.0.0.1:' + server.address().port;
+108 |   const save = (route, method, body) => authedFetch(url + route, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+109 |   assert.equal((await (await authedFetch(url + '/api/lessons')).json())[0].discipline, 'Personal Training');
+110 |   const old = await save('/api/lessons/1', 'PUT', { title: 'Edited old plan', discipline: 'Personal Training' });
+111 |   assert.equal(old.status, 200); assert.equal((await old.json()).id, 1);
+112 |   const input = { title: 'Fitness plan', discipline: 'Fitness', class_type: 'Other', class_type_other: 'Balance flow', class_format: 'Small group' };
+113 |   const created = await save('/api/lessons', 'POST', input); assert.equal(created.status, 201);
+114 |   const lesson = await created.json(); assert.equal(lesson.class_type_other, 'Balance flow');
+115 |   const updated = await save('/api/lessons/' + lesson.id, 'PUT', { ...input, class_format: 'Group class' });
+116 |   assert.equal(updated.status, 200); assert.equal((await updated.json()).id, lesson.id); assert.equal(rows.length, 2);
+117 |   assert.equal((await save('/api/lessons', 'POST', { ...input, class_type_other: 'x'.repeat(41) })).status, 400);
+118 |   assert.equal((await save('/api/lessons/' + lesson.id, 'PUT', { title: 'Changed discipline', discipline: 'Boxing' })).status, 200);
+119 |   assert.equal(rows[1].class_type, null);
+120 |   assert.equal(rows[0].created_at.toISOString(), '2026-01-01T00:00:00.000Z');
+```
+
+- **Line 91:** Closes the injected fetch function, options object and generateDraft call.
+- **Line 92:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 93:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 94:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 95:** Blank line separates related operations for readability.
+- **Line 96:** Human-readable comment: The Prisma double tests API wiring and exact fields; SQL execution is tested separately above. It does not execute.
+- **Line 97:** Registers an HTTP API test using a Prisma test double, not a live database.
+- **Line 98:** Seeds the test double with one owned legacy lesson and a fixed timestamp.
+- **Line 99:** Starts a small fake Prisma model containing only operations exercised below.
+- **Line 100:** Simulates an owner-filtered query so one account cannot read another account’s rows in this test.
+- **Line 101:** Simulates creation by assigning a new ID and appending to the disposable array.
+- **Line 102:** Simulates an owner-scoped update, raising Prisma’s not-found code if no owned row exists.
+- **Line 103:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 104:** Provides the fake lesson model and transaction callback; real SQL transaction behavior is tested separately.
+- **Line 105:** Starts the real Express app with that store on a randomly chosen loopback port.
+- **Line 106:** Waits for listening and registers server cleanup after this test.
+- **Line 107:** Builds the local test server address from its assigned port.
+- **Line 108:** Defines an authenticated JSON request helper for create and update assertions.
+- **Line 109:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 110:** Updates the existing legacy lesson through the real PUT route.
+- **Line 111:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 112:** Defines a valid Fitness Other lesson with a small-group format.
+- **Line 113:** Creates the lesson through POST and requires the created response status.
+- **Line 114:** Reads the returned lesson and checks the custom label survived.
+- **Line 115:** Updates the same lesson ID to a group-class format.
+- **Line 116:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 117:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 118:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 119:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 120:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+
+### Lines 121–150
+
+```text
+121 | });
+122 |
+123 | test('Fitness controls and cards render while legacy edit options and dashboard filtering remain available', async () => {
+124 |   const { transformWithOxc } = await import('vite');
+125 |   const React = await import('react');
+126 |   const { renderToStaticMarkup } = await import('react-dom/server');
+127 |   const folder = mkdtempSync(path.join(tmpdir(), 'coachlab-fitness-ui-'));
+128 |   try {
+129 |     for (const name of readdirSync(new URL('../client/src/', import.meta.url)).filter(name => name.endsWith('.jsx'))) {
+130 |       const source = readFileSync(new URL('../client/src/' + name, import.meta.url), 'utf8');
+131 |       const transformed = await transformWithOxc(source, name, { jsx: { runtime: 'classic' } });
+132 |       const code = transformed.code.replace(/(['"])(\.\/[^'"]+)\1/g, (whole, quote, relative) => quote + (relative.endsWith('.jsx') ? pathToFileURL(path.join(folder, relative.replace(/\.jsx$/, '.mjs'))).href : new URL('../client/src/' + relative, import.meta.url).href) + quote).replace(/from ["']react["']/g, 'from ' + JSON.stringify(import.meta.resolve('react')));
+133 |       writeFileSync(path.join(folder, name.replace(/\.jsx$/, '.mjs')), code);
+134 |     }
+135 |     const render = async (name, props) => renderToStaticMarkup(React.createElement((await import(pathToFileURL(path.join(folder, name + '.mjs')).href)).default, props));
+136 |     assert.equal(await render('FitnessFields', { value: { discipline: 'Boxing' } }), '');
+137 |     const controls = await render('FitnessFields', { value: { ...base, class_type: 'Other', class_type_other: 'Balance flow' } });
+138 |     assert.match(controls, /maxLength="40"/i); assert.match(controls, /Other class type/); assert.match(controls, /Group class/);
+139 |     assert.doesNotMatch(await render('FitnessFields', { value: { ...base, class_type: 'Yoga' } }), /Other class type/);
+140 |     const newForm = await render('LessonForm', {}); assert.match(newForm, /Fitness/); assert.doesNotMatch(newForm, /<option[^>]*>Personal Training/);
+141 |     const legacy = { ...base, id: 1, discipline: 'Personal Training', created_at: '2026-01-01Z' };
+142 |     assert.match(await render('LessonForm', { lesson: legacy }), /<option[^>]*selected[^>]*>Personal Training/);
+143 |     assert.doesNotMatch(await render('AiLessonForm', {}), /<option[^>]*>Personal Training/);
+144 |     const fitness = { ...base, id: 2, class_type: 'Other', class_type_other: 'Balance flow', class_format: 'Group class', created_at: '2026-01-01Z' };
+145 |     assert.match(await render('LessonCard', { lesson: fitness }), /Balance flow/);
+146 |     assert.match(await render('LessonCard', { lesson: legacy }), /Personal Training/);
+147 |     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Fitness', 'Other'), [fitness]);
+148 |     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Fitness', 'Yoga'), []);
+149 |     assert.deepEqual(filterLessons([legacy, fitness], 'All', 'Personal Training'), [legacy]);
+150 |   } finally { rmSync(folder, { recursive: true, force: true }); }
+```
+
+- **Line 121:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
+- **Line 122:** Blank line separates related operations for readability.
+- **Line 123:** Registers rendered-component and filter checks; these are not browser interaction tests.
+- **Line 124:** Loads the existing Vite JSX transformer for testing the actual component source.
+- **Line 125:** Loads React dynamically for rendering actual components.
+- **Line 126:** Loads the server renderer to produce inspectable HTML without a browser.
+- **Line 127:** Creates a uniquely named temporary folder for transformed JSX modules.
+- **Line 128:** Starts a protected startup sequence; errors reach the catch block without exposing secret configuration.
+- **Line 129:** Visits application JSX files to prepare importable test modules.
+- **Line 130:** Reads the actual component source rather than a copied test implementation.
+- **Line 131:** Compiles JSX with the project’s existing Vite transformer.
+- **Line 132:** Rewrites local JSX imports to temporary modules and other imports to their original files; React resolves to the installed package.
+- **Line 133:** Writes only transformed test modules to the disposable folder.
+- **Line 134:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 135:** Defines a helper to import and render an actual component with chosen props.
+- **Line 136:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 137:** Renders Other controls using a generic custom label.
+- **Line 138:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 139:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 140:** Checks new manual forms offer Fitness and omit the legacy Personal Training choice.
+- **Line 141:** Builds a legacy lesson fixture for editing and card-rendering checks.
+- **Line 142:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 143:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 144:** Builds a Fitness fixture for card metadata and dashboard-filter checks.
+- **Line 145:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 146:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 147:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 148:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 149:** Checks the stated result against the expected value or pattern; a mismatch fails this test rather than silently accepting incorrect behavior. The arguments show the exact contract being verified.
+- **Line 150:** Removes only the uniquely created temporary test folder, including files, even after failure.
+
+### Lines 151–151
+
+```text
+151 | });
+```
+
+- **Line 151:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.

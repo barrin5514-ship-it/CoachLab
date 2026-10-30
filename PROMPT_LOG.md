@@ -4964,3 +4964,84 @@ Fresh verification after comments: serial npm test passed 106 tests with zero fa
 Part 2 intended commit subject: "docs: explain source functions and safety checks for beginners". Containing commit hash and push verification are reported after commit. Only the source comments and required walkthrough/log documentation are staged; no secrets, real databases, dependency changes or unrelated projects are included.
 
 Final security-review detail: the broad staged-line scanner flagged PostgreSQL URL patterns in renumbered walkthrough listings. Inspection without displaying their values confirmed every match was an unchanged, hard-coded test fixture on an example host, already present in the previous commit and its source test. No configured connection strings were read or introduced. The scoped scan rejects new patterns and allows only those exact existing fixture matches; source changes still consist only of recorded comment insertions.
+
+## 2026-10-29 — Fitness class types and formats
+
+Exact development prompt:
+
+~~~text
+COACHLAB — ADD "FITNESS" WITH CLASS TYPES
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Demo is tomorrow: small and safe.
+
+GOAL
+Add a "Fitness" discipline that covers one-on-one training AND group
+fitness classes, so CoachLab isn't limited to "Personal Training."
+
+BUILD
+1. New discipline: Fitness.
+2. New lesson fields (additive, optional, safe migration):
+   - Class type (pick one):
+     Personal training, Cardio kickboxing, Boxing fitness (non-contact),
+     Zumba / dance fitness, Rebounding (mini trampoline), Bootcamp,
+     HIIT, Circuit / strength, Spin / cycling, Yoga, Pilates, Other.
+   - "Other" shows a short text box (limit ~40 characters).
+   - Format: One-on-one, Small group, Group class.
+   Only show these fields when discipline = Fitness.
+3. Existing "Personal Training" lessons must keep working and display
+   normally. For NEW lessons, show Personal Training as a class type
+   under Fitness (keep the old value valid; do not rewrite old data).
+4. Dashboard: Fitness tab, class type shown on lesson cards, and a
+   class type filter inside Fitness.
+5. AI lesson drafts: pass class type + format into the prompt.
+   - Fitness rules: no medical claims; give low-impact options; beginner
+     pacing; music/tempo cues for dance and kickboxing classes;
+     equipment-aware (rebounders, bikes, mats); boxing fitness and
+     cardio kickboxing are NO-CONTACT; group classes need cues a whole
+     room can follow; one-on-one can be more personalized.
+   - Keep the same five timed sections, audience rules, and validation.
+6. Suggest videos: include class type in search terms
+   (e.g. "rebounding workout beginner group class").
+7. Tests: new fields, validation, "Other" text, old Personal Training
+   lessons still load, AI prompt includes class type, video terms.
+
+RULES
+- Low RAM: tests serially. One small commit. Push only if tests and
+  build pass.
+- Database: additive only, no resets, no data loss. Production runs
+  "prisma migrate deploy" on start.
+- Never print .env values. Don't touch other projects.
+- If anything risks breaking the live site, stop and report instead.
+
+REPORT BACK (in one code block)
+- Commit hash, push result, fresh test/build results.
+- How old Personal Training lessons are handled.
+- What to check on the live site.
+~~~
+
+Exact follow-up:
+
+~~~text
+Continue without BMAD
+~~~
+
+Exact constraint approval:
+
+~~~text
+Approved: widen the PostgreSQL discipline constraint to add Fitness,
+keeping every existing value and record. Leave SQLite and backups
+untouched. Confirm with tests that existing lessons still load and
+save. Proceed with the full Fitness scope, then report as requested.
+~~~
+
+Assistant outcome summary: inspected the existing discipline checks and paused before widening PostgreSQL until explicit approval. BMAD runner encountered a Python registry-access failure; the user directed continuation without BMAD. Implemented shared Fitness options/validation/guidance, reusable form controls, legacy edit compatibility, dashboard navigation/filter/card metadata, Prisma store normalization, contextual video terms and one versioned PostgreSQL migration. All prior disciplines remain in the replacement constraint. No real environment values were read, no remote SQL/provider calls were made, and SQLite implementation/schema/backups were not changed.
+
+Files: client/src/fitness.js and FitnessFields.jsx (new), AiLessonForm.jsx, App.jsx, LessonCard.jsx, LessonForm.jsx, lesson-draft.js, lesson-view.js; server/validate-lesson.js, lesson-store.js, video-suggestions.js, ai.test.js, fitness.test.js (new); prisma/schema.prisma and migrations/20261029000100_add_fitness/migration.sql (new); package.json, README.md, AGENTS.md, CODE_WALKTHROUGH.md and this log.
+
+Actual verification today: targeted Fitness tests 6/6; full serial npm test 112/112, zero failures/skips; production npm run build passed (Prisma Client generation, TypeScript and Vite, 36 modules); Prisma validation passed; separate Prisma setup/compatibility tests 5/5. Disposable PGlite executed all earlier PostgreSQL migrations and this migration, compared every original field for all six legacy disciplines, accepted all 36 type/format combinations and optional fields, rejected invalid values, and edited a legacy Personal Training record while preserving its ID/date/discipline. The real Express routes with a Prisma test double verified legacy GET/PUT, Fitness create/update, no duplicate on update and stale metadata clearing. React server rendering checked new/legacy controls, labels and filters; this is not a live browser test. Gemini and video requests were mocked; no claims of fresh live AI/YouTube or Neon integration success. No dependencies were added. Existing locked PGlite is used only for disposable tests.
+
+Genuine mistake/correction: the first new validation fixture incorrectly passed title into an AI request; the existing allowlist correctly rejected it. Removed title from that fixture and reran successfully. Also corrected an existing inaccurate comment above Prisma update to describe its transaction. A documentation tool call had a quoting syntax error before execution; corrected it without touching application behavior.
+
+Documentation: updated exact numbered source/configuration/migration/test listings and explanations; documented optional metadata, PostgreSQL-only Fitness storage, legacy behavior and deployment checks. Review and commit reference: this work belongs to the single commit titled "feat: add Fitness class types while preserving legacy lessons"; its hash is reported after committing because a commit cannot contain its own hash. Push and live deployment status must be reported from actual observations.
+
+Final local review: all 16 affected listings (1,523 lines) matched source and explanation numbering; JavaScript syntax checks passed. SQLite store implementation was compared with HEAD and is unchanged. Unrelated walkthrough sections were checked unchanged. Reviewed source/SQL/test diffs and documentation; no whitespace errors. Live deployment still requires Render confirmation after push.
