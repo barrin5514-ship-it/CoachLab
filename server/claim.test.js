@@ -1,3 +1,4 @@
+// Checks claim behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
@@ -8,6 +9,7 @@ import { migrate } from './migrations.js';
 import { sqliteLessons } from './lesson-store.js';
 import { claimLessons, sqliteClaimStore, assertSafeBackupDirectory } from './claim.js';
 
+// Prepares isolated test resources and cleanup so real lesson data is not used.
 function fixture(t) {
   const database = new Database(':memory:');
   migrate(database);

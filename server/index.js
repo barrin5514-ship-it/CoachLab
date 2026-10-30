@@ -1,3 +1,4 @@
+// Starts the selected database and authenticated server, stopping on failure instead of falling back.
 import { createApp } from './app.js';
 import { openDatabase } from './database.js';
 import { migrate } from './migrations.js';
@@ -8,11 +9,13 @@ import { listenerSettings } from './web.js';
 import { productionSecuritySettings } from './production-security.js';
 import { StartupCheckError, startupFailure } from './startup-errors.js';
 
+// Closes this resource cleanly instead of leaving an active request or connection behind.
 let close = async () => {};
 let startupStage = 'application configuration';
 try {
   const production = process.env.NODE_ENV === 'production';
   const { port, host } = listenerSettings();
+  // Choose one database explicitly; a failed connection must never silently switch storage.
   const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
   let auth;
@@ -34,6 +37,7 @@ try {
     const client = production ? module.createProductionClient() : module.createDevelopmentClient();
     close = () => client.$disconnect();
     startupStage = 'pooled DATABASE_URL connection and database identity query';
+    // Authenticate and confirm the actual database name before serving application requests.
     const identity = await client.$queryRaw`SELECT current_database() AS name`;
     const expected = production ? process.env.PRODUCTION_DB_NAME : process.env.COACHLAB_DEV_EXPECTED_DATABASE;
     if (identity[0].name !== expected) throw new StartupCheckError('Connected database does not match the expected database name.');

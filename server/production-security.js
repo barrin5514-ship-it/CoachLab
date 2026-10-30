@@ -1,4 +1,6 @@
+// Requires a public HTTPS origin and a strong authentication secret for production.
 import { StartupCheckError } from './startup-errors.js';
+// Requires a clean public HTTPS origin and sufficiently long auth secret.
 export function productionSecuritySettings(env = process.env) {
   let url;
   try { url = new URL(env.APP_URL); } catch { throw new StartupCheckError('APP_URL must be the public HTTPS origin.'); }

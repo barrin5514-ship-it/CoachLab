@@ -1,3 +1,4 @@
+/* Shared layout and controls keep coaching screens readable on phones and desktops. */
 :root { font-family: system-ui, sans-serif; color: #172d3a; background: #f3f6f7; line-height: 1.6; }
 * { box-sizing: border-box; }
 body { margin: 0; }

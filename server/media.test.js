@@ -1,3 +1,4 @@
+// Checks media behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sniffMedia } from './media-sniff.js';
@@ -11,6 +12,7 @@ import { withApprovedVideo } from '../client/src/media.js';
 import { createYouTubeQuota } from './youtube-quota.js';
 
 test('YouTube diagnostics report safe statuses, reasons and result counts without secret error bodies or URLs', async () => {
+  // Collects safe diagnostic events so tests can check their fields and privacy.
   const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
   await assert.rejects(youtubeCandidates('inside leg kicks', 'Muay Thai', 'SECRET_KEY', async () => Response.json({ error: { message: 'SECRET_KEY https://private.example', errors: [{ reason: 'quotaExceeded' }] } }, { status: 403 }), 'inside leg kicks', () => {}, diagnostic));
   assert.equal(logs[0].status, 403);
@@ -25,6 +27,7 @@ test('YouTube diagnostics report safe statuses, reasons and result counts withou
 
 test('exact live lesson logs key presence and specific match phrase; missing key differs from zero matches', async () => {
   const lesson = { title: 'Using Leg Kicks to Close the Distance', goal: 'inside leg kicks to close distance', discipline: 'Muay Thai', audience: 'Adults' };
+  // Collects safe diagnostic events so tests can check their fields and privacy.
   const logs = [], diagnostic = (event, fields) => logs.push({ event, ...fields });
   const missing = await suggestLessonVideos(lesson, { env: {}, diagnostic });
   assert.match(missing.message, /YouTube search unavailable/);
@@ -42,6 +45,7 @@ test('exact live lesson logs key presence and specific match phrase; missing key
 test('shared YouTube quota counts actual searches, preserves catalog access and expires after a day', async () => {
   let time = 0, requests = 0;
   const quota = createYouTubeQuota(() => time);
+  // Supplies a controlled HTTP response or failure so network behavior is repeatable.
   const fetcher = async () => { requests++; return Response.json({ items: [] }); };
   for (let i = 0; i < 25; i++) await youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a'));
   await assert.rejects(youtubeCandidates('leg kicks', 'Muay Thai', 'fake', fetcher, 'leg kicks', () => quota.take('coach-a')), error => error.status === 429);
@@ -78,6 +82,7 @@ test('lesson video queries extract unknown techniques across lesson text and kee
 
 test('video suggestions verify catalog first, avoid YouTube quota when found and never save', async () => {
   let searches = 0;
+  // Supplies a controlled playback check, including failures, without external requests.
   const verify = async url => ({ url, kind: 'youtube', title: 'Verified instruction' });
   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Adults' }, { env: { YOUTUBE_API_KEY: 'fake' }, verify, search: async () => { searches++; return []; } });
   assert.equal(searches, 0);
@@ -96,7 +101,9 @@ test('video fallback searches once, passes kids context, filters broken links an
   let searches = 0;
   const result = await suggestLessonVideos({ title: 'Jab', discipline: 'Boxing', audience: 'Kids' }, {
     env: { YOUTUBE_API_KEY: 'fake' },
+    // Supplies fake video candidates and records search usage for limit checks.
     search: async (query, discipline) => { searches++; assert.equal(query, 'jab Boxing drill kids non contact'); assert.equal(discipline, 'Boxing'); return Array.from({ length: 8 }, (_, i) => ({ url: `https://www.youtube.com/watch?v=abcdefghij${i}`, title: 'Jab drill' })); },
+    // Supplies a controlled playback check, including failures, without external requests.
     verify: async url => { if (url.endsWith('0')) throw new Error('private error'); return { url, kind: 'youtube', title: 'Jab drill' }; },
   });
   assert.equal(searches, 1);
@@ -148,6 +155,7 @@ test('private, loopback and link-local network addresses are never public', asyn
 
 test('safeFetch accepts only plain https, follows a few redirects and rechecks every hop', async () => {
   const calls = [];
+  // Imitates an HTTPS response to test redirect and private-address checks safely.
   const request = async (url, options) => {
     calls.push(url.href);
     assert.equal(options.method, 'GET');
@@ -163,6 +171,7 @@ test('safeFetch accepts only plain https, follows a few redirects and rechecks e
 });
 
 test('verifyLink confirms YouTube through oEmbed and images or videos by their real file contents', async () => {
+  // Builds a fake byte response for media verification tests.
   const reply = (status, body, headers = {}) => async () => ({ status, headers, body: Buffer.from(body) });
   const ok = await verifyLink('https://youtu.be/dQw4w9WgXcQ', { fetcher: reply(200, JSON.stringify({ title: 'Jab basics', author_name: 'Coach Dan' })) });
   assert.deepEqual(ok, { kind: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Jab basics', credit: 'YouTube — Coach Dan', source_page: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
@@ -194,7 +203,9 @@ test('activity helpers keep attachments with the right activity when headings ch
   assert.deepEqual(mediaPayload([{ id: 4, title: 'A', activity: 'x', url: 'ignored' }, { origin: 'link', url: 'https://a.com/x.png', title: 'B' }]), [{ id: 4, title: 'A', activity: 'x' }, { url: 'https://a.com/x.png', origin: 'link', title: 'B', activity: '', credit: '', source_page: '' }]);
 });
 
+// Builds fake Commons search JSON instead of contacting Wikimedia.
 const commonsReply = pages => async () => Response.json({ query: { pages } });
+// Builds fake file metadata with credits and supported-format details.
 const page = (title, mime, extra = {}) => ({ title, imageinfo: [{ url: `https://upload.wikimedia.org/${title}`, thumburl: `https://upload.wikimedia.org/thumb/${title}`, descriptionurl: `https://commons.wikimedia.org/wiki/${title}`, mime, extmetadata: { Artist: { value: '<a href="x">Jane Coach</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' }, ImageDescription: { value: 'A wrestler shoots a double leg takedown' }, ...extra } }] });
 
 test('Commons search keeps only supported file types that match the technique and carries credit', async () => {
@@ -210,7 +221,9 @@ test('Commons search keeps only supported file types that match the technique an
 
 test('finder returns only verified media matched to the section that asked for it and never repeats a link', async () => {
   const verified = [];
+  // Supplies a controlled playback check, including failures, without external requests.
   const verify = async url => { verified.push(url); if (url.includes('broken')) throw new MediaLinkError('gone'); return { kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'Checked', credit: '', source_page: '' }; };
+  // Supplies a controlled HTTP response or failure so network behavior is repeatable.
   const fetcher = async url => Response.json({ query: { pages: url.includes('filetype%3Abitmap') ? [page('File:Double_leg_takedown.jpg', 'image/jpeg'), page('File:Double_leg_broken.jpg', 'image/jpeg')] : [] } });
   const sections = [
     { name: 'Warm-up', instructions: 'Jog lightly.', queries: [] },
@@ -228,7 +241,9 @@ test('finder returns only verified media matched to the section that asked for i
 });
 
 test('catalog media is matched on the technique the section asked for, not on passing mentions in its instructions', async () => {
+  // Supplies a controlled playback check, including failures, without external requests.
   const verify = async url => ({ kind: url.includes('watch') ? 'youtube' : 'image', url, title: 'ok', credit: '', source_page: '' });
+  // Supplies a controlled HTTP response or failure so network behavior is repeatable.
   const fetcher = async () => Response.json({ query: { pages: [] } });
   const passing = { name: 'Technique teaching', instructions: 'Warm up the jab, then teach the stance and roundhouse kick.', queries: ['lead roundhouse kick technique'] };
   assert.deepEqual((await findMedia({ discipline: 'Muay Thai', sections: [passing] }, { fetcher, verify, env: {} })).media, []);
@@ -238,11 +253,13 @@ test('catalog media is matched on the technique the section asked for, not on pa
 
 test('finder uses the optional YouTube key only on the server and drops irrelevant titles', async () => {
   const seen = [];
+  // Supplies a controlled HTTP response or failure so network behavior is repeatable.
   const fetcher = async (url, options) => {
     seen.push([url, options.headers['x-goog-api-key']]);
     if (url.includes('googleapis.com')) return Response.json({ items: [{ id: { videoId: 'AAAAAAAAAAA' }, snippet: { title: 'Pad work for beginners', channelTitle: 'Gym' } }, { id: { videoId: 'BBBBBBBBBBB' }, snippet: { title: 'Knee cut half guard pass tutorial', channelTitle: 'Coach' } }] });
     return Response.json({ query: { pages: [] } });
   };
+  // Supplies a controlled playback check, including failures, without external requests.
   const verify = async url => ({ kind: 'youtube', url, title: 'ok', credit: '', source_page: '' });
   const result = await findMedia({ discipline: 'Brazilian Jiu-Jitsu', sections: [{ name: 'Technique teaching', instructions: 'Teach it.', queries: ['half guard pass'] }] }, { fetcher, verify, env: { YOUTUBE_API_KEY: 'test-key-value' } });
   assert.ok(result.media.some(item => item.url.endsWith('BBBBBBBBBBB')));
@@ -258,6 +275,7 @@ test('video relevance normalizes plurals and punctuation, checks descriptions an
     ['Cooking dinner', 'A delicious recipe'],
     ['Leg day workout', 'Strength exercises'],
   ].map(([title, description], index) => ({ id: { videoId: 'abcdefghij' + index }, snippet: { title, description } }));
+  // Supplies a controlled HTTP response or failure so network behavior is repeatable.
   const fetcher = async url => {
     const params = new URL(url).searchParams;
     assert.equal(params.get('maxResults'), '15');
@@ -302,12 +320,16 @@ test('video selection keeps results open, batches approval and retains selection
   const source = readFileSync(new URL('../client/src/VideoSuggestions.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
   const { code } = await transformWithOxc(source, 'VideoSuggestions.jsx', { jsx: { runtime: 'classic' } });
   const slots = [], ref = { current: false }; let cursor = 0, searches = 0, approved, succeeds = false;
+  // Imitates stable React state slots so actual component handlers can be exercised.
   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
   const videos = Array.from({ length: 4 }, (_, i) => ({ url: 'https://www.youtube.com/watch?v=abcdefghij' + i, title: 'Video ' + i, link_only: i === 3 }));
   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }), Fragment: 'fragment' };
   const Component = runInNewContext(code + '; VideoSuggestions;', { React, useState, useRef: () => ref, MediaItem: () => null, mediaLimits, youtubeId, fetch: async () => { searches++; return Response.json({ videos, message: 'Review before saving' }); } });
+  // Renders the component with the same fake state and controlled approval outcome.
   const render = () => { cursor = 0; return Component({ lesson: { id: 1 }, media: [videos[0]], onApprove: async items => { approved = items; return succeeds; } }); };
+  // Walks the fake element tree to find controls and status text.
   const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+  // Finds a control by its visible label so the test can invoke its handler.
   const button = (tree, label) => all(tree).find(node => node.type === 'button' && node.children.includes(label));
   await button(render(), 'Suggest videos').props.onClick();
   let tree = render(), boxes = all(tree).filter(node => node.type === 'input');

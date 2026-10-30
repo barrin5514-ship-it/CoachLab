@@ -1,3 +1,4 @@
+// Checks migration validation behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
@@ -7,11 +8,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
+// Parses test connection configuration while keeping invalid connection values out of errors.
 const parseUrl = value => { try { return new URL(value); } catch { throw new Error('Invalid connection configuration.'); } };
 const fields = ['id', 'title', 'discipline', 'skill_level', 'duration_minutes', 'goal', 'drills', 'coaching_notes', 'created_at'];
+// Hashes record values so equality checks need not print lesson content.
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+// Hashes a file to detect changes without printing its contents.
 const fileHash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+// Orders fields and normalizes timestamps for exact migration comparisons.
 const canonical = rows => rows.map(row => fields.map(key => key === 'created_at' ? new Date(row[key]).toISOString() : row[key]));
+// Compares every selected field rather than relying only on record counts.
 const equalRows = (actual, expected) => {
   assert.equal(actual.length, expected.length);
   const left = canonical(actual), right = canonical(expected);
@@ -72,8 +78,11 @@ test('isolated PostgreSQL migration validation', { skip: process.env.COACHLAB_RU
   direct.search = '';
   const client = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
   const schema = 'coachlab_validation_' + randomUUID().replaceAll('-', '');
+  // Reads the isolated test lesson table for migration assertions.
   const read = async () => (await client.query('SELECT * FROM lessons ORDER BY id')).rows;
+  // Binds test-record values as SQL parameters rather than joining lesson text into SQL.
   const insert = async row => client.query(`INSERT INTO lessons (${fields.join(',')}) VALUES (${fields.map((_, i) => '$' + (i + 1)).join(',')})`, fields.map(key => row[key]));
+  // Exercises the transactional import path with disposable test rows.
   const importRows = async rows => {
     await client.query('SAVEPOINT import_batch');
     try {
@@ -113,6 +122,7 @@ test('isolated PostgreSQL migration validation', { skip: process.env.COACHLAB_RU
     const relation = (await client.query("SELECT 'lessons'::regclass::oid = to_regclass($1)::oid AS isolated", [schema + '.lessons'])).rows[0];
     assert.equal(relation.isolated, true);
     stage = 'scenarios';
+    // Runs a named migration scenario with controlled transaction cleanup.
     const scenario = async (name, run) => t.test(name, async () => {
       await client.query('SAVEPOINT scenario');
       try { await run(); } finally { await client.query('ROLLBACK TO SAVEPOINT scenario'); await client.query('RELEASE SAVEPOINT scenario'); }

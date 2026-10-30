@@ -1,3 +1,4 @@
+// Checks lesson ui behavior with controlled fixtures; read each test name for its expected outcome.
 import { disciplineNavigation, filterLessons, timelineEntries } from '../client/src/lesson-view.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';

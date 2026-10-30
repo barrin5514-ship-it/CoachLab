@@ -1,8 +1,10 @@
+// Checks settings, applies deployment migrations, then starts the app in that order.
 import { deployMigrations } from './deploy-migrations.js';
 import { productionSecuritySettings } from './production-security.js';
 import { listenerSettings } from './web.js';
 import { StartupCheckError, startupFailure } from './startup-errors.js';
 
+// Runs deployment migrations before loading the server, allowing a new empty database.
 export async function startProduction(env = process.env, migrate = deployMigrations, start = () => import('./index.js')) {
   env.NODE_ENV = 'production';
   let stage = 'APP_URL and BETTER_AUTH_SECRET validation';

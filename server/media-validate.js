@@ -1,9 +1,12 @@
+// Checks attachment shapes and lengths before storage or external link checks.
 import { mediaLimits } from '../client/src/media.js';
 
+// Checks text type and size before it can reach later code.
 const text = (value, limit) => value === undefined || value === null ? '' : typeof value === 'string' && value.length <= limit ? value.trim() : null;
 const linkFields = ['url', 'origin', 'title', 'activity', 'credit', 'source_page'];
 const savedFields = ['id', 'title', 'activity'];
 
+// Accepts only known attachment fields and bounded lists before verification or saving.
 export function validateMediaList(list) {
   if (!Array.isArray(list)) return { error: 'media must be a list of attachments.' };
   if (list.length > mediaLimits.perLesson) return { error: `A lesson can have at most ${mediaLimits.perLesson} pictures and videos.` };

@@ -1,7 +1,9 @@
+// Runs the explicit owner-claim command; ordinary app startup does not run it.
 import { parseArgs } from 'node:util';
 import { claimLessons, defaultBackupRoot, prismaClaimStore, sqliteClaimStore } from './claim.js';
 
 const { values } = parseArgs({ options: { email: { type: 'string' }, lessons: { type: 'string' }, 'all-unclaimed': { type: 'boolean' }, confirm: { type: 'boolean' }, 'backup-dir': { type: 'string' } } });
+// Closes this resource cleanly instead of leaving an active request or connection behind.
 let close = async () => {};
 try {
   const selected = process.env.COACHLAB_DATABASE || 'sqlite';

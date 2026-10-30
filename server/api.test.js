@@ -1,3 +1,4 @@
+// Checks api behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -9,6 +10,7 @@ import { createApp } from './app.js';
 import { migrate } from './migrations.js';
 import { testOptions, authedFetch as fetch } from './test-auth.js';
 
+// Prepares isolated test resources and cleanup so real lesson data is not used.
 async function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-api-'));
   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
@@ -33,6 +35,7 @@ async function fixture(t) {
   return state;
 }
 
+// Sends a request to the isolated test server with the required test headers.
 function post(state, body) {
   return fetch(`${state.url}/api/lessons`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
@@ -126,6 +129,7 @@ test('update preserves identity without duplicates; delete persists; invalid and
   const state = await fixture(t);
   const original = await (await post(state, { title: 'Original', discipline: 'Boxing' })).json();
   const other = await (await post(state, { title: 'Keep this', discipline: 'MMA' })).json();
+  // Exercises updating the same lesson ID on the isolated test server.
   const put = (id, body) => fetch(`${state.url}/api/lessons/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const edited = { title: 'Edited', discipline: 'Wrestling', skill_level: 'Advanced', duration_minutes: 30, goal: 'New goal', drills: 'Second activity\n\nFirst activity', coaching_notes: 'Modified safety' };
   const response = await put(original.id, edited);

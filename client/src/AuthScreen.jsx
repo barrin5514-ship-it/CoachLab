@@ -1,7 +1,9 @@
+// Shows account forms and explains sign-in failures without exposing server details.
 import React, { useState } from 'react';
 import { getSession, requestReset, resetPassword, signIn, signUp, startGoogleSignIn } from './auth.js';
 import { passwordLimits, passwordProblem, validateEmail, validateName } from './password-policy.js';
 
+// Hides passwords by default but lets the owner reveal their own typing.
 function PasswordField({ label, value, onChange, autoComplete, hint, disabled }) {
   const [shown, setShown] = useState(false);
   return <div className="password-field">
@@ -13,6 +15,7 @@ function PasswordField({ label, value, onChange, autoComplete, hint, disabled })
   </div>;
 }
 
+// Chooses only account actions supported by the server configuration.
 export default function AuthScreen({ config, notice, resetToken, resetError, onSignedIn }) {
   const resetEnabled = config.passwordReset === true;
   const [requestedMode, setMode] = useState(resetToken ? 'reset' : resetError ? 'forgot' : 'signin');
@@ -23,17 +26,20 @@ export default function AuthScreen({ config, notice, resetToken, resetError, onS
   const [message, setMessage] = useState(notice ? { tone: 'success', text: notice } : resetError ? { tone: 'error', text: resetError } : null);
   const [busy, setBusy] = useState(false);
 
+  // Clears the password when changing account forms so it is not reused accidentally.
   function go(next, text, tone = 'success') {
     setMode(next);
     setPassword('');
     setMessage(text ? { tone, text } : null);
   }
+  // Keeps account requests from overlapping and shows their safe errors.
   async function run(work) {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try { await work(); } catch (failure) { setMessage({ tone: 'error', text: failure.message }); } finally { setBusy(false); }
   }
+  // Prevents browser navigation and runs the selected account action with shared error handling.
   const submit = work => event => { event.preventDefault(); run(work); };
 
   const login = submit(async () => {

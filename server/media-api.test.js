@@ -1,3 +1,4 @@
+// Checks media api behavior with controlled fixtures; read each test name for its expected outcome.
 import { createYouTubeQuota } from './youtube-quota.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -66,6 +67,7 @@ test('video suggestions enforce one in-flight search and eighty YouTube searches
   const server = createApp(store, { ...testOptions, auth: { getUser: async request => ({ id: request.headers['x-test-user'] || 'a' }) }, now: () => time, youtubeQuota: createYouTubeQuota(() => time), videoFinder: (lesson, { reserveSearch }) => { reserveSearch(); return new Promise(resolve => { release = resolve; }); } }).listen(0, '127.0.0.1');
   t.after(() => new Promise(resolve => server.close(resolve)));
   await once(server, 'listening');
+  // Sends a request to the isolated test server with the required test headers.
   const post = user => fetch(`http://127.0.0.1:${server.address().port}/api/lessons/1/videos`, { method: 'POST', headers: { 'x-test-user': user } });
   for (let i = 0; i < 80; i++) {
     release = null;
@@ -83,12 +85,14 @@ test('video suggestions enforce one in-flight search and eighty YouTube searches
   release({ videos: [], message: 'No results' });
   assert.equal((await next).status, 200);
 });
+// Supplies fake link verification so tests do not depend on external media sites.
 const verifyLink = async url => {
   if (url.includes('broken')) throw new MediaLinkError('The website answered with status 404, so the link cannot be used.');
   if (url.includes('offline')) throw new Error('private transport detail');
   return url.includes('youtu') ? { kind: 'youtube', url: ytLink, title: 'Checked video', credit: 'YouTube — Coach', source_page: ytLink } : { kind: 'image', url, title: 'Checked picture', credit: '', source_page: '' };
 };
 
+// Prepares isolated test resources and cleanup so real lesson data is not used.
 async function fixture(t, extra = {}) {
   const directory = mkdtempSync(path.join(tmpdir(), 'coachlab-media-'));
   assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
@@ -200,6 +204,7 @@ test('links that fail verification or attachments that do not exist stop the sav
 
 test('verify and suggest routes validate input, hide failures and limit searches', async t => {
   let calls = 0;
+  // Returns fake search results so the route can be tested without external quota.
   const findMedia = async ({ discipline, sections }) => { calls += 1; return { media: [{ origin: 'suggested', kind: 'youtube', url: ytLink, title: 'Found', activity: sections[0].name, credit: 'YouTube', source_page: ytLink }], notes: [discipline] }; };
   const state = await fixture(t, { findMedia });
   const ok = await state.json('/api/media/verify', 'POST', { url: 'https://youtu.be/dQw4w9WgXcQ' });

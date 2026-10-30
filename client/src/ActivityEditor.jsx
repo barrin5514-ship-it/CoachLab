@@ -1,11 +1,14 @@
+// Edits activity cards in memory and keeps their pictures and videos with the matching headings.
 import React, { useEffect, useRef, useState } from 'react';
 
 import { activityBlocks, joinActivities, moveActivity } from './activities.js';
 import MediaEditor from './MediaEditor.jsx';
 import { headingOf, renameActivity, sameActivity, unassignedMedia } from './media.js';
 
+// Keeps activities editable as separate cards while preserving the saved text format.
 export default function ActivityEditor({ value, onChange, label = 'Exercises and activities', limit = 10000, media, onMediaChange }) {
   const nextId = useRef(0);
+  // Assigns stable local IDs so editing one activity does not confuse React with another.
   const makeCards = text => activityBlocks(text).map(item => ({ id: nextId.current++, text: item }));
   const [cards, setCards] = useState(() => makeCards(value));
   const withMedia = Array.isArray(media) && onMediaChange;
@@ -15,18 +18,22 @@ export default function ActivityEditor({ value, onChange, label = 'Exercises and
     if (value !== joinActivities(cards.map(card => card.text))) setCards(makeCards(value));
   }, [value]);
 
+  // Updates the cards and sends their combined text back to the parent form.
   function update(next) {
     setCards(next);
     onChange(joinActivities(next.map(card => card.text)));
   }
+  // Keeps attachment headings in sync when the coach edits an activity title.
   function edit(card, text) {
     if (withMedia && headingOf(card.text) !== headingOf(text)) onMediaChange(current => renameActivity(current, headingOf(card.text), headingOf(text)));
     update(cards.map(item => item.id === card.id ? { ...item, text } : item));
   }
+  // Moves one activity within the current list without dropping its text.
   function swap(index, direction) {
     const order = moveActivity(cards.map((_, position) => position), index, direction);
     update(order.map(position => cards[position]));
   }
+  // Chooses an unused heading so attached media can identify the new activity.
   function addActivity() {
     let number = cards.length + 1;
     while (headings.includes(`New activity ${number} — add minutes`)) number += 1;

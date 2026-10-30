@@ -1,6 +1,8 @@
+// Displays checked attachments and fallback links without automatically playing external videos.
 import React, { useState } from 'react';
 import { attachmentSrc, formatSize, originLabel, safeLink, youtubeId } from './media.js';
 
+// Uses the attachment kind to choose a preview and keeps a source link as fallback.
 export default function MediaItem({ item }) {
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(false);

@@ -1,3 +1,4 @@
+// Checks postgres api behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -27,17 +28,21 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
   direct.search = '';
   const admin = new pg.Client({ connectionString: direct.toString(), ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 15000, statement_timeout: 15000 });
   let server, url, created = false;
+  // Stops the isolated API server and its database connection between persistence checks.
   const stop = async () => {
     if (server?.listening) await new Promise(resolve => server.close(resolve));
     await client.$disconnect();
   };
+  // Starts the isolated test API to check behavior across restarts.
   const start = async () => {
     client = createDevelopmentClient(env, schema);
     server = createApp(prismaLessons(client), { ...testOptions, provider: async () => structuredClone(mockDraft), verifyLink: async link => ({ kind: link.includes('youtu') ? 'youtube' : 'image', url: link, title: 'Checked', credit: '', source_page: '' }) }).listen(0, '127.0.0.1');
     await once(server, 'listening');
     url = `http://127.0.0.1:${server.address().port}`;
   };
+  // Reads saved lessons back through the isolated API.
   const get = async () => (await fetch(url + '/api/lessons')).json();
+  // Sends a request to the isolated test server with the required test headers.
   const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
     await assert.rejects(client.lesson.count(), error => error.code === 'P2021' && JSON.stringify(error.meta).includes(schema));
@@ -84,6 +89,7 @@ test('PostgreSQL API: six disciplines, mocked AI approval, committed persistence
     const withMedia = await post('/api/lessons', { ...changed, title: 'Media persistence', media: [{ id: upload.id, title: 'Stored picture', activity: 'Activity one' }, { url: 'https://example.com/pic.png', title: 'Linked picture' }] });
     assert.equal(withMedia.status, 201);
     const mediaLesson = await withMedia.json();
+    // Reads saved attachment metadata through the isolated API.
     const mediaRows = async () => (await fetch(url + '/api/lesson-media')).json();
     assert.deepEqual((await mediaRows()).map(item => [item.origin, item.title, item.lesson_id]), [['upload', 'Stored picture', mediaLesson.id], ['link', 'Linked picture', mediaLesson.id]]);
     const snapshot = await get();

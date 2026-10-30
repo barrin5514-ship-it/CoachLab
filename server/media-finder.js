@@ -1,36 +1,46 @@
+// Finds relevant catalog and provider media before checking links for use in a lesson.
 import { mediaCatalog } from '../client/src/lesson-media.js';
 import { youtubeId } from '../client/src/media.js';
 import { verifyLink } from './media-verify.js';
 import { youtubeQuota } from './youtube-quota.js';
 
 const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'drill', 'drills', 'basic', 'basics', 'how', 'technique', 'exercise']);
+// Keeps useful query words while dropping common filler.
 const significant = text => [...new Set(String(text).toLowerCase().match(/[a-z0-9]{3,}/g) || [])].filter(word => !stopWords.has(word));
+// Removes markup and simple entities so matching works on readable text.
 const strip = html => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\s+/g, ' ').trim();
+// Checks shared search words instead of accepting every returned media item.
 const relevant = (query, text, share) => {
   const words = significant(query);
   if (!words.length) return false;
   const haystack = text.toLowerCase();
   return words.filter(word => haystack.includes(word)).length >= Math.max(1, Math.ceil(words.length * share));
 };
+// Normalizes case, punctuation, common plurals and low-kick wording for broader matching.
 const videoWords = text => significant(strip(text).replace(/low[ -]+kicks?/gi, 'leg kick')).map(word => word.replace(/(ch|sh|ss|x)es$/, '$1').replace(/s$/, ''));
+// Ranks useful technique matches in titles or descriptions, without requiring every modifier.
 const videoScore = (query, title, description) => {
   const modifiers = new Set(['inside', 'outside', 'inner', 'outer', 'lead', 'rear', 'tutorial', 'beginner']);
   const words = [...new Set(videoWords(query))].filter(word => !modifiers.has(word));
   if (!words.length) return 0;
+  // Counts whole normalized words rather than accidental substrings.
   const hits = text => { const tokens = new Set(videoWords(text)); return words.filter(word => tokens.has(word)).length; };
   const titleHits = hits(title), descriptionHits = hits(description);
   const needed = Math.min(words.length, Math.max(2, Math.ceil(words.length / 2)));
   if (Math.max(titleHits, descriptionHits) < needed) return 0;
   return titleHits * 3 + descriptionHits;
 };
+// Requests provider JSON with a short timeout and a safe failure.
 const jsonFrom = async (fetcher, url, headers = {}) => {
   const response = await fetcher(url, { headers: { 'user-agent': 'CoachLab/1.0 (local coaching lesson planner)', accept: 'application/json', ...headers }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error('search unavailable');
   return response.json();
 };
 
+// Bounds search phrases before any external provider receives them.
 export const cleanQueries = queries => (Array.isArray(queries) ? queries : []).filter(query => typeof query === 'string').map(query => query.replace(/\s+/g, ' ').trim()).filter(query => query.length >= 3 && query.length <= 80).slice(0, 2);
 
+// Uses reviewed catalog matches first so a search may avoid provider quota.
 export function catalogCandidates(discipline, section, queries) {
   const text = queries.length ? queries.join(' ') : '';
   return mediaCatalog.filter(item => item.disciplines.includes(discipline) && item.terms.test(text)).flatMap(item => [
@@ -39,6 +49,7 @@ export function catalogCandidates(discipline, section, queries) {
   ]);
 }
 
+// Keeps supported Wikimedia file types with matching descriptions and source credits.
 export async function commonsCandidates(query, fetcher = fetch) {
   const found = [];
   for (const [filter, mimes] of [['bitmap', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']], ['video', ['video/webm', 'video/mp4']]]) {
@@ -58,8 +69,10 @@ export async function commonsCandidates(query, fetcher = fetch) {
   return found;
 }
 
+// Reserves shared quota, searches safely and ranks candidates before playback verification.
 export async function youtubeCandidates(query, discipline, key, fetcher = fetch, matchQuery = query, reserveSearch = () => youtubeQuota.take(), diagnostic = () => {}) {
   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&maxResults=15&q=${encodeURIComponent(query.toLowerCase().includes(discipline.toLowerCase()) ? query : `${query} ${discipline}`)}`;
+  // Reserve a shared search slot before the network call; even a failed provider request can cost quota.
   reserveSearch();
   let response;
   try { response = await fetcher(url, { headers: { 'x-goog-api-key': key, accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); }
@@ -69,12 +82,14 @@ export async function youtubeCandidates(query, discipline, key, fetcher = fetch,
   const code = data?.error?.details?.find(item => reasons.has(item.reason))?.reason || data?.error?.errors?.[0]?.reason;
   diagnostic('youtube_http', { status: response.status, reason: response.ok ? 'ok' : reasons.has(code) ? code : 'unclassified_error' });
   if (!response.ok || !Array.isArray(data?.items)) throw new Error('YouTube search unavailable');
+  // Rank title and description matches before spending time checking playback.
   const candidates = data.items.filter(item => /^[\w-]{11}$/.test(item.id?.videoId || '')).map(item => ({ item, score: videoScore(matchQuery, item.snippet?.title || '', item.snippet?.description || '') }))
     .filter(result => result.score > 0).sort((a, b) => b.score - a.score).map(({ item }) => ({ url: `https://www.youtube.com/watch?v=${item.id.videoId}`, title: strip(item.snippet.title).slice(0, 120), credit: `YouTube — ${strip(item.snippet.channelTitle).slice(0, 100)}`, source_page: `https://www.youtube.com/watch?v=${item.id.videoId}`, rank: 1 }));
   diagnostic('youtube_results', { returned: data.items.length, matched: candidates.length, embeddable: true, safe_search: 'strict', duration_filter: false });
   return candidates;
 }
 
+// Combines sources and checks links before returning bounded media per activity.
 export async function findMedia({ discipline, sections }, { fetcher = fetch, verify = verifyLink, env = process.env, reserveSearch } = {}) {
   const key = (env.YOUTUBE_API_KEY || '').trim();
   const perSection = await Promise.all(sections.map(async section => {

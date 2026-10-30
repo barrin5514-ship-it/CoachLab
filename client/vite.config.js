@@ -1,3 +1,4 @@
+// Configures the development browser server and the production React build.
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { apiProxy } from './api-proxy.js';

@@ -1,5 +1,7 @@
+// Records SQLite migration versions so each reviewed SQL file is applied only once.
 import { readFileSync } from 'node:fs';
 
+// Applies each SQLite SQL version inside a transaction and records it only on success.
 export function migrate(database) {
   database.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,

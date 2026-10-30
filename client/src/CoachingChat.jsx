@@ -1,5 +1,7 @@
+// Keeps a temporary, read-only coaching conversation in browser memory.
 import React, { useEffect, useRef, useState } from 'react';
 
+// Keeps chat temporary and separate from lesson editing.
 export default function CoachingChat() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
@@ -11,7 +13,9 @@ export default function CoachingChat() {
   const input = useRef(null);
   useEffect(() => () => request.current?.abort(), []);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
+  // Closes the chat panel and returns keyboard focus to its toggle button.
   function close() { setOpen(false); toggle.current?.focus(); }
+  // Sends a bounded question while keeping the conversation only in browser memory.
   async function submit(event) {
     event.preventDefault();
     if (request.current || !message.trim()) return;

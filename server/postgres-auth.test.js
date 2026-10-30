@@ -1,3 +1,4 @@
+// Checks postgres auth behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -50,6 +51,7 @@ test('PostgreSQL accounts: real Better Auth through Prisma, private lessons and 
     await once(server, 'listening');
     const base = `http://127.0.0.1:${server.address().port}`;
     const clientFor = cookieClient(base, origin);
+    // Registers and signs in a separate test coach to check account isolation.
     const join = async (email, ip) => {
       const api = clientFor(ip);
       assert.equal((await api('/api/auth/sign-up/email', { method: 'POST', body: { name: 'Coach', email, password } })).status, 200);

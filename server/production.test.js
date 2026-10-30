@@ -1,3 +1,4 @@
+// Checks production behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -30,6 +31,7 @@ test('production database configuration rejects unsafe or mismatched targets wit
   const env = { NODE_ENV: 'production', COACHLAB_DB_ENV: 'production', PRODUCTION_DB_HOST: 'ep-production.example.neon.tech', PRODUCTION_DB_NAME: 'neondb', DATABASE_URL: 'postgresql://test:test@ep-production-pooler.example.neon.tech/neondb?sslmode=require', DIRECT_URL: 'postgresql://test:test@ep-production.example.neon.tech/neondb?sslmode=require' };
   const settings = productionDatabaseSettings(env);
   let calls = 0;
+  // Imitates the migration command so startup tests cannot change a live database.
   const run = (command, args, options) => {
     calls++;
     assert.equal(command, process.execPath);
@@ -84,6 +86,7 @@ test('production serves React browser routes without swallowing API or missing a
 test('production API limiter bounds memory, separates clients and expires limits without blocking health', () => {
   let time = 1000;
   const guard = productionApiGuard({ now: () => time, limit: 2, maxClients: 2 });
+  // Invokes the request guard with a fake client address and path.
   const call = (ip, path = '/lessons') => {
     const result = { status: 200, headers: {} };
     const response = { set: (name, value) => { result.headers[name] = value; return response; }, status: value => { result.status = value; return response; }, json: body => { result.body = body; } };

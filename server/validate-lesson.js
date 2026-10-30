@@ -1,8 +1,10 @@
+// Rejects unsupported or oversized lesson fields before either database receives them.
 const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
 const levels = ['Beginner', 'Intermediate', 'Advanced'];
 const textLimits = { title: 200, goal: 2000, drills: 10000, coaching_notes: 10000 };
 const fields = [...Object.keys(textLimits), 'discipline', 'skill_level', 'duration_minutes', 'audience'];
 
+// Checks known fields, types and bounds before any lesson reaches storage.
 export function validateLesson(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'Send a JSON object containing lesson fields.' };

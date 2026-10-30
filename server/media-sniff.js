@@ -1,5 +1,8 @@
+// Recognizes supported media from file bytes instead of trusting the claimed file type.
+// Checks file signature bytes rather than trusting the filename.
 const startsWith = (buffer, bytes, offset = 0) => bytes.every((byte, index) => buffer[offset + index] === byte);
 
+// Rejects unknown formats by inspecting the actual bytes.
 export function sniffMedia(buffer) {
   if (!buffer || buffer.length < 12) return null;
   if (startsWith(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { kind: 'image', mime: 'image/png' };

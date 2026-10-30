@@ -1,13 +1,16 @@
+// Keeps search results open for multi-selection; approval opens the editor rather than saving.
 import React, { useRef, useState } from 'react';
 import MediaItem from './MediaItem.jsx';
 import { mediaLimits, youtubeId } from './media.js';
 
+// Keeps suggestions and selections local until explicit batch approval.
 export default function VideoSuggestions({ lesson, media, onApprove, disabled }) {
   const [result, setResult] = useState(null);
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const running = useRef(false);
+  // Runs one search and keeps its results for repeated selection without spending more quota.
   async function suggest() {
     if (running.current) return;
     running.current = true; setBusy(true); setError('');
@@ -19,10 +22,12 @@ export default function VideoSuggestions({ lesson, media, onApprove, disabled })
     } catch (failure) { setError(failure instanceof TypeError ? 'Could not reach video search. Try later.' : failure.message); }
     finally { running.current = false; setBusy(false); }
   }
+  // Passes the chosen verified batch to the editor; failed opening keeps the choices available.
   async function approveSelected() {
     if (running.current || !selected.length) return;
     running.current = true; setBusy(true); setError('');
     try {
+      // Select from the already fetched results; approval must not issue another YouTube search.
       const approved = result.videos.filter(item => selected.includes(item.url) && !item.link_only);
       if (await onApprove(approved) !== false) { setResult(null); setSelected([]); }
       else setError('Could not open the editor. Your selection is kept; try again.');

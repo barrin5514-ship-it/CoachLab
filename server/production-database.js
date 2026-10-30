@@ -1,5 +1,7 @@
+// Checks direct and pooled production settings agree before any migration or query.
 import { StartupCheckError } from './startup-errors.js';
 
+// Rejects mismatched direct and pooled targets before a production database operation.
 export function productionDatabaseSettings(env = process.env) {
   if (env.NODE_ENV !== 'production') throw new StartupCheckError('NODE_ENV must be production.');
   if (env.COACHLAB_DB_ENV !== 'production') throw new StartupCheckError('COACHLAB_DB_ENV must be production.');
@@ -15,9 +17,11 @@ export function productionDatabaseSettings(env = process.env) {
     if ([...url.searchParams.keys()].some(key => !['sslmode', 'channel_binding'].includes(key))) throw new StartupCheckError(`${name} contains unsupported query parameters; only sslmode and channel_binding are allowed.`);
     return url;
   });
+  // Application traffic uses pooling; migrations need the direct endpoint of that same database.
   const [pooled, direct] = urls;
   if (!pooled.hostname.includes('-pooler.')) throw new StartupCheckError('DATABASE_URL must use a pooled hostname containing -pooler.');
   if (direct.hostname.includes('-pooler.')) throw new StartupCheckError('DIRECT_URL must use a direct hostname without -pooler.');
+  // Compare identity internally and report only field names if the two connections disagree.
   for (const field of ['hostname', 'pathname', 'username', 'password', 'port']) {
     const pooledValue = field === 'hostname' ? pooled.hostname.replace('-pooler.', '.') : pooled[field];
     if (pooledValue !== direct[field]) throw new StartupCheckError(`DATABASE_URL and DIRECT_URL do not match on ${field}.`);
@@ -27,6 +31,7 @@ export function productionDatabaseSettings(env = process.env) {
   try { database = decodeURIComponent(direct.pathname.slice(1)); } catch { throw new StartupCheckError('DIRECT_URL database name has invalid percent encoding.'); }
   if (!database || database.includes('/')) throw new StartupCheckError('DIRECT_URL must contain one database name without a trailing slash.');
   if (database !== env.PRODUCTION_DB_NAME) throw new StartupCheckError('PRODUCTION_DB_NAME does not match DIRECT_URL database name.');
+  // Stop rather than knowingly target the configured development host as production.
   if (env.COACHLAB_DEV_EXPECTED_HOST?.replace('-pooler.', '.') === direct.hostname) throw new StartupCheckError('Production must not use COACHLAB_DEV_EXPECTED_HOST.');
   direct.searchParams.set('sslmode', 'verify-full');
   pooled.search = '';

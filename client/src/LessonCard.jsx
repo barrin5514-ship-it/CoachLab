@@ -1,3 +1,4 @@
+// Displays a saved lesson, its media and explicit edit/delete actions.
 import React, { useState } from 'react';
 import VideoSuggestions from './VideoSuggestions.jsx';
 import LessonMedia from './LessonMedia.jsx';
@@ -6,6 +7,7 @@ import { activityBlocks, activityMinutes } from './activities.js';
 import { timelineEntries } from './lesson-view.js';
 import { groupMedia, mediaKey } from './media.js';
 
+// Breaks coaching text into readable bullets and expandable long explanations.
 export function CoachingText({ text, after }) {
   if (!text) return <p>Not added</p>;
   return <>{text.split(/\n\s*\n/).map((block, index) => {
@@ -18,12 +20,15 @@ export function CoachingText({ text, after }) {
     </section>;
   })}</>;
 }
+// Shows saved data without writing changes until the coach takes an explicit action.
 export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { byBlock, rest } = groupMedia(media, activityBlocks(lesson.drills));
+  // Places checked media with the relevant activity or whole-lesson section.
   const gallery = items => items?.length ? <ul className="media-list">{items.map(item => <li key={mediaKey(item)}><MediaItem item={item} /></li>)}</ul> : null;
+  // Sends deletion only after confirmation and reports when the server cannot confirm it.
   async function remove() {
     if (busy) return;
     setBusy(true); setError('');

@@ -1,3 +1,4 @@
+// Translates known startup failures into useful messages without printing credentials.
 export class StartupCheckError extends Error {}
 
 const prismaReasons = {
@@ -15,10 +16,12 @@ const prismaReasons = {
   P3018: 'A migration SQL step failed; inspect migration history before retrying.',
 };
 
+// Shows only recognized safe Prisma error descriptions, never raw provider output.
 export function prismaFailureReason(code) {
   return Object.hasOwn(prismaReasons, code) ? `${code}: ${prismaReasons[code]}` : 'No recognized safe error code; raw provider output was withheld.';
 }
 
+// Names the failed startup stage without leaking connection details.
 export function startupFailure(stage, error) {
   const reason = error instanceof StartupCheckError ? error.message : prismaFailureReason(error?.code);
   return `Production startup stopped at ${stage}. ${reason} No development fallback was attempted.`;

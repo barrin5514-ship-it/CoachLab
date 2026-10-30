@@ -1,3 +1,4 @@
+// Configures server-side sessions, password checks and sign-in protections.
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
@@ -8,22 +9,29 @@ import { passwordProblem, validateEmail, validateName } from '../client/src/pass
 const generic = 'Invalid email or password';
 const tooMany = 'Too many sign-in attempts. Wait a few minutes and try again, or reset your password.';
 
+// Tracks recent attempts so repeated sign-in failures can be slowed down.
 export function attemptLimiter({ max, windowMs, now = Date.now }) {
   const entries = new Map();
+  // Expires old attempts rather than keeping a permanent block.
   const fresh = key => {
     const list = (entries.get(key) || []).filter(time => now() - time < windowMs);
     if (list.length) entries.set(key, list); else entries.delete(key);
     return list;
   };
   return {
+    // Checks whether recent attempts have reached the limit.
     blocked: key => fresh(key).length >= max,
+    // Records an attempt before later requests can reuse the same allowance.
     hit: key => { const list = fresh(key); list.push(now()); entries.set(key, list); },
+    // Removes the attempt history after a successful login.
     clear: key => entries.delete(key),
   };
 }
 
+// Normalizes email case and spacing so equivalent logins share one limit.
 const normalize = email => String(email ?? '').trim().toLowerCase();
 
+// Delegates password and session storage to Better Auth while applying app safety rules.
 export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, mailer, env = {}, loginLimiter = attemptLimiter({ max: 8, windowMs: 15 * 60 * 1000 }), resetLimiter = attemptLimiter({ max: 3, windowMs: 60 * 60 * 1000 }) }) {
   const passwordResetEnabled = env.NODE_ENV !== 'production';
   if (typeof secret !== 'string' || secret.length < 32) throw new Error('A random authentication secret of at least 32 characters is required.');
@@ -41,24 +49,29 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
       maxPasswordLength: 128,
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
+      // Keeps reset delivery disabled in production and limits development reset attempts.
       sendResetPassword: async ({ user, url }) => {
+        // Block the endpoint too, not just the browser link, while production reset mail is unavailable.
         if (!passwordResetEnabled) return;
         const key = normalize(user.email);
         if (resetLimiter.blocked(key)) return;
         resetLimiter.hit(key);
         await mailer.sendPasswordReset({ to: user.email, url });
       },
+      // Uses a notice instead of replacing an existing account password.
       onExistingUserSignUp: async ({ user }) => { if (passwordResetEnabled) await mailer.sendExistingAccountNotice({ to: user.email }); },
     },
     socialProviders: google ? { google } : undefined,
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     advanced: {
       cookiePrefix: 'coachlab',
+      // HTTPS-only production cookies keep the login session off unencrypted connections.
       useSecureCookies: env.NODE_ENV === 'production' || baseURL.startsWith('https://'),
       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
     },
     rateLimit: {
       enabled: true,
+      // Better Auth stores its rate-limit records in the database; extra app limiters have separate in-memory counters.
       storage: 'database',
       window: 60,
       max: 120,
@@ -71,6 +84,7 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
     },
     hooks: {
       before: createAuthMiddleware(async context => {
+        // Block the endpoint too, not just the browser link, while production reset mail is unavailable.
         if (!passwordResetEnabled && /^\/(request-password-reset|reset-password)(\/|$)/.test(context.path)) throw new APIError('FORBIDDEN', { message: 'Contact the coach to reset your password.', code: 'PASSWORD_RESET_DISABLED' });
         const body = context.body ?? {};
         if (context.path === '/sign-up/email') {
@@ -100,10 +114,12 @@ export function createAuth({ database, prisma, secret, baseURL, trustedOrigins, 
     google: !!google,
     mailMode: passwordResetEnabled ? mailer.mode : 'disabled',
     handler: toNodeHandler(auth),
+    // Reads the session cookie and returns only the user identity needed for ownership checks.
     async getUser(request) {
       const result = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
       return result?.user ? { id: result.user.id, email: result.user.email, name: result.user.name } : null;
     },
+    // Creates auth tables only for local SQLite; PostgreSQL uses versioned deployment migrations.
     async prepare() {
       if (!sqlite) return;
       const { runMigrations } = await getMigrations(auth.options);

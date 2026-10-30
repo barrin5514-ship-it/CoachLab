@@ -1,3 +1,4 @@
+// Creates or updates lessons only when the coach submits the form.
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
 import { activityMinutes } from './activities.js';
@@ -8,6 +9,7 @@ const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 
 const initial = { audience: 'Unspecified', title: '', discipline: '', skill_level: 'Beginner', duration_minutes: '', goal: '', drills: '', coaching_notes: '' };
 const textFields = [['goal', 'Training goal', 2000], ['coaching_notes', 'Coaching notes', 10000]];
 
+// Uses the same form for new lessons and explicit updates to an existing ID.
 export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedia = [] }) {
   const [values, setValues] = useState(() => lesson ? Object.fromEntries(Object.keys(initial).map(key => [key, lesson[key] ?? initial[key]])) : initial);
   const [media, setMedia] = useState(() => savedMedia.map(item => ({ ...item, clientKey: newKey() })));
@@ -16,11 +18,13 @@ export default function LessonForm({ onSaved, onCancel, lesson, media: savedMedi
   const submitting = useRef(false);
   const [registry] = useState(pendingRegistry);
 
+  // Updates the local form values; persistence waits for form submission.
   function change(event) {
     const { name, value } = event.target;
     setValues(current => ({ ...current, [name]: value }));
   }
 
+  // Validates and submits the lesson with its staged media; failures leave the editor available.
   async function submit(event) {
     event.preventDefault();
     if (submitting.current) return;

@@ -1,3 +1,4 @@
+// Runs the existing SQLite migration runner for the configured local database.
 import { openDatabase } from './database.js';
 import { migrate } from './migrations.js';
 

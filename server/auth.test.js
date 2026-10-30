@@ -1,3 +1,4 @@
+// Checks auth behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -14,6 +15,7 @@ import { cookieClient } from './test-auth.js';
 const origin = 'http://coachlab.test';
 const goodPassword = 'violet-harbor-ladder-92';
 
+// Prepares isolated test resources and cleanup so real lesson data is not used.
 async function fixture(t, extra = {}) {
   const database = new Database(':memory:');
   migrate(database);
@@ -28,8 +30,11 @@ async function fixture(t, extra = {}) {
   return { base, database, mailer, auth, client };
 }
 
+// Registers a test coach through the real account API.
 const register = (api, email, password = goodPassword, name = 'Coach') => api('/api/auth/sign-up/email', { method: 'POST', body: { name, email, password } });
+// Signs in a test coach to exercise session behavior.
 const signIn = (api, email, password = goodPassword) => api('/api/auth/sign-in/email', { method: 'POST', body: { email, password } });
+// Creates a registered, signed-in test client for ownership checks.
 async function signedIn(f, email, ip) {
   const api = f.client(ip);
   assert.equal((await register(api, email)).status, 200);

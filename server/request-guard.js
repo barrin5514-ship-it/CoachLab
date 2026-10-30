@@ -1,3 +1,5 @@
+// Bounds production API traffic and rejects compressed bodies before they are parsed.
+// Limits traffic and memory growth before request-body parsing.
 export function productionApiGuard({ now = Date.now, limit = 120, maxClients = 1024 } = {}) {
   const clients = new Map();
   const windowMs = 60000;

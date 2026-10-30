@@ -1,3 +1,4 @@
+// Connects authenticated Express routes to lesson storage, media checks and AI services.
 import { registerChatRoute } from './chat.js';
 import { registerVideoSuggestions } from './video-suggestions.js';
 import { youtubeQuota as defaultYouTubeQuota } from './youtube-quota.js';
@@ -15,8 +16,10 @@ import { serveFrontend } from './web.js';
 import { productionApiGuard } from './request-guard.js';
 
 const orphanAgeMs = 24 * 60 * 60 * 1000;
+// Shows only a link hostname in user errors, not private query strings.
 const hostOf = value => { try { return new URL(value).hostname; } catch { return 'that link'; } };
 
+// Serves authorized upload bytes with safe headers and bounded range handling.
 function sendFile(request, response, file) {
   const data = Buffer.from(file.data);
   response.set({ 'Content-Type': file.mime, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-cache', Vary: 'Cookie', 'Accept-Ranges': 'bytes', 'Content-Disposition': 'inline' });
@@ -29,6 +32,7 @@ function sendFile(request, response, file) {
   return response.status(206).set({ 'Content-Range': `bytes ${start}-${end}/${data.length}`, 'Content-Length': String(end - start + 1) }).send(data.subarray(start, end + 1));
 }
 
+// Builds the API with authentication required, regardless of the selected database.
 export function createApp(database, options = {}) {
   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
@@ -37,6 +41,7 @@ export function createApp(database, options = {}) {
   const app = express();
   app.disable('x-powered-by');
   if (options.production) {
+    // Trust only the nearest hosting proxy when interpreting the client address.
     app.set('trust proxy', 1);
     app.use((request, response, next) => {
       request.headers['x-forwarded-for'] = request.ip;
@@ -49,11 +54,13 @@ export function createApp(database, options = {}) {
   });
   if (options.production) app.use('/api', productionApiGuard());
   if (auth.handler) app.all('/api/auth/*splat', auth.handler);
+  // Bound body size before validation; production also rejects compressed bodies.
   app.use(express.json({ limit: '32kb', inflate: !options.production }));
   const lessons = typeof database.prepare === 'function' ? sqliteLessons(database) : database;
   let suggestions = [];
   let suggesting = false;
 
+  // Validates attachment fields and checks new links before a lesson write.
   async function verifiedMedia(rawMedia) {
     const checked = validateMediaList(rawMedia);
     if (checked.error) return { error: checked.error };
@@ -72,6 +79,7 @@ export function createApp(database, options = {}) {
     }
     return { media };
   }
+  // Runs shared lesson and media validation before the selected create or update operation.
   async function saveWithMedia(request, response, save) {
     if (!request.is('application/json')) return response.status(400).json({ error: 'Send Content-Type: application/json.' });
     const hasMedia = request.body && typeof request.body === 'object' && !Array.isArray(request.body) && 'media' in request.body;
@@ -92,54 +100,66 @@ export function createApp(database, options = {}) {
     }
   }
 
+  // Answers health checks without exposing database contents or requiring a login.
   app.get('/api/health', (request, response) => {
     response.json({ status: 'ok', service: 'CoachLab API' });
   });
+  // Publishes feature flags only, not provider credentials or secrets.
   app.get('/api/auth-config', (request, response) => {
     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
   });
   app.use('/api', async (request, response, next) => {
+    // Reject writes from other sites before trusting a session cookie.
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
       return response.status(403).json({ error: 'This request was blocked for your safety because it did not come from CoachLab.' });
     }
+    // Every protected API request needs a real server-side session.
     const user = await auth.getUser(request);
     if (!user) return response.status(401).json({ error: 'Please sign in to continue.' });
     request.user = user;
     next();
   });
+  // Uses shared validation and owner-scoped storage for lesson requests.
   app.get('/api/lessons', async (request, response) => {
     response.json(await lessons.list(request.user.id));
   });
+  // Uses shared validation and owner-scoped storage for lesson requests.
   app.post('/api/lessons', (request, response) => saveWithMedia(request, response, async (lesson, media) => response.status(201).json(await lessons.create(request.user.id, lesson, media))));
   app.param('id', (request, response, next, value) => {
     if (!/^[1-9]\d*$/.test(value) || Number(value) > 2147483647) return response.status(400).json({ error: 'Invalid lesson ID.' });
     request.lessonId = Number(value);
     next();
   });
+  // Acts only on the signed-in owner's lesson and keeps the existing lesson ID.
   app.put('/api/lessons/:id', (request, response) => saveWithMedia(request, response, async (lesson, media) => {
     const saved = await lessons.update(request.user.id, request.lessonId, lesson, media);
     if (!saved) return response.status(404).json({ error: 'Lesson no longer exists. Your edits have not been saved.' });
     return response.json(saved);
   }));
+  // Acts only on the signed-in owner's lesson and keeps the existing lesson ID.
   app.delete('/api/lessons/:id', async (request, response) => {
     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
     response.status(204).end();
   });
 
+  // Lists attachment metadata for the signed-in coach only.
   app.get('/api/lesson-media', async (request, response) => {
     if (!lessons.media) return response.json([]);
     response.json(await lessons.media.list(request.user.id));
   });
+  // Bounds raw uploads and converts parser failures to useful public messages.
   const uploadBody = (request, response, next) => express.raw({ type: () => true, limit: mediaLimits.video + 1024, inflate: !options.production })(request, response, error => {
     if (error) return response.status(error.status === 413 ? 413 : 400).json({ error: error.status === 413 ? 'That file is too large. Pictures can be up to 6 MB and videos up to 20 MB; use a YouTube link for longer videos.' : 'The upload could not be read.' });
     next();
   });
+  // Checks real file bytes, size and type before keeping an owned pending upload.
   app.post('/api/media/upload', uploadBody, async (request, response) => {
     if (!lessons.media) return response.status(501).json({ error: 'This database does not support media attachments.' });
     const declared = String(request.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
     if (!uploadTypes[declared]) return response.status(415).json({ error: 'Upload a PNG, JPEG, GIF, WebP picture or an MP4 or WebM video.' });
     const data = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
     if (!data.length) return response.status(400).json({ error: 'The file is empty.' });
+    // File extensions and browser MIME labels can be false; check the actual bytes.
     const detected = sniffMedia(data);
     if (!detected || detected.kind !== uploadTypes[declared]) return response.status(415).json({ error: 'The file contents do not match a supported picture or video type.' });
     if (data.length > mediaLimits[detected.kind]) return response.status(413).json({ error: `${detected.kind === 'image' ? 'Pictures can be up to 6 MB' : 'Videos can be up to 20 MB; use a YouTube link for longer videos'}.` });
@@ -149,15 +169,18 @@ export function createApp(database, options = {}) {
     Promise.resolve().then(() => lessons.media.purgeOrphans(orphanAgeMs)).catch(() => {});
     response.status(201).json(await lessons.media.addUpload(request.user.id, { kind: detected.kind, mime: detected.mime, title, data }));
   });
+  // Serves bytes only after verifying that this coach owns the upload.
   app.get('/api/media/:id/file', async (request, response) => {
     const file = lessons.media ? await lessons.media.getFile(request.user.id, request.lessonId) : null;
     if (!file) return response.status(404).json({ error: 'Media file not found.' });
     sendFile(request, response, file);
   });
+  // Allows cleanup of an owned pending upload, not deletion of saved media by URL alone.
   app.delete('/api/media/:id', async (request, response) => {
     if (!lessons.media || !await lessons.media.removeOrphan(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Upload not found or already attached to a lesson.' });
     response.status(204).end();
   });
+  // Checks external media on the server so private network addresses remain blocked.
   app.post('/api/media/verify', async (request, response) => {
     if (!request.is('application/json') || typeof request.body?.url !== 'string') return response.status(400).json({ error: 'Send JSON with a url.' });
     try {
@@ -167,6 +190,7 @@ export function createApp(database, options = {}) {
       response.status(502).json({ error: 'CoachLab could not check that link right now. Try again in a moment.' });
     }
   });
+  // Bounds section-based media searches and shares real YouTube search quota.
   app.post('/api/media/suggest', async (request, response) => {
     const body = request.body;
     const sections = Array.isArray(body?.sections) ? body.sections : null;

@@ -1,6 +1,8 @@
+// Shares AI input, draft-shape and safety rules between the browser and server.
 export const disciplines = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
 export const audiences = ['Unspecified', 'Kids', 'Adults'];
 export const sectionGuidance = [['common_mistakes', 'Common mistakes'], ['easier', 'Easier option'], ['harder', 'Harder option']];
+// Uses conservative guidance for Kids and unspecified audiences without collecting children's details.
 export function safetyGuidance(request) {
   const rules = ['Coach review required. Use consent, stop signals and appropriate supervision.'];
   if (request.audience !== 'Adults') rules.push('Kids or unspecified audience: no hard sparring, no head contact, no submissions or chokes. Use short drills, games, frequent breaks and praise. Age is not collected, so use these conservative rules for all Kids classes.');
@@ -11,9 +13,12 @@ export const levels = ['Beginner', 'Intermediate', 'Advanced'];
 export const sections = ['Warm-up', 'Technique teaching', 'Progressive drills', 'Partner exercises', 'Cooldown'];
 export const details = ['techniques', 'common_mistakes', 'coaching_corrections', 'modifications', 'safety'];
 export const labels = ['Techniques to teach', 'Common mistakes', 'Coaching corrections', 'Skill-level modifications', 'Safety considerations'];
+// Checks text type and size before it can reach later code.
 const text = (value, limit) => typeof value === 'string' && value.trim().length > 0 && value.length <= limit;
+// Rejects null and arrays where a plain request object is expected.
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// Bounds AI inputs and requires the coach's privacy confirmation.
 export function validateRequest(value) {
   if (!object(value)) return 'Send a lesson request object.';
   const allowed = ['discipline', 'skill_level', 'duration_minutes', 'students', 'objective', 'techniques', 'equipment', 'privacy_confirmed', 'audience'];
@@ -27,6 +32,7 @@ export function validateRequest(value) {
   return null;
 }
 
+// Checks structure, coaching cues and exact timing before an AI draft is accepted.
 export function validateDraft(draft, request) {
   if (!object(draft) || !text(draft.title, 200) || !text(draft.objectives, 1500)) return 'The draft needs a title and training objectives.';
   if (details.some(key => !text(draft[key], 1000))) return 'Every coaching guidance field requires 1–1000 characters.';
@@ -41,6 +47,7 @@ export function validateDraft(draft, request) {
   return null;
 }
 
+// Converts the approved structured draft into existing lesson fields, avoiding a second storage format.
 export function toLesson(draft, request) {
   return {
     audience: request.audience ?? 'Unspecified', title: draft.title, discipline: request.discipline, skill_level: request.skill_level, duration_minutes: request.duration_minutes,

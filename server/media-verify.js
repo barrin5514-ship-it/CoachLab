@@ -1,3 +1,4 @@
+// Checks public HTTPS media safely so a supplied URL cannot reach private server addresses.
 import https from 'node:https';
 import dns from 'node:dns';
 import net from 'node:net';
@@ -6,6 +7,7 @@ import { youtubeId, mediaLimits } from '../client/src/media.js';
 
 export class MediaLinkError extends Error {}
 
+// Rejects private and reserved addresses so media URLs cannot probe internal services.
 export function isPublicAddress(address) {
   if (net.isIPv4(address)) {
     const [a, b, c] = address.split('.').map(Number);
@@ -20,15 +22,18 @@ export function isPublicAddress(address) {
   return false;
 }
 
+// Checks every resolved address before allowing the outbound connection.
 export function publicLookup(hostname, options, callback) {
   dns.lookup(hostname, { ...options, all: true }, (error, addresses) => {
     if (error) return callback(error);
+    // Reject the whole DNS answer if any resolved address could point into a private network.
     if (!addresses.length || addresses.some(entry => !isPublicAddress(entry.address))) return callback(new MediaLinkError('The link points to a private or unsupported network address.'));
     const wantsAll = options && options.all;
     return wantsAll ? callback(null, addresses) : callback(null, addresses[0].address, addresses[0].family);
   });
 }
 
+// Bounds each HTTPS response and converts network failures to safe link errors.
 function requestOnce(url, { method, headers, maxBytes, timeout, lookup }) {
   return new Promise((resolve, reject) => {
     const request = https.request(url, { method, headers, lookup, timeout, agent: false }, response => {
@@ -45,6 +50,7 @@ function requestOnce(url, { method, headers, maxBytes, timeout, lookup }) {
         }
         chunks.push(chunk);
       });
+      // Completes the bounded response with collected bytes, even after a truncated stream closes.
       const finish = () => resolve({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks), truncated });
       response.on('end', finish);
       response.on('close', finish);
@@ -56,8 +62,10 @@ function requestOnce(url, { method, headers, maxBytes, timeout, lookup }) {
   });
 }
 
+// Rechecks every redirect and permits only public standard HTTPS destinations.
 export async function safeFetch(value, { method = 'GET', headers = {}, maxBytes = 65536, timeout = 8000, lookup = publicLookup, request = requestOnce } = {}) {
   let url;
+  // Follow only a few redirects and repeat the destination checks at every hop.
   for (let hop = 0; hop < 4; hop++) {
     try { url = new URL(hop === 0 ? value : url.location); } catch { throw new MediaLinkError('That is not a valid web address.'); }
     if (url.protocol !== 'https:') throw new MediaLinkError('Links must start with https:// so they stay private and secure.');
@@ -73,8 +81,10 @@ export async function safeFetch(value, { method = 'GET', headers = {}, maxBytes 
   throw new MediaLinkError('The link redirects too many times.');
 }
 
+// Bounds publisher-supplied titles before they reach the UI.
 const cleanTitle = text => String(text || '').replace(/\s+/g, ' ').trim().slice(0, mediaLimits.title);
 
+// Uses YouTube oEmbed or real file bytes; a plausible-looking URL alone is not proof.
 export async function verifyLink(input, { fetcher = safeFetch } = {}) {
   const raw = String(input ?? '').trim();
   if (!raw) throw new MediaLinkError('Paste a link first.');

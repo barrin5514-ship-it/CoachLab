@@ -1,3 +1,4 @@
+// Coordinates the signed-in dashboard, lesson editor and freshly loaded attachments.
 import CoachingChat from './CoachingChat.jsx';
 import React, { useEffect, useState } from 'react';
 import LessonForm from './LessonForm.jsx';
@@ -6,6 +7,7 @@ import AiLessonForm from './AiLessonForm.jsx';
 import { disciplineNavigation, filterLessons } from './lesson-view.js';
 import { fetchMedia, withApprovedVideos } from './media.js';
 
+// Keeps lessons and media together while one editor is open.
 export default function App({ user, onLogOut }) {
   const [lessons, setLessons] = useState([]);
   const [audience, setAudience] = useState('All');
@@ -25,6 +27,7 @@ export default function App({ user, onLogOut }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Loads saved lessons with an abort signal so stale requests cannot overwrite a newer screen.
     async function loadLessons() {
       setLoading(true);
       setError('');
@@ -46,6 +49,7 @@ export default function App({ user, onLogOut }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Loads attachments separately so a media error does not hide the lesson text.
     async function loadMedia() {
       try {
         const data = await fetchMedia(controller.signal);
@@ -59,14 +63,17 @@ export default function App({ user, onLogOut }) {
     return () => controller.abort();
   }, [reload, mediaReload]);
 
+  // Selects attachments for one lesson instead of showing another lesson's media.
   const mediaFor = id => media.filter(item => item.lesson_id === id);
 
+  // Fetches current attachments before opening the editor, preventing stale media from being silently removed.
   async function handleEdit(lesson, approvedVideos = []) {
     setNotice(null);
     setOpening(true);
     try {
       const fresh = await fetchMedia();
       const attached = fresh.filter(item => item.lesson_id === lesson.id);
+      // Merge against freshly fetched attachments so batch approval does not remove newly saved media.
       setEditingMedia(withApprovedVideos(attached, approvedVideos));
       setMedia(fresh);
       setMediaError('');
@@ -80,6 +87,7 @@ export default function App({ user, onLogOut }) {
     } finally { setOpening(false); }
   }
 
+  // Refreshes the dashboard and checks attachments after the server confirms a save.
   async function handleSaved(lesson, sent) {
     setLessons(current => current.some(item => item.id === lesson.id) ? current.map(item => item.id === lesson.id ? lesson : item) : [lesson, ...current]);
     setAudience('All');

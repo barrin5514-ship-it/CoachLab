@@ -1,3 +1,4 @@
+// Lets a coach generate, edit and explicitly approve an AI draft before saving it.
 import React, { useRef, useState } from 'react';
 import ActivityEditor from './ActivityEditor.jsx';
 import MediaEditor, { PendingMedia, pendingRegistry } from './MediaEditor.jsx';
@@ -5,6 +6,7 @@ import { discardUpload, mediaPayload, newKey } from './media.js';
 import { disciplines, levels, audiences, sectionGuidance, safetyGuidance, details, labels, validateRequest, validateDraft, toLesson } from './lesson-draft.js';
 
 const initial = { audience: 'Unspecified', discipline: 'Brazilian Jiu-Jitsu', skill_level: 'Beginner', duration_minutes: 60, students: 2, objective: '', techniques: '', equipment: '', privacy_confirmed: false };
+// Separates generation from approval so AI output cannot save itself.
 export default function AiLessonForm({ onSaved, onCancel }) {
   const [request, setRequest] = useState(initial);
   const [draft, setDraft] = useState(null);
@@ -16,14 +18,19 @@ export default function AiLessonForm({ onSaved, onCancel }) {
   const [error, setError] = useState('');
   const locked = useRef(false);
   const [registry] = useState(pendingRegistry);
+  // Updates this draft field without saving to the database.
   function edit(key, value) {
     setDraft(current => ({ ...current, [key]: value }));
+    // A newly generated draft always needs the coach's fresh approval.
     setApproved(false);
   }
+  // Changing attachments clears approval so the coach reviews the new draft.
   function setMedia(next) {
     setMediaList(current => typeof next === 'function' ? next(current) : next);
+    // A newly generated draft always needs the coach's fresh approval.
     setApproved(false);
   }
+  // Combines sources and checks links before returning bounded media per activity.
   async function findMedia(source) {
     setFinding(true);
     setFindNote('');
@@ -37,15 +44,18 @@ export default function AiLessonForm({ onSaved, onCancel }) {
       setFindNote(failure.name === 'Error' ? failure.message : 'Media search was interrupted. You can add pictures and videos yourself or search again.');
     } finally { setFinding(false); }
   }
+  // Discards temporary uploads when the coach leaves this unsaved draft.
   function discard() {
     media.forEach(discardUpload);
     onCancel();
   }
+  // Validates inputs, requires approval for saving, and refuses to lose pending attachment edits.
   async function submit(event) {
     event.preventDefault();
     if (locked.current) return;
     const invalid = draft ? validateDraft(draft, request) : validateRequest(request);
     if (invalid || (draft && !approved)) { setError(invalid || 'Review and approve the draft before saving.'); return; }
+    // Do not save while an attachment editor still contains unfinished work.
     if (draft && registry.count()) {
       setError('A picture or video is still open. Press “Add to this activity” (or Done) to keep it, or Cancel to discard it, then save the lesson.');
       document.querySelector('[data-media-pending]')?.scrollIntoView({ block: 'center' });
@@ -66,6 +76,7 @@ export default function AiLessonForm({ onSaved, onCancel }) {
       } else {
         if (validateDraft(data.draft, request)) throw new Error('The server returned an invalid draft.');
         setDraft(data.draft);
+        // A newly generated draft always needs the coach's fresh approval.
         setApproved(false);
         setMediaList([]);
         findMedia(data.draft);

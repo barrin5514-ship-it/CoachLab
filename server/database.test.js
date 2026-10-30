@@ -1,3 +1,4 @@
+// Checks database behavior with controlled fixtures; read each test name for its expected outcome.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -7,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import Database from 'better-sqlite3';
 import { migrate } from './migrations.js';
 
+// Runs SQLite checks in a child process with an isolated database path.
 function run(code, filename) {
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
     cwd: new URL('../', import.meta.url),

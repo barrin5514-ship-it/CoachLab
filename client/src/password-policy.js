@@ -1,7 +1,9 @@
+// Shares basic account-input checks so the browser and server use the same rules.
 export const passwordLimits = { min: 10, max: 128 };
 
 const common = new Set(['password', 'password1', 'password123', 'passw0rd', 'qwertyuiop', 'qwerty123', 'qwertyuiop1', '1234567890', '12345678910', '0123456789', 'iloveyou12', 'letmein123', 'welcome123', 'admin12345', 'changeme123', 'coachlab123', 'trustno1234', 'abc1234567', 'football123', 'baseball123']);
 
+// Returns a readable password-rule failure before attempting registration or reset.
 export function passwordProblem(password, email = '') {
   if (typeof password !== 'string') return 'Enter a password.';
   if (password.length < passwordLimits.min) return `Use at least ${passwordLimits.min} characters.`;
@@ -13,6 +15,7 @@ export function passwordProblem(password, email = '') {
   return null;
 }
 
+// Bounds the coach display name before it reaches account storage.
 export function validateName(name) {
   if (typeof name !== 'string' || !name.trim()) return 'Enter your name.';
   if (name.trim().length > 80) return 'Use at most 80 characters for your name.';
@@ -20,6 +23,7 @@ export function validateName(name) {
   return null;
 }
 
+// Checks basic email shape without claiming that the mailbox exists.
 export function validateEmail(email) {
   if (typeof email !== 'string' || !email.trim()) return 'Enter your email address.';
   const value = email.trim();

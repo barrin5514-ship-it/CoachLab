@@ -1,3 +1,4 @@
+// Launches guarded production startup and reports only safe error details.
 import { startProduction } from './production-startup.js';
 import { StartupCheckError, startupFailure } from './startup-errors.js';
 

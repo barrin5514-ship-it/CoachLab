@@ -1,6 +1,8 @@
+// Shows optional curated demonstrations with publisher links when media cannot load.
 import React, { useState } from 'react';
 import { lessonMedia } from './lesson-media.js';
 
+// Loads publisher media only on request and preserves source links if it fails.
 function Demonstration({ item }) {
   const [imageFailed, setImageFailed] = useState(false);
   const [showVideo, setShowVideo] = useState(false);
@@ -14,6 +16,7 @@ function Demonstration({ item }) {
     <small>If playback is blocked or unavailable, use the source link. External media loads from its publisher only when this section is opened; videos require another click.</small>
   </section>;
 }
+// Offers curated examples without pretending unknown techniques have reviewed demonstrations.
 export default function LessonMedia({ lesson }) {
   const [open, setOpen] = useState(false);
   const items = lessonMedia(lesson);

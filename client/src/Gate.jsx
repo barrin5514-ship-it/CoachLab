@@ -1,8 +1,10 @@
+// Checks the current login before showing the private lesson dashboard.
 import React, { useEffect, useState } from 'react';
 import App from './App.jsx';
 import AuthScreen from './AuthScreen.jsx';
 import { getAuthConfig, getSession, installUnauthorizedHandler, signOut } from './auth.js';
 
+// Reads a reset token once and removes it from the visible address bar.
 function readResetLink() {
   const params = new URLSearchParams(window.location.search);
   const onResetPage = window.location.pathname === '/reset-password';
@@ -12,6 +14,7 @@ function readResetLink() {
   return { token, error };
 }
 
+// Only mounts the private dashboard after the session check succeeds.
 export default function Gate() {
   const [link] = useState(readResetLink);
   const [config, setConfig] = useState({ google: false, mail: 'unknown' });
@@ -26,6 +29,7 @@ export default function Gate() {
 
   useEffect(() => installUnauthorizedHandler(() => setState(current => current.status === 'in' ? { status: 'out', user: null, notice: 'Your session ended, so you were signed out. Please sign in again.' } : current)), []);
 
+  // Clears the local signed-in view even if the session has already expired.
   async function logOut() {
     try { await signOut(); } catch { /* the server may already have ended the session */ }
     setState({ status: 'out', user: null, notice: 'You have been signed out.' });

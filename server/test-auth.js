@@ -1,3 +1,4 @@
+// Provides fake authentication and cookie helpers for isolated automated tests.
 // Test-only helpers. The real application always uses server/auth.js (Better Auth); these fakes let the older lesson and media tests run as a signed-in coach without a login round trip.
 export const TEST_ORIGIN = 'http://coachlab.test';
 export const testUsers = {
@@ -8,6 +9,7 @@ export const testUsers = {
 export const testAuth = {
   google: false,
   mailMode: 'memory',
+  // Reads a fake test-user header; real app authentication never uses this test adapter.
   async getUser(request) {
     const requested = request.headers['x-test-user'];
     if (requested === 'anonymous') return null;
@@ -17,14 +19,17 @@ export const testAuth = {
 
 export const testOptions = { auth: testAuth, allowedOrigins: [TEST_ORIGIN] };
 
+// Adds fake test authentication to isolated API requests.
 export function authedFetch(url, options = {}) {
   return globalThis.fetch(url, { ...options, headers: { origin: TEST_ORIGIN, ...options.headers } });
 }
 
 // A tiny browser stand-in: it remembers cookies, sends the Origin header and returns parsed JSON.
+// Keeps test cookies between requests so session behavior can be tested.
 export function cookieClient(base, origin = TEST_ORIGIN) {
   return (ip = '203.0.113.10') => {
     const jar = new Map();
+    // Sends a test request through the isolated cookie-aware client.
     const api = async (path, { method = 'GET', body, headers = {}, origin: sent = origin, raw, redirect } = {}) => {
       const cookie = [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
       const response = await globalThis.fetch(base + path, { method, redirect, headers: { 'x-forwarded-for': ip, ...(sent ? { origin: sent } : {}), ...(cookie ? { cookie } : {}), ...(body !== undefined && !raw ? { 'content-type': 'application/json' } : {}), ...headers }, body: raw ? body : body === undefined ? undefined : JSON.stringify(body) });

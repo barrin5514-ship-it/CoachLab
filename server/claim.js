@@ -1,3 +1,4 @@
+// Backs up and assigns selected legacy ownerless lessons only after explicit confirmation.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -7,16 +8,21 @@ import path from 'node:path';
 
 export const defaultBackupRoot = path.join(homedir(), 'CoachLab-backups');
 
+// Rejects OneDrive backup paths so cloud sync cannot interfere with the backup.
 export function assertSafeBackupDirectory(directory) {
   const resolved = path.resolve(directory);
   if (resolved.split(path.sep).some(part => /^onedrive(?:\s|$)/i.test(part))) throw new Error('Backups must be stored outside OneDrive.');
   return resolved;
 }
 
+// Provides owner-claim operations with bound SQLite values.
 export function sqliteClaimStore(database) {
   return {
+    // Looks up the registered destination coach before any ownership change.
     findUser: email => database.prepare('SELECT id, name, email FROM user WHERE email = ?').get(email.trim().toLowerCase()) || null,
+    // Lists only ownerless legacy lessons eligible for an explicit claim.
     unclaimed: () => database.prepare('SELECT l.id, l.title, l.discipline, l.created_at, (SELECT count(*) FROM lesson_media m WHERE m.lesson_id = l.id) AS media FROM lessons l WHERE l.owner_id IS NULL ORDER BY l.id').all(),
+    // Copies the selected ownerless lesson data for the pre-change backup.
     snapshot: ids => ({
       lessons: database.prepare(`SELECT * FROM lessons WHERE owner_id IS NULL AND id IN (${ids.map(() => '?').join(',')})`).all(...ids),
       media: database.prepare(`SELECT * FROM lesson_media WHERE owner_id IS NULL AND lesson_id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(row => ({ ...row, data: row.data ? Buffer.from(row.data).toString('base64') : null })),
@@ -27,26 +33,34 @@ export function sqliteClaimStore(database) {
       const media = database.prepare(`UPDATE lesson_media SET owner_id = ? WHERE owner_id IS NULL AND lesson_id IN (${marks})`).run(userId, ...ids).changes;
       return { lessons, media };
     }),
+    // Counts records now belonging to the destination coach to verify the claim.
     owned: (userId, ids) => database.prepare(`SELECT count(*) AS n FROM lessons WHERE owner_id = ? AND id IN (${ids.map(() => '?').join(',')})`).get(userId, ...ids).n,
   };
 }
 
+// Provides the same explicit owner-claim workflow through Prisma.
 export function prismaClaimStore(client) {
   return {
+    // Looks up the registered destination coach before any ownership change.
     findUser: async email => await client.user.findUnique({ where: { email: email.trim().toLowerCase() }, select: { id: true, name: true, email: true } }),
+    // Lists only ownerless legacy lessons eligible for an explicit claim.
     unclaimed: async () => (await client.lesson.findMany({ where: { owner_id: null }, orderBy: { id: 'asc' }, select: { id: true, title: true, discipline: true, created_at: true, _count: { select: { media: true } } } })).map(row => ({ id: row.id, title: row.title, discipline: row.discipline, created_at: row.created_at.toISOString(), media: row._count.media })),
+    // Copies the selected ownerless lesson data for the pre-change backup.
     snapshot: async ids => ({
       lessons: (await client.lesson.findMany({ where: { owner_id: null, id: { in: ids } } })).map(row => ({ ...row, created_at: row.created_at.toISOString() })),
       media: (await client.lessonMedia.findMany({ where: { owner_id: null, lesson_id: { in: ids } } })).map(row => ({ ...row, created_at: row.created_at.toISOString(), data: row.data ? Buffer.from(row.data).toString('base64') : null })),
     }),
+    // Assigns the selected ownerless lessons and media together in a transaction.
     claim: (userId, ids) => client.$transaction(async tx => ({
       lessons: (await tx.lesson.updateMany({ where: { owner_id: null, id: { in: ids } }, data: { owner_id: userId } })).count,
       media: (await tx.lessonMedia.updateMany({ where: { owner_id: null, lesson_id: { in: ids } }, data: { owner_id: userId } })).count,
     }), { timeout: 30000 }),
+    // Counts records now belonging to the destination coach to verify the claim.
     owned: (userId, ids) => client.lesson.count({ where: { owner_id: userId, id: { in: ids } } }),
   };
 }
 
+// Defaults to a dry run and verifies a backup before assigning selected ownerless lessons.
 export async function claimLessons({ store, email, lessonIds, allUnclaimed = false, confirm = false, backupRoot = defaultBackupRoot, now = () => new Date(), log = () => {} }) {
   if (!email) throw new Error('Give the registered coach’s email with --email.');
   if (!allUnclaimed && !lessonIds?.length) throw new Error('Choose the lessons to claim with --lessons 8,9 or use --all-unclaimed.');
