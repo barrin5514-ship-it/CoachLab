@@ -5420,3 +5420,40 @@ REPORT BACK (one code block): what changed in plain English,
 commit hash, push result, test/build results.
 
 Outcome: Removed two extra sidebar destinations. The existing Fitness/Personal training shortcut now includes old discipline=Personal Training rows as well as new Fitness rows. Filtering returns original objects without altering stored fields; existing editor, API, databases, migrations and save behavior untouched. Default All and audience/group-class filters preserved. Updated client/src/DisciplineHeader.jsx, client/src/lesson-view.js, server/lesson-ui.test.js and required documentation. Exact numbered source listings and explanation coverage verified. Serial npm test: 120 passed, zero failed/skipped; npm run build passed. Browser checked actual rendered navigation and existing CSS in a temporary synthetic read-only preview at 1366x768 and 390x844: buttons in bounds, no horizontal overflow, phone wraps; not a live production/account editing test. Temporary tab closed, viewport reset and preview stopped. No .env reads, live AI requests or other-project changes. Commit subject: Simplify Fitness navigation and include legacy personal training. Previous docs commit: fc67cc2.
+
+## 2026-10-30 — Muay Thai and BJJ card photo styling
+
+Verbatim user prompt:
+
+COACHLAB — FIX MUAY THAI + BJJ CARD PHOTOS (styling only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+PROBLEM
+On the dashboard, the Muay Thai and BJJ athletes are pushed to the
+right edge of their cards and cut off. Also, these two cards still
+put the title ON the photo, while the other 5 cards use the photo
+on top with the title/caption below.
+
+NOTE: With object-fit: cover, a HIGHER horizontal object-position %
+shows more of the image's right side, which moves a right-side
+subject toward the center. The last nudge lowered the % — wrong way.
+
+FIX
+1. Make Muay Thai and BJJ use the same layout as the other 5 cards:
+   same 4:3 photo on top, title and caption below. All 7 cards
+   should look consistent.
+2. Set each photo's horizontal position so the athlete is centered
+   and fully visible (likely 85–100%), top aligned like the others.
+3. If positioning alone can't center them, re-export that WebP from
+   the original owner photo with the athlete centered (under ~200 KB).
+4. Check desktop and phone widths. Don't touch other photos, the
+   hero, the title, or the filters.
+
+RULES
+- Styling only. Tests serially. One small commit. Push only if tests
+  and build pass. Never print .env values. Don't touch other projects.
+
+REPORT BACK (one code block): commit hash, push result, test/build
+results, old and new position for both photos.
+
+Outcome: CSS only plus required documentation. Added the two missing cards to the existing five-card 4:3 photo/caption rules. Muay Thai 35% 50% -> 100% top; BJJ 50% 50% -> 100% top. Inspected both original local WebPs and actual component previews at 1366x900 and 390x844; both crops centered, captions below, phone has no horizontal overflow. No re-export needed. Other five positions, photo bytes, hero, titles and filters unchanged. No live account/database/AI requests or .env reads. Temporary preview stopped, browser tab closed and viewport reset. npm test serial: 120 passed, zero failures/skips. npm run build passed. Exact CSS numbered listing and all explanation coverage verified. git diff --check passed. Commit subject: Align Muay Thai and BJJ photos with dashboard cards. Previous filter commit: 719686c.

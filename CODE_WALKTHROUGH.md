@@ -897,11 +897,11 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 214 | .coach-shell .media-list img, .coach-shell .media-list iframe { border-radius: 6px; }
 215 | @media (max-width: 600px) { .coach-shell .draft-section { padding: 14px; } .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select { font-size: 16px; } .coach-shell .form-panel .actions button { flex: 1 1 140px; min-height: 48px; } }
 216 |
-217 | /* Keep the five affected portraits above their captions; the other two crops stay unchanged. */
-218 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) { display: flex; flex-direction: column; justify-content: flex-start; }
-219 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img { position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
-220 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after { display: none; }
-221 | .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy { padding: 16px 18px 20px; }
+217 | /* Keep all seven discipline photos above their captions with the same 4:3 layout. */
+218 | .discipline-tile:is([data-photo="boxing"], [data-photo="muay-thai"], [data-photo="bjj"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) { display: flex; flex-direction: column; justify-content: flex-start; }
+219 | .discipline-tile:is([data-photo="boxing"], [data-photo="muay-thai"], [data-photo="bjj"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img { position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
+220 | .discipline-tile:is([data-photo="boxing"], [data-photo="muay-thai"], [data-photo="bjj"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after { display: none; }
+221 | .discipline-tile:is([data-photo="boxing"], [data-photo="muay-thai"], [data-photo="bjj"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy { padding: 16px 18px 20px; }
 222 | .discipline-tile[data-photo="boxing"] img { object-position: 85% top; }
 223 | .discipline-tile[data-photo="wrestling"] img { object-position: right top; }
 224 | .discipline-tile[data-photo="mma"] img { object-position: right top; }
@@ -915,9 +915,9 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 232 | .coach-shell > .hero .account-line { overflow-wrap: anywhere; }
 233 | .coach-shell > .hero .actions { flex-wrap: wrap; }
 234 | @media (max-width: 600px) { .coach-shell > .hero { padding: 22px 16px; align-items: stretch; } .coach-shell > .hero .actions button { min-height: 48px; flex: 1 1 160px; } }
-235 | .discipline-tile[data-photo="bjj"] img { object-position: 50% 50%; }
+235 | .discipline-tile[data-photo="bjj"] img { object-position: 100% top; }
 236 |
-237 | .discipline-tile[data-photo="muay-thai"] img { object-position: 35% 50%; }
+237 | .discipline-tile[data-photo="muay-thai"] img { object-position: 100% top; }
 ```
 
 - **Line 211:** CSS rule .coach-shell .lesson-timeline > li: background: #f8faf8; border-color: #26704c; margin-bottom: 16px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
@@ -926,11 +926,11 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 214:** CSS rule .coach-shell .media-list img, .coach-shell .media-list iframe: border-radius: 6px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 215:** CSS rule @media (max-width: 600px): .coach-shell .draft-section  padding: 14px;  .coach-shell .form-panel input, .coach-shell .form-panel textarea, .coach-shell .form-panel select  font-size: 16px;  .coach-shell .form-panel .actions button  flex: 1 1 140px; min-height: 48px;. These properties set readable colors, spacing, sizing or responsive layout without changing lesson behavior.
 - **Line 216:** Blank line separating related statements; it has no runtime effect.
-- **Line 217:** Comment explaining the crop or hero fallback styling; it does not execute.
-- **Line 218:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]): display: flex; flex-direction: column; justify-content: flex-start;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
-- **Line 219:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) img: position: relative; inset: auto; display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
-- **Line 220:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"])::after: display: none;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
-- **Line 221:** CSS selector .discipline-tile:is([data-photo="boxing"], [data-photo="wrestling"], [data-photo="mma"], [data-photo="personal-training"], [data-photo="classes"]) .tile-copy: padding: 16px 18px 20px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
+- **Line 217:** Comment: all seven dashboard cards share the same photo-above-caption layout; individual crop positions remain separate.
+- **Line 218:** Adds Muay Thai and BJJ to the existing five card selectors. Flex column layout places each photo above its title and caption; the other five keep their existing behavior.
+- **Line 219:** Uses the same relative-positioned, block, 4:3 object-fit cover photo layout for all seven cards. Only the two previously omitted cards gain this rule.
+- **Line 220:** Disables the photo-overlay gradient for all seven cards, including the newly included Muay Thai and BJJ; other five cards remain unchanged.
+- **Line 221:** Applies the existing below-photo caption padding to all seven cards; titles, captions and font styles are unchanged.
 - **Line 222:** CSS selector .discipline-tile[data-photo="boxing"] img: object-position: 85% top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 223:** CSS selector .discipline-tile[data-photo="wrestling"] img: object-position: right top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 224:** CSS selector .discipline-tile[data-photo="mma"] img: object-position: right top;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
@@ -944,9 +944,9 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 232:** CSS selector .coach-shell > .hero .account-line: overflow-wrap: anywhere;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 233:** CSS selector .coach-shell > .hero .actions: flex-wrap: wrap;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
 - **Line 234:** CSS selector @media (max-width: 600px): .coach-shell > .hero  padding: 22px 16px; align-items: stretch;  .coach-shell > .hero .actions button  min-height: 48px; flex: 1 1 160px;. These declarations control image framing, readable title colors, caption spacing or responsive header layout; they do not alter application actions.
-- **Line 235:** Targets only the BJJ dashboard image: horizontal alignment decreases from 65% to 50% as explicitly requested; vertical alignment stays at 50%. With horizontal overflow, decreasing this value moves image pixels right, not left.
+- **Line 235:** Moves only the dashboard BJJ image crop from 50% 50% to 100% top. The right edge is retained, bringing the athletes inward while preserving the source WebP and other photo styles.
 - **Line 236:** Blank line separating related statements; it has no runtime effect.
-- **Line 237:** Targets only the Muay Thai dashboard image: horizontal alignment decreases from the default center (50%) to 35%; vertical alignment remains centered. Other photos, hero and title are unaffected.
+- **Line 237:** Moves only the dashboard Muay Thai image crop from 35% 50% to 100% top. Higher horizontal position retains more of the right side, bringing the athlete inward; no photo file is modified.
 
 ## client/vite.config.js
 
