@@ -5306,3 +5306,43 @@ Verbatim user prompt:
 Outcome: reproduced overly strict guard for "help" and "how do I use this" before any provider call (cause 1). "How do I use CoachLab?" already passed locally; live signed-in behavior/provider logs were unavailable, so no claim that all reported live failures share this cause. Existing provider exceptions already returned a separate 502; they did not silently become this fallback. Added narrowly matched factual app-help replies, current feature instructions, fixed safe logging categories, and the requested unavailable error. Authentication, read-only access and numeric quotas unchanged.
 
 Changed: server/chat.js, server/ai.test.js, CODE_WALKTHROUGH.md and this log. Tests: npm test, serial concurrency=1, 118 passed, zero failed. Production build: npm run build passed (dependency check, offline Prisma generation/TypeScript, Vite). No live Gemini calls, real lessons/databases or .env reads. Verified all 61 chat source lines against numbered walkthrough and explanation coverage (actual total verified by script). Local tooling corrections: Windows rg globs required directory-based searches; no application defect was introduced by those inspection errors. Commit subject: "Fix CoachLab app-help chat and safe failure diagnostics"; hash belongs in next authorized log update.
+
+## 2026-10-30 — Semantic chat topic handling
+
+Verbatim user prompt:
+
+.COACHLAB — CHAT TOPIC FILTER STILL TOO STRICT
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+PROBLEM (live site, after 88e65aa)
+Working: "help", "How can I explain how to kick?"
+Wrongly blocked with the off-topic fallback:
+- "How do I use the app?"
+- "How do I explain a hook to a seven-year-old girl?"
+- "How do I explain a left hook to a seven-year-old girl?"
+CoachLab is for coaches who teach kids, so questions that mention
+a child's age or gender are normal coaching questions.
+
+FIX
+- Stop relying on a strict keyword list. Let questions through by
+  default and let Gemini decide what's off-topic, with system
+  instructions to answer coaching, fitness, safety and CoachLab
+  app questions, including teaching kids, and to politely
+  decline anything unrelated.
+- Keep a small server-side block only for clearly unrelated or
+  unsafe requests.
+- Kids' answers should stay age-appropriate and safety-focused.
+- Add tests for all five questions above (all should be answered)
+  plus one clearly off-topic question (should get the fallback).
+
+RULES
+- Keep chat read-only, signed-in only, same quotas.
+- Tests serially. Small commits. Push only if tests and build
+  pass. Never print .env values. Don't touch other projects.
+
+REPORT BACK (one code block): the cause in plain English, commit
+hash, push result, test/build results.
+
+Outcome: Removed the keyword allowlist and canned app-help phrase rule. Ordinary requests now reach Gemini with explicit semantic relevance, child age/gender and safety instructions. Kept existing privacy/medical/child-safety refusals plus two narrowly matched unrelated requests. Quota numbers, authentication and read-only access remain unchanged. Regression tests route all five questions through mocked Gemini, verify safe instructions and answers, and check an off-topic refusal. No live AI calls or .env reads. Changed server/chat.js, server/ai.test.js and their walkthrough/log. Prior fix 88e65aab6354beff5cb51df2724fca7c7be0d037 was too narrow; new examples exposed the remaining allowlist. Verified current numbered source listings and explanation coverage. Commit subject: Allow semantic coaching and app questions in chat.
+
+Verification: npm test passed serially: 119 tests, zero failures/skips; npm run build passed (offline Prisma generation, TypeScript and Vite). Initial test run caught removal of the existing prompt phrase "Politely redirect"; restored that explicit instruction and reran the entire suite and build successfully. No live Gemini calls. Current 60-line chat listing matches source with explanation coverage.

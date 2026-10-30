@@ -388,7 +388,7 @@ test('mocked route repairs steps across disciplines, Fitness types and audiences
 // Regression checks use isolated signed-in routes and stand-in providers, never live Gemini.
 test('chat app help is specific, coaching reaches AI, off-topic redirects, and failures are distinct', async t => {
   let calls = 0;
-  const state = await chatFixture(t, async () => { calls++; return 'Practice slow boxing footwork with coach supervision.'; });
+  const state = await chatFixture(t, async () => { calls++; return 'New Lesson, AI lesson draft, Fitness, Suggest videos, Save lesson, Edit lesson. Practice slow boxing footwork with coach supervision.'; });
   for (const question of ['help', 'how do I use this', 'How do I use CoachLab?', 'how do I make a lesson']) {
     const reply = await state.post(question);
     assert.equal(reply.status, 200);
@@ -396,11 +396,11 @@ test('chat app help is specific, coaching reaches AI, off-topic redirects, and f
     for (const feature of ['New Lesson', 'AI lesson draft', 'Fitness', 'Suggest videos', 'Save lesson', 'Edit lesson']) assert.ok(answer.includes(feature));
     state.advance(60001);
   }
-  assert.equal(calls, 0);
+  assert.equal(calls, 4);
   assert.match((await (await state.post('Boxing footwork drills?')).json()).answer, /slow boxing footwork/);
-  assert.equal(calls, 1);
+  assert.equal(calls, 5);
   assert.equal((await (await state.post('Write a space opera')).json()).answer, 'I can help with coaching or using CoachLab. Please ask a specific coaching or app question.');
-  assert.equal(calls, 1);
+  assert.equal(calls, 5);
 });
 
 test('chat failure logs only a fixed category and shows unavailable rather than off-topic', async t => {
@@ -413,4 +413,27 @@ test('chat failure logs only a fixed category and shows unavailable rather than 
     assert.deepEqual(await reply.json(), { error: 'Chat is unavailable right now, try again in a minute.' });
   }
   assert.deepEqual(logs, [['[CoachLab chat] invalid_answer_or_provider_failure'], ['[CoachLab chat] provider_timeout']]);
+});
+
+test('all reported questions reach Gemini with child-safe semantic topic instructions', async t => {
+  const questions = ['help', 'How can I explain how to kick?', 'How do I use the app?', 'How do I explain a hook to a seven-year-old girl?', 'How do I explain a left hook to a seven-year-old girl?'];
+  const seen = [];
+  const state = await chatFixture(t, message => answerChat(message, { env, fetcher: async (url, options) => {
+    const body = JSON.parse(options.body);
+    seen.push(body.contents[0].parts[0].text);
+    assert.match(body.systemInstruction.parts[0].text, /age or gender/);
+    assert.match(body.systemInstruction.parts[0].text, /no head contact/);
+    return Response.json(envelope({ answer: message === 'help' || message.includes('app') ? 'Use New Lesson to create a plan, review it, then save.' : 'Explain the movement slowly with a non-contact demonstration and coach supervision.' }));
+  } }));
+  for (const question of questions) {
+    assert.equal(chatGuard(question), null);
+    const response = await state.post(question);
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).answer, /New Lesson|non-contact demonstration/);
+    state.advance(60001);
+  }
+  assert.deepEqual(seen, questions);
+  assert.match((await (await state.post('Write a space opera')).json()).answer, /Please ask a specific coaching or app question/);
+  assert.equal(seen.length, 5);
+  assert.equal(chatGuard('How can I teach balance?'), null);
 });
