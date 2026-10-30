@@ -13624,41 +13624,49 @@ Audience support: this file connects the optional class-group field to validatio
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\lesson-view.js`
 
-Photo dashboard: this file connects the owner’s supplied imagery and existing discipline/Fitness filters, or verifies those connections. No database or AI behavior changes.
-
-### Lines 1–14
+UI-only navigation and lesson display; saved records remain unchanged.
 
 ```text
 1 | // Builds dashboard filters and readable timelines from existing lesson fields.
 2 | export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Fitness', 'Personal Training'];
 3 | // Combines discipline and audience filters without changing the saved list.
 4 | export function filterLessons(lessons, audience, discipline, classType = 'All') {
-5 |   return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline) && (discipline !== 'Fitness' || classType === 'All' || (classType === 'Group classes' ? !!lesson.class_type && lesson.class_type !== 'Personal training' : (lesson.class_type || 'Unspecified') === classType)));
-6 | }
-7 | // Separates heading, minutes and cues while preserving each activity's media index.
-8 | export function timelineEntries(blocks) {
-9 |   return blocks.map((block, index) => {
-10 |     const [heading, ...cues] = block.split('\n');
-11 |     const timed = heading.match(/^(.*?)\s*(?:—|–|-|:)\s*(\d{1,3})\s*(?:minutes?|mins?)\s*$/i);
-12 |     return { index, title: timed ? timed[1].trim() : 'Coaching cues', minutes: timed ? Number(timed[2]) : null, cues: timed ? cues.join('\n') : block };
-13 |   });
-14 | }
+5 |   return lessons.filter(lesson => {
+6 |     const legacyPersonal = discipline === 'Fitness' && classType === 'Personal training' && lesson.discipline === 'Personal Training';
+7 |     const matchesDiscipline = discipline === 'All' || lesson.discipline === discipline || legacyPersonal;
+8 |     const matchesClass = legacyPersonal || discipline !== 'Fitness' || classType === 'All' || (classType === 'Group classes' ? !!lesson.class_type && lesson.class_type !== 'Personal training' : (lesson.class_type || 'Unspecified') === classType);
+9 |     return (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && matchesDiscipline && matchesClass;
+10 |   });
+11 | }
+12 | // Separates heading, minutes and cues while preserving each activity's media index.
+13 | export function timelineEntries(blocks) {
+14 |   return blocks.map((block, index) => {
+15 |     const [heading, ...cues] = block.split('\n');
+16 |     const timed = heading.match(/^(.*?)\s*(?:—|–|-|:)\s*(\d{1,3})\s*(?:minutes?|mins?)\s*$/i);
+17 |     return { index, title: timed ? timed[1].trim() : 'Coaching cues', minutes: timed ? Number(timed[2]) : null, cues: timed ? cues.join('\n') : block };
+18 |   });
+19 | }
 ```
 
 - **Line 1:** Human-readable comment: Builds dashboard filters and readable timelines from existing lesson fields. This explanation does not execute.
 - **Line 2:** Keeps legacy navigation available and adds the new Fitness tab.
 - **Line 3:** Human-readable comment: Combines discipline and audience filters without changing the saved list. This explanation does not execute.
 - **Line 4:** Adds an optional class-type filter while retaining the original three-argument behavior through its All default.
-- **Line 5:** Combines audience, discipline and class-type filters. Group classes includes specified Fitness types other than Personal training; legacy Personal Training remains separate.
-- **Line 6:** Closes this function, conditional block or object; execution continues after the block.
-- **Line 7:** Human-readable comment: Separates heading, minutes and cues while preserving each activity's media index. This explanation does not execute.
-- **Line 8:** Exports a display-only timeline parser for existing activity text.
-- **Line 9:** Maps each original block to one display entry and preserves its index for attachment matching.
-- **Line 10:** Splits the first line into heading and the remaining lines into cues using array destructuring and the rest operator.
-- **Line 11:** Matches a heading ending with a separator, one to three digits and a minute label. Capture groups retain the title and number; the i flag ignores case.
-- **Line 12:** Returns the original index, extracted title/minutes and remaining cues for a timed section. Untimed content is retained intact with a null time rather than inventing a duration.
-- **Line 13:** Closes the callback or options object and the surrounding function call; the semicolon ends the statement.
-- **Line 14:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 5:** Filters into a new array; the callback reads each existing lesson without changing its fields or identity.
+- **Line 6:** Recognizes old Personal Training records only when the visible Personal Training shortcut is selected; does not convert their stored discipline.
+- **Line 7:** Accepts the default All view, an exact discipline match, or the legacy record included by the Personal Training shortcut.
+- **Line 8:** Accepts that legacy match alongside current Fitness personal training, while retaining all existing class-type and group filters.
+- **Line 9:** Combines the audience, discipline and class checks. Missing audiences still mean Unspecified; a true result includes the original lesson.
+- **Line 10:** Closes the callback and filter call, returning the new display array without saving anything.
+- **Line 11:** Closes this function, conditional block or object; execution continues after the block.
+- **Line 12:** Human-readable comment: Separates heading, minutes and cues while preserving each activity's media index. This explanation does not execute.
+- **Line 13:** Exports a display-only timeline parser for existing activity text.
+- **Line 14:** Maps each original block to one display entry and preserves its index for attachment matching.
+- **Line 15:** Splits the first line into heading and the remaining lines into cues using array destructuring and the rest operator.
+- **Line 16:** Matches a heading ending with a separator, one to three digits and a minute label. Capture groups retain the title and number; the i flag ignores case.
+- **Line 17:** Returns the original index, extracted title/minutes and remaining cues for a timed section. Untimed content is retained intact with a null time rather than inventing a duration.
+- **Line 18:** Closes the callback and filter call, returning the new display array without saving anything.
+- **Line 19:** Closes this function, conditional block or object; execution continues after the block.
 
 ## server/ai-timing.js
 
@@ -14980,9 +14988,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\src\DisciplineHeader.jsx`
 
-Discipline pages: working navigation reuses the existing filters, local owner images and new-form defaults. Saved lesson values remain authoritative.
-
-### Lines 1–13
+UI-only navigation and lesson display; saved records remain unchanged.
 
 ```text
 1 | // Provides working discipline navigation and a matching local-photo header.
@@ -14990,7 +14996,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 3 | import { disciplineCards, disciplinePage } from './discipline-pages.js';
 4 | import { DisciplinePhoto } from './DisciplineCards.jsx';
 5 | export function DisciplineNavigation({ discipline, classType, onSelect, disabled }) {
-6 |   const destinations = [{ title: 'Dashboard', discipline: 'All' }, ...disciplineCards, { title: 'All Fitness', discipline: 'Fitness' }, { title: 'Legacy Personal Training', discipline: 'Personal Training' }];
+6 |   const destinations = [{ title: 'Dashboard', discipline: 'All' }, ...disciplineCards];
 7 |   return <aside className="coach-sidebar"><strong className="sidebar-brand">CoachLab</strong><nav aria-label="Disciplines">{destinations.map(card => <button type="button" className="secondary" key={card.title} disabled={disabled} aria-pressed={discipline === card.discipline && classType === (card.classType || 'All')} onClick={() => onSelect(card)}>{card.title}</button>)}</nav></aside>;
 8 | }
 9 | export default function DisciplineHeader({ discipline, classType }) {
@@ -15005,7 +15011,7 @@ Discipline pages: working navigation reuses the existing filters, local owner im
 - **Line 3:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 4:** Imports the named tools from the module after from; braces select named exports. This makes them available to the code below.
 - **Line 5:** Defines the sidebar with current selection, callback and editing lock props.
-- **Line 6:** Builds Dashboard, seven photo-card destinations, All Fitness and legacy lesson navigation.
+- **Line 6:** Creates Dashboard plus the seven existing discipline cards; removes the separate All Fitness and Legacy Personal Training buttons. Personal Training still selects Fitness with the Personal training class type.
 - **Line 7:** Renders real filter buttons with pressed-state accessibility and a disabled state during editing.
 - **Line 8:** Closes this function, conditional block or object; execution continues after the block.
 - **Line 9:** Defines the page photo/title component using current filters.

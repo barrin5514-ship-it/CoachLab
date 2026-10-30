@@ -105,3 +105,15 @@ test('discipline page defaults preserve Fitness and legacy navigation', async ()
   assert.equal(disciplinePage('Fitness', 'Group classes').image, 'classes');
   assert.equal(disciplinePage('Personal Training', 'All').discipline, 'Personal Training');
 });
+
+test('Personal Training shortcut includes legacy and Fitness records without changing them', () => {
+  const rows = [{ id: 1, discipline: 'Personal Training', audience: 'Adults' }, { id: 2, discipline: 'Fitness', class_type: 'Personal training', audience: 'Adults' }, { id: 3, discipline: 'Fitness', class_type: 'Yoga' }, { id: 4, discipline: 'Boxing' }];
+  const before = structuredClone(rows);
+  assert.deepEqual(filterLessons(rows, 'All', 'Fitness', 'Personal training'), rows.slice(0, 2));
+  assert.deepEqual(filterLessons(rows, 'Kids', 'Fitness', 'Personal training'), []);
+  assert.deepEqual(filterLessons(rows, 'All', 'Fitness', 'Group classes'), [rows[2]]);
+  assert.deepEqual(filterLessons(rows, 'All', 'All'), rows);
+  assert.deepEqual(rows, before);
+  const navigation = readFileSync(new URL('../client/src/DisciplineHeader.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(navigation, /All Fitness|Legacy Personal Training/);
+});

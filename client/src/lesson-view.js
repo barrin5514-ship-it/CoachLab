@@ -2,7 +2,12 @@
 export const disciplineNavigation = ['Boxing', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'Wrestling', 'MMA', 'Fitness', 'Personal Training'];
 // Combines discipline and audience filters without changing the saved list.
 export function filterLessons(lessons, audience, discipline, classType = 'All') {
-  return lessons.filter(lesson => (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && (discipline === 'All' || lesson.discipline === discipline) && (discipline !== 'Fitness' || classType === 'All' || (classType === 'Group classes' ? !!lesson.class_type && lesson.class_type !== 'Personal training' : (lesson.class_type || 'Unspecified') === classType)));
+  return lessons.filter(lesson => {
+    const legacyPersonal = discipline === 'Fitness' && classType === 'Personal training' && lesson.discipline === 'Personal Training';
+    const matchesDiscipline = discipline === 'All' || lesson.discipline === discipline || legacyPersonal;
+    const matchesClass = legacyPersonal || discipline !== 'Fitness' || classType === 'All' || (classType === 'Group classes' ? !!lesson.class_type && lesson.class_type !== 'Personal training' : (lesson.class_type || 'Unspecified') === classType);
+    return (audience === 'All' || (lesson.audience ?? 'Unspecified') === audience) && matchesDiscipline && matchesClass;
+  });
 }
 // Separates heading, minutes and cues while preserving each activity's media index.
 export function timelineEntries(blocks) {

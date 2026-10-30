@@ -5392,3 +5392,31 @@ total estimated time.
 Outcome: Replaced three-minute script with five timed sections totaling eight minutes. Added spoken lines, exact UI actions, backups, pre-demo checklist and a future heading-only coding-agent demonstration; no application change performed. Checked current Add selected, Kids draft approval, Fitness choices and read-only chat labels against source. Differentiated existing per-user chat limits from proposed per-user allowances across AI features. Timing is a script estimate, not a timed live rehearsal. Coding check may extend to nine minutes; bounded waits preserve the 5–10-minute range. No live draft/chat/media requests, private data, .env reads or other-project changes. CODE_WALKTHROUGH.md unchanged because no application source/configuration changed. Serial tests/build required by AGENTS.md before push. Previous chat fix commit: 7a0d15e. Commit subject: Rewrite CoachLab demo as eight-minute spoken script.
 
 Actual checks: 799 spoken words (directions, backups and pasted prompt excluded); scheduled sections total 8 minutes. npm test: 119 passed, zero failed/skipped, concurrency=1. npm run build passed. git diff --check passed. Reviewed documentation changes only. Initial word-count helper missed inline Say text; corrected the count before reporting timing. No changes to application source or configuration.
+
+## 2026-10-30 — Clean up Fitness filters
+
+Verbatim user prompt:
+
+COACHLAB — CLEAN UP FITNESS FILTERS (UI only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+The filter row shows: Boxing, Muay Thai, BJJ, Wrestling,
+Personal Training, Classes, All Fitness, Legacy Personal Training.
+Remove "All Fitness" and "Legacy Personal Training".
+
+- Old Legacy Personal Training lessons must still be findable:
+  show them under the "Personal Training" filter, alongside the
+  new Fitness personal training lessons.
+- Keep "All" (or the default view) showing every lesson.
+- No database changes. Do not change or move any saved lessons.
+  Old lessons must still open, edit and save.
+- Check desktop and phone widths.
+
+RULES
+- Tests serially. One small commit. Push only if tests and build
+  pass. Never print .env values. Don't touch other projects.
+
+REPORT BACK (one code block): what changed in plain English,
+commit hash, push result, test/build results.
+
+Outcome: Removed two extra sidebar destinations. The existing Fitness/Personal training shortcut now includes old discipline=Personal Training rows as well as new Fitness rows. Filtering returns original objects without altering stored fields; existing editor, API, databases, migrations and save behavior untouched. Default All and audience/group-class filters preserved. Updated client/src/DisciplineHeader.jsx, client/src/lesson-view.js, server/lesson-ui.test.js and required documentation. Exact numbered source listings and explanation coverage verified. Serial npm test: 120 passed, zero failed/skipped; npm run build passed. Browser checked actual rendered navigation and existing CSS in a temporary synthetic read-only preview at 1366x768 and 390x844: buttons in bounds, no horizontal overflow, phone wraps; not a live production/account editing test. Temporary tab closed, viewport reset and preview stopped. No .env reads, live AI requests or other-project changes. Commit subject: Simplify Fitness navigation and include legacy personal training. Previous docs commit: fc67cc2.
