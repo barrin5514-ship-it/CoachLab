@@ -5476,3 +5476,78 @@ REPORT BACK: the diff summary, test/build results, commit hash.
 Outcome: Added one static footer to client/index.html outside the React root so all auth and app views share it. Appended CSS for vertical page layout, expanding root and muted centered 14px-equivalent text on the existing dark background. Normal wrapping and padding support phones; no fixed overlay. Application diff shown in chat before committing. No logic/API/database changes, .env reads, paid calls or other-project edits. Exact source listings and explanations for HTML/CSS verified in CODE_WALKTHROUGH.md. Commit subject: Add shared CoachLab credit footer. Prior photo commit: 92c3e49.
 
 Actual checks: npm test passed serially, 120 tests, zero failures/skips; npm run build passed. git diff --check passed. Only the HTML shell, CSS and required documentation are staged. No live AI requests or saved-data changes.
+
+## 2026-10-30 — Part 1: Classes, ladders and lesson links
+
+Exact owner prompt:
+
+~~~text
+COACHLAB — PART 1: CLASSES + LEVEL LADDERS + ASSIGN LESSONS
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site auto-deploys on push. Don't break existing lessons.
+
+STEP 0 — RENAME
+The dashboard card and sidebar item currently called "Classes"
+(group fitness: Cardio kickboxing, Zumba, HIIT, etc.) must be
+renamed to "Fitness". Same photo, same filters, same behavior.
+"Classes" will now mean the new feature below.
+
+GOAL
+Coaches can create Classes: specific groups they teach that will
+later get monthly plans, weekly check-ins and progression (later
+parts). Build the class setup and lesson assigning now.
+
+FEATURES
+1. A "Classes" page (signed-in, each coach sees only their own).
+   Create, edit, archive a class with:
+   - Name (e.g. "Kids Boxing Tue/Thu")
+   - Discipline (existing list, including Fitness types)
+   - Audience: Kids / Adults
+   - Days per week (1-7), and which days
+   - Goal (short text, e.g. "Belt test in June", "Basics down")
+   - Current level (picked from that class's ladder)
+2. Level ladders per discipline, with editable defaults:
+   - BJJ: White, Blue, Purple, Brown, Black (adults);
+     kids: White, Grey, Yellow, Orange, Green
+   - Boxing, Muay Thai, MMA, Wrestling, Fitness:
+     Beginner, Intermediate, Advanced, Competition-ready
+   - Each coach can rename, add, remove or reorder levels for
+     their own gym. Editing never changes other coaches' ladders.
+   - Each level has an optional "skills required" list the
+     coach can edit (starts with a few sensible defaults).
+3. Assign lessons to classes:
+   - On any saved lesson, an "Add to class" button lets the coach
+     pick one or more of their classes.
+   - Each class page lists its assigned lessons, with an optional
+     date for each, and a "Remove from class" option.
+   - One lesson can belong to several classes. Assigning links
+     the lesson; it never copies or changes the original.
+   - From a class page, "Add lesson" lets the coach pick from
+     their saved lessons.
+   - Deleting a lesson removes it from classes cleanly.
+4. Each class keeps progress separately from other classes.
+5. Plain-English labels and helper text. Works on phone.
+
+DATABASE
+- Additive Prisma migration only (new tables). Do not alter or
+  delete existing lesson data. Apply to production with the
+  existing migrate deploy flow.
+
+RULES
+- Low RAM: tests serially. Small commits. Push only if tests and
+  build pass. Never print .env values. Don't touch other projects.
+- Add tests: Fitness rename keeps the same filters; create/edit/
+  archive class; coach can't see another coach's classes; ladder
+  edits stay per-coach; assign/remove lesson; one lesson in two
+  classes; deleting a lesson cleans up assignments; old lessons
+  still load and save.
+- Update CODE_WALKTHROUGH.md and PROMPT_LOG.md.
+- Stop and report if anything risks breaking the live site.
+
+REPORT BACK (one code block): what was built in plain English,
+commits, push result, test/build results, migration name.
+~~~
+
+Preparation: clean synchronized starting HEAD 5b9a507 (preserved the existing owner footer, demo script, navigation simplification and photo work). Read AGENTS.md, account/lesson schema, protected route middleware, startup and current UI. No .env reads. No BMAD workflow. Design: three new PostgreSQL tables; coach-scoped ladders by discipline/audience; stable level IDs; each class stores its own current level; assignments link originals and cascade on lesson deletion. SQLite lessons remain unchanged; Classes intentionally reports unavailable under SQLite rather than silently switching storage. Only the production startup migrate deploy flow will apply the migration remotely after the authorized push.
+
+Step 0 completed: group-fitness card/sidebar and page title renamed Fitness in client/src/discipline-pages.js, with the existing photo, Group classes filter and Fitness discipline unchanged. Updated the associated assertion in server/lesson-ui.test.js and its walkthrough. Final combined-work checks already run locally: 123/123 serial tests, zero failures/skips; production build passed, 45 modules, including Prisma generation/TypeScript. The prior run passed 122 tests before the assignment UI-handler test was added. Commit subject for this rename: "style: rename group fitness shortcut to Fitness"; push deferred until all Part 1 commits are complete.

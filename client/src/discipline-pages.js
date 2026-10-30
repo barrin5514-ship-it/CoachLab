@@ -6,13 +6,13 @@ export const disciplineCards = [
   { title: 'Wrestling', discipline: 'Wrestling', image: 'wrestling', description: 'Positioning, movement and control' },
   { title: 'MMA', discipline: 'MMA', image: 'mma', description: 'Striking, grappling and transitions' },
   { title: 'Personal Training', discipline: 'Fitness', classType: 'Personal training', image: 'personal-training', description: 'Strength, conditioning and individual coaching' },
-  { title: 'Classes', discipline: 'Fitness', classType: 'Group classes', image: 'classes', description: 'Cardio, dance, strength and group fitness' },
+  { title: 'Fitness', discipline: 'Fitness', classType: 'Group classes', image: 'classes', description: 'Cardio, dance, strength and group fitness' },
 ];
 // Uses the same photo/filter mapping for page headings and new-form defaults.
 export function disciplinePage(discipline, classType) {
   if (discipline === 'All') return null;
   if (discipline === 'Personal Training') return { ...disciplineCards[5], title: 'Personal Training (legacy)', discipline };
-  if (discipline === 'Fitness') return { ...disciplineCards[classType === 'Personal training' ? 5 : 6], title: classType === 'All' ? 'Fitness' : classType === 'Group classes' ? 'Classes' : classType };
+  if (discipline === 'Fitness') return { ...disciplineCards[classType === 'Personal training' ? 5 : 6], title: classType === 'All' ? 'Fitness' : classType === 'Group classes' ? 'Fitness' : classType };
   return disciplineCards.find(card => card.discipline === discipline) || { title: discipline, discipline };
 }
 // Prefill only new lessons; existing lessons always supply their own stored values.
