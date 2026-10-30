@@ -5457,3 +5457,22 @@ REPORT BACK (one code block): commit hash, push result, test/build
 results, old and new position for both photos.
 
 Outcome: CSS only plus required documentation. Added the two missing cards to the existing five-card 4:3 photo/caption rules. Muay Thai 35% 50% -> 100% top; BJJ 50% 50% -> 100% top. Inspected both original local WebPs and actual component previews at 1366x900 and 390x844; both crops centered, captions below, phone has no horizontal overflow. No re-export needed. Other five positions, photo bytes, hero, titles and filters unchanged. No live account/database/AI requests or .env reads. Temporary preview stopped, browser tab closed and viewport reset. npm test serial: 120 passed, zero failures/skips. npm run build passed. Exact CSS numbered listing and all explanation coverage verified. git diff --check passed. Commit subject: Align Muay Thai and BJJ photos with dashboard cards. Previous filter commit: 719686c.
+
+## 2026-10-30 — Shared CoachLab footer
+
+Verbatim user prompt:
+
+Add a small footer at the bottom of every page that says:
+"Built by Bolo • CoachLab 2026"
+Muted gray text, centered, matches the dark theme, readable on
+phones. No logic, API or database changes.
+
+Show me the diff before committing. Then run tests serially and
+the build. If both pass, make one small commit and push.
+Never print .env values.
+
+REPORT BACK: the diff summary, test/build results, commit hash.
+
+Outcome: Added one static footer to client/index.html outside the React root so all auth and app views share it. Appended CSS for vertical page layout, expanding root and muted centered 14px-equivalent text on the existing dark background. Normal wrapping and padding support phones; no fixed overlay. Application diff shown in chat before committing. No logic/API/database changes, .env reads, paid calls or other-project edits. Exact source listings and explanations for HTML/CSS verified in CODE_WALKTHROUGH.md. Commit subject: Add shared CoachLab credit footer. Prior photo commit: 92c3e49.
+
+Actual checks: npm test passed serially, 120 tests, zero failures/skips; npm run build passed. git diff --check passed. Only the HTML shell, CSS and required documentation are staged. No live AI requests or saved-data changes.

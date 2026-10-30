@@ -28,9 +28,7 @@ JavaScript executes application logic. JSX is HTML-like syntax inside JavaScript
 
 Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\client\index.html`
 
-<!-- Loads the React entry point; the app fills the root element after login checks. -->
-
-### Lines 1–13
+Shared document shell and static footer across every React screen.
 
 ```text
 1 | <!-- Loads the React entry point; the app fills the root element after login checks. -->
@@ -43,9 +41,10 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 8 |   </head>
 9 |   <body>
 10 |     <div id="root"></div>
-11 |     <script type="module" src="/src/main.jsx"></script>
-12 |   </body>
-13 | </html>
+11 |     <footer class="site-footer">Built by Bolo • CoachLab 2026</footer>
+12 |     <script type="module" src="/src/main.jsx"></script>
+13 |   </body>
+14 | </html>
 ```
 
 - **Line 1:** Human-readable comment: Loads the React entry point; the app fills the root element after login checks. This explanation does not execute.
@@ -58,9 +57,10 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 - **Line 8:** Closes the head metadata section.
 - **Line 9:** Opens the body, which contains the visible page.
 - **Line 10:** Creates and immediately closes an empty div with ID root. React fills this container later.
-- **Line 11:** Loads /src/main.jsx as a JavaScript module; Vite transforms its JSX for the browser. The closing script tag ends this element.
-- **Line 12:** Closes the body.
-- **Line 13:** Closes the entire HTML document.
+- **Line 11:** Adds a static semantic footer after the React root, so sign-in, account and signed-in screens share the exact requested credit. No scripts, state or API calls are added.
+- **Line 12:** Loads /src/main.jsx as a JavaScript module; Vite transforms its JSX for the browser. The closing script tag ends this element.
+- **Line 13:** Closes the body.
+- **Line 14:** Closes the entire HTML document.
 
 ## client/src/main.jsx
 
@@ -947,6 +947,20 @@ Photo framing and header styling: uses only owner assets, preserves current cont
 - **Line 235:** Moves only the dashboard BJJ image crop from 50% 50% to 100% top. The right edge is retained, bringing the athletes inward while preserving the source WebP and other photo styles.
 - **Line 236:** Blank line separating related statements; it has no runtime effect.
 - **Line 237:** Moves only the dashboard Muay Thai image crop from 35% 50% to 100% top. Higher horizontal position retains more of the right side, bringing the athlete inward; no photo file is modified.
+
+### Shared static page footer
+
+```text
+238 |
+239 | body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+240 | #root { flex: 1; }
+241 | .site-footer { padding: 16px 12px; background: #071215; color: #a6b4b8; text-align: center; font-size: 0.875rem; line-height: 1.5; }
+```
+
+- **Line 238:** Blank line separates related style or markup sections.
+- **Line 239:** Makes the page a vertical flex container at least as tall as the viewport; 100vh is the fallback and 100dvh follows mobile browser controls. Content can grow beyond the viewport.
+- **Line 240:** Lets the React root fill spare page space, keeping the footer at the bottom of short screens and below longer content without a fixed overlay.
+- **Line 241:** Adds modest padding, the existing dark background and readable muted gray text. Centers the 0.875rem text, with 1.5 line height and normal wrapping on phones.
 
 ## client/vite.config.js
 

@@ -235,3 +235,7 @@ body:has(.coach-shell) { background: #071215; }
 .discipline-tile[data-photo="bjj"] img { object-position: 100% top; }
 
 .discipline-tile[data-photo="muay-thai"] img { object-position: 100% top; }
+
+body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+#root { flex: 1; }
+.site-footer { padding: 16px 12px; background: #071215; color: #a6b4b8; text-align: center; font-size: 0.875rem; line-height: 1.5; }
