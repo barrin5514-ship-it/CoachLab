@@ -1,111 +1,153 @@
-# CoachLab: three-minute demo
+# CoachLab — eight-minute spoken demo
 
-Use the live site: https://coachlab-q2ck.onrender.com
+Live site: https://coachlab-q2ck.onrender.com
 
-## Before class
+## Short pre-demo checklist
 
-- Open the site several minutes early so the Render service is awake. Confirm the latest deployment is healthy and sign in privately before sharing your screen. Do not show passwords, Render environment settings or Neon connection strings.
-- Rehearse on your phone. Swipe the discipline navigation to reach every discipline; check that the page itself does not scroll sideways.
-- Prepare one generic approved Adults lesson as a fallback. Use invented class details only, never children's names, contact information, medical details or other personal athlete information.
-- Try one Kids draft and one Adults Beginner draft ahead of time. Check that all five section times add up and each section has numbered cues, common mistakes and easier/harder options. Coach review is essential: prompt rules and automated structure checks cannot guarantee model accuracy or safety.
-- Check saving, refresh, editing, logout/login, media playback/source fallbacks and account isolation before inviting classmates. Use only a disposable lesson if demonstrating deletion.
-- Keep DEMO_SCRIPT.md, PROMPT_LOG.md and CODE_WALKTHROUGH.md ready in separate editor tabs. Close private terminals and notification panels.
-- Do not run npm start on your PC for this presentation: it is the production entry point and runs remote migrations when configured. Use the deployed site; local PostgreSQL development needs its own reviewed additive migration before using the new audience field. Do not improvise a reset or copy production credentials into local files.
+- Open the site **one minute early** to wake it; allow longer if needed.
+- Be logged in before sharing your screen. Keep account details and notifications hidden.
+- Have your phone ready, already signed into the same account on the live site.
+- Have one reviewed, saved demo lesson ready, with safe instructional videos attached.
+- Use generic class details only. No real children's names, contact details or personal data.
+- Open the coding agent in CoachLab, with a clean Git status and dependencies ready. Keep the small prompt below ready to paste. Do not open .env or private settings.
+- Rehearse with a timer. These are actions to perform during the talk, not claims that this demo has already run.
 
-## 0:00–0:25 — Introduce it
+**Timing:** 1 + 4 + 1 + 1 + 1 = **8 minutes**, including normal clicks and short waits. Read only the **Say** lines aloud. Use a backup line instead of the normal line if needed, not as extra speech. Keep AI waits to about 15 seconds; then show the saved example. Allow up to one extra minute for the coding check, keeping the talk within 10 minutes. A fast rehearsal can fit 5–6 minutes by shortening pauses and showing the saved example sooner.
 
-“CoachLab helps a coach turn a class idea into a lesson they can actually follow at the gym. I built it for planning sessions across boxing, Muay Thai, Brazilian Jiu-Jitsu, wrestling, MMA and personal training. The coach stays in charge of what gets taught.”
+## 1. Intro and problem — 0:00–1:00
 
-Point to the discipline navigation. Choose Boxing and show the audience filter. Explain that Kids and Adults are class categories, not profiles of individual children. Existing lessons are Unspecified until a coach edits that choice.
+**Click:** Open the dashboard on the live site.
 
-## 0:25–1:10 — Generate and review a draft
+**Say:**
 
-Choose AI lesson draft, Boxing, Kids, Beginner and 30 minutes. Leave optional details blank or enter “Footwork and balance games, no contact.” Confirm the request contains no personal information, then Generate draft.
+“Hi, this is CoachLab. I coach kids' boxing and adult MMA. Planning a class takes time. I need to think about the goal, the warm-up, the drills and how to explain each movement.
 
-“React is the part I click on. It sends my generic class request to an Express server. That server keeps the AI key private and asks Gemini for a structured draft. For Kids we use conservative rules: no hard sparring, head contact, submissions or chokes, with short drills, games, breaks and praise. Beginners of any age also have no hard sparring.”
+“I wanted one place to plan that work, find useful videos and keep lessons I can use again. That is why I built CoachLab.
 
-If generation is slow or a quota error appears, show the prepared approved lesson instead. Say honestly that the provider is unavailable; manual planning and saved lessons still work. Do not repeatedly retry during the talk.
+“The aim is to save planning time, while keeping me in charge. AI can suggest a starting point, but I still check what is right for the class. A plan for children needs different language and activities from a plan for adults.
 
-## 1:10–1:50 — Coach approval and saving
+“I'll show the app, explain how it works, and show how I use coding agents to build it.”
 
-Show the five timed sections. Point to numbered teaching cues, common mistakes, and easier/harder options. Change one generic coaching cue, keeping at least two numbered steps in that section. Confirm the total still matches 30 minutes.
+**Backup:** “The live site is waking up. I have a saved example ready, so I can still explain the class-planning flow.”
 
-“AI can make mistakes. I review and edit the plan before explicitly approving it. Nothing is saved just because I generated a draft.”
+## 2. Live tour — 1:00–5:00
 
-Approve and save only if the draft is appropriate. Show the Kids badge, section minutes and cues on the saved card. If using the fallback, edit that generic lesson and save changes rather than presenting it as newly generated.
+### Dashboard and disciplines — 1:00–1:20
 
-## 1:50–2:20 — Persistence and media
+**Click:** Show the saved lesson cards. Choose **Boxing**, then **MMA**, then **Dashboard**.
 
-Refresh the browser. Show that the lesson remains. Briefly open a reviewed picture/video or its source fallback if one is available; do not claim every external video always plays.
+**Say:** “This is my dashboard. My saved lessons are here. I can choose a discipline, so I can find a boxing plan or an MMA plan without mixing everything together. I can also filter by audience.”
 
-“The lesson is stored in PostgreSQL on Neon, not just in this browser. Express handles saving and loading through an API. Prisma is the tool the server uses to talk to the database. Media stays with its activity, and outside sources can sometimes be unavailable.”
+**Backup:** “If the page is slow, this saved card shows the same idea: each plan has a discipline and class details.”
 
-## 2:20–3:00 — Explain control and learning
+### Fitness classes — 1:20–1:40
 
-Open the prompt log and one small commit diff.
+**Click:** Choose **All Fitness** or a Fitness card. Show **Personal training** and **Boxing fitness (non-contact)** among the choices.
 
-“I gave the coding agent specific tasks in order. I required reviewed diffs, small commits, serial tests and a passing build before each push. I also required explanations of the code. For example, when we added audience, old tests expected exactly nine lesson fields. The test failures exposed those outdated expectations, and we corrected them to include the new field without dropping the original data checks.”
+**Say:** “CoachLab also covers Fitness classes. That includes personal training and non-contact boxing fitness. The class type helps describe what I am planning. It does not mean every fitness class needs the same lesson.”
 
-“React renders components and keeps temporary form state. Express validates requests and checks account access. Neon stores the saved records. The AI provides drafts; the coach makes the decision.”
+**Backup:** “I can show these Fitness choices in the lesson form if there are no saved classes here yet.”
 
-## One tiny live coding-agent change (after the walkthrough)
+### Create a lesson — 1:40–2:05
 
-Allow extra time beyond the three-minute app tour for tests/build and deployment. This changes one visible heading only, with no database or API work.
+**Click:** Choose **+ New Lesson**. Show title, discipline, audience and activity fields. Use the generic title **Boxing balance and hooks**. Cancel this unsaved form before opening the AI form.
 
-Paste this prompt:
+**Say:** “I can write a lesson myself. I choose the class details, add the activities and write my coaching notes. I do not have to use AI. I'll cancel this example and show the draft option.”
 
-```text
-In CoachLab only, read AGENTS.md and check Git status. Change the dashboard heading in client/src/App.jsx from “Your lesson plans” to “Your coaching plans”. Do not change behavior, styles, databases, secrets or other files except the required PROMPT_LOG.md and CODE_WALKTHROUGH.md updates. Show and explain the diff. Run npm test, then npm run build, one at a time, and stop on failure. Record actual results. Commit only these verified changes with the message “docs-ui: clarify coaching plans heading”. Do not push until I approve the reviewed commit; a push automatically deploys to Render.
-```
+**Backup:** “If a form does not open, the saved lesson shows the fields I would fill in. I will not refresh while a save is still running.”
 
-In PowerShell, start in the correct project:
+### AI draft for Kids, review and save — 2:05–3:05
 
-```powershell
-Set-Location 'C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab'
-git status --short --branch
-```
+**Click:** Choose **AI lesson draft**. Select **Boxing**, **Kids**, **Beginner**, **30 minutes**. Enter **Balance and hook technique, non-contact games** as the goal. Confirm no personal information, then **Generate draft**. Review the timed sections and safety notes. Edit a cue if needed. Only if suitable, check the review approval and choose **Approve and save lesson**.
 
-If there are unexpected changes, stop and identify them. Never discard somebody else's work. After the agent edits, review:
+**Say:** “Here I give AI a small, generic class brief. Kids is an audience choice, not a record about an individual child.
 
-```powershell
-git diff -- client/src/App.jsx PROMPT_LOG.md CODE_WALKTHROUGH.md
-git diff --check
-```
+“The draft breaks the class into timed parts. I look at the teaching steps, common mistakes and easier options. For kids, I want short, non-contact activities, breaks and clear instructions.
 
-Explain: “The minus line is the old heading; the plus line is the replacement. The h2 tag is a section heading. We changed its text, not how lessons are stored or loaded.” Check that the heading's ID and surrounding JSX remain unchanged and the walkthrough matches the current lines.
+“I check the whole draft before approving it. AI can be wrong. Generating a draft is not the same as saving an approved lesson.”
 
-Run these separately, waiting for each to finish successfully:
+**Backup:** “AI is slow or unavailable, so I will show this prepared lesson. It was saved earlier; I am not claiming it was generated just now. I still review every suggestion.”
 
-```powershell
-npm test
-npm run build
-```
+### Suggest videos and multi-select — 3:05–3:40
 
-A failed command means stop, fix and retest—do not push. After reviewing the staged changes, the agent can commit (do not run a duplicate commit if it already did):
+**Click:** On the saved lesson, choose **Suggest videos**. Review the titles and sources. Select two suitable available suggestions using their checkboxes. Choose **Add selected** to open the edit flow; review where they attach, then save. If fewer than two suitable suggestions appear, show the prepared attachments instead.
 
-```powershell
-git add client/src/App.jsx PROMPT_LOG.md CODE_WALKTHROUGH.md
-git diff --cached --check
-git diff --cached
-git commit -m "docs-ui: clarify coaching plans heading"
-git status --short --branch
-```
+**Say:** “Suggest videos helps me find a demonstration. I can select more than one, instead of attaching each in a separate search. I still check the source and whether it fits the class. A suggested video is not automatically a safe or suitable lesson.”
 
-For the optional live deployment, explicitly approve the push. Check for remote changes first:
+**Backup:** “The video search has a limit, or the source is unavailable. These saved attachments show the result. I will not keep retrying or attach an unsuitable video just for the demo.”
 
-```powershell
-git fetch origin
-git merge-base --is-ancestor origin/main HEAD
-```
+### Coaching chat — 3:40–4:15
 
-Continue only if the second command exits successfully (PowerShell: $LASTEXITCODE is 0). Otherwise stop and reconcile remote changes; never force-push. Then:
+**Click:** Open **Coach chat**. Ask exactly: **How do I explain a left hook to a seven-year-old?** Read a short part of the actual answer; do not promise what it will say.
 
-```powershell
-git push origin main
-git rev-parse HEAD
-git ls-remote origin refs/heads/main
-```
+**Say:** “I can also ask a coaching question in plain words. Here I am asking how to explain a left hook to a seven-year-old. That is generic class context, with no child's name.
 
-The two hashes should match. Wait for Render's new deployment to finish, refresh the live site, and show the changed heading plus a saved lesson. Explain that a Git commit records the reviewed change, GitHub keeps the history, and Render builds and runs the pushed version. A successful push alone does not prove a deployment succeeded.
+“I check the answer for clear, age-appropriate, non-contact guidance. The chat is read-only. It can explain, but it cannot change my saved lesson.”
 
-If a deployment fails, stop changes, preserve data and inspect its safe startup error. Do not reset the database or force-push. The preceding working code and additive audience migration remain in history.
+**Backup:** “Chat is unavailable right now. I will use my reviewed coaching notes. I would not treat an unchecked AI answer as an instruction to use with a child.”
+
+### Refresh and persistence — 4:15–4:40
+
+**Click:** Close chat. Wait for saving to finish. Refresh the browser and find the lesson again. Briefly point to **Edit lesson**.
+
+**Say:** “Now I will refresh. The lesson is still here because it was saved to the database, not just held on this screen. I can open it later and edit it when my class needs change.”
+
+**Backup:** “If loading fails, I will not say the save worked. The prepared saved lesson demonstrates the normal flow, and I can check this attempt afterward.”
+
+### Open on my phone — 4:40–5:00
+
+**Click:** On the phone, open the live site in the already signed-in browser. Refresh and locate the same lesson. Hold it up or show its screen.
+
+**Say:** “Here is the same saved plan on my phone. I can prepare at my desk and open it at the gym, using the same account.”
+
+**Backup:** “The phone connection is slow. I prepared this signed-in view earlier, but I cannot confirm a fresh load right now.”
+
+## 3. How it is built — 5:00–6:00
+
+**Click:** Keep the saved lesson visible; point to its form, saved content and video area. Do not open service accounts or private settings.
+
+**Say:** “React builds the screen I click on. It handles the forms and shows the lesson cards.
+
+“Express is the server behind the screen. It checks requests and makes sure I am signed in before letting me use my lessons.
+
+“Neon PostgreSQL is the database. It keeps saved lessons so they can load again, including on my phone.
+
+“Render runs the site online, so I do not need my laptop running for someone to open it.
+
+“Gemini supplies the AI drafts and chat answers. The YouTube API helps find videos. Those services give suggestions, not a guarantee that the content is correct or right for my class.”
+
+**Backup:** “Even if a service is unavailable, these are their separate jobs. A page loading does not prove every outside service is working.”
+
+## 4. How I built it — 6:00–7:00
+
+**Click:** Show the prepared coding-agent prompt, submit it, and inspect the diff. Run tests then the build serially. Review the explanation and commit only after success. This is a future demo action; the script rewrite itself changes no application code.
+
+**Say:** “I use ChatGPT and Claude to help write clear prompts. Codex builds the changes. I review the result and test it; I do not just accept everything.
+
+“Here is a tiny example. I ask for one heading change. In the diff, the minus line is the old text and the plus line is the new text. I check that nothing else changed in the app.
+
+“Next I run the tests and the build, one at a time. I ask the agent to explain the change. If both checks pass, I commit it. A commit is a named checkpoint I can review later.”
+
+**Prepared prompt to paste, not read aloud:**
+
+~~~text
+Work only in CoachLab. Read AGENTS.md and check Git status. If there are unexpected edits, stop. In client/src/App.jsx change only the visible heading “Your lesson plans” to “Your coaching plans”. Keep its ID and behavior unchanged. Update the required prompt log and walkthrough. Show and explain the diff. Run npm test, then npm run build, serially; stop on failure. Review the staged files and commit only if both pass. Do not push, deploy, access databases, read .env, or modify other projects. If the heading already changed, stop rather than inventing another edit.
+~~~
+
+**Backup:** “The check is still running, so I will not commit an unverified change. This earlier reviewed diff shows the process. I will finish the live check after the talk.”
+
+**Time guard:** Allow at most one extra minute here. Never claim pending tests passed. Do not wait for a live deployment; this demonstration ends at the verified local commit.
+
+## 5. Limits and what is next — 7:00–8:00
+
+**Click:** Return to the saved lesson on the live site.
+
+**Say:** “There are limits. Password-reset email is not available yet. AI has a shared daily allowance, so a request can be refused when that allowance is used. The free hosting plan can sleep, which makes the first visit slow.
+
+“The chat already has a per-user question limit, as well as a shared limit. Next I want clearer per-user AI allowances across the features, so one busy user does not use the shared allowance for everyone.
+
+“I also want weekly lesson plans, so I can plan a sequence rather than one class at a time. Another next step is chat that can help edit a lesson, with my review and approval before anything is saved. That does not work today.
+
+“For now, CoachLab gives me one place to plan, review and keep my classes. I still make the coaching decisions.”
+
+**Backup:** “If the live page is unavailable, these limits and next steps still apply. I will separate what I demonstrated today from what I still need to build.”

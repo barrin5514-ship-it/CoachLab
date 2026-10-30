@@ -5346,3 +5346,49 @@ hash, push result, test/build results.
 Outcome: Removed the keyword allowlist and canned app-help phrase rule. Ordinary requests now reach Gemini with explicit semantic relevance, child age/gender and safety instructions. Kept existing privacy/medical/child-safety refusals plus two narrowly matched unrelated requests. Quota numbers, authentication and read-only access remain unchanged. Regression tests route all five questions through mocked Gemini, verify safe instructions and answers, and check an off-topic refusal. No live AI calls or .env reads. Changed server/chat.js, server/ai.test.js and their walkthrough/log. Prior fix 88e65aab6354beff5cb51df2724fca7c7be0d037 was too narrow; new examples exposed the remaining allowlist. Verified current numbered source listings and explanation coverage. Commit subject: Allow semantic coaching and app questions in chat.
 
 Verification: npm test passed serially: 119 tests, zero failures/skips; npm run build passed (offline Prisma generation, TypeScript and Vite). Initial test run caught removal of the existing prompt phrase "Politely redirect"; restored that explicit instruction and reran the entire suite and build successfully. No live Gemini calls. Current 60-line chat listing matches source with explanation coverage.
+
+## 2026-10-30 — Eight-minute presentation script (documentation only)
+
+Verbatim user prompt:
+
+COACHLAB — REWRITE DEMO SCRIPT FOR 5–10 MINUTES (docs only)
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site: https://coachlab-q2ck.onrender.com
+
+Rewrite DEMO_SCRIPT.md as a spoken script I can read out loud,
+for an 8-minute target (must fit 5–10 minutes). Plain, simple
+words. I coach kids' boxing and adult MMA; open with why I built
+it (planning classes takes time, I wanted one place to do it).
+
+SECTIONS, with rough times:
+1. Intro and problem (1 min)
+2. Live tour (4 min): dashboard and disciplines, Fitness classes,
+   create a lesson, AI lesson draft (Kids audience), Suggest
+   videos with multi-select, coaching chat (ask "How do I explain
+   a left hook to a seven-year-old?"), save and refresh to show
+   it persists, open it on my phone.
+3. How it's built (1 min): React + Express, Neon PostgreSQL,
+   Render, Gemini, YouTube API, explained simply.
+4. How I built it (1 min): ChatGPT and Claude write prompts,
+   Codex builds, I review and test. Include one live coding-agent
+   change: request it, review the diff, test, explain, commit.
+5. Limits and what's next (1 min): no password-reset email,
+   shared AI limits, free plan sleeps; next: weekly lesson plans,
+   chat that edits lessons, per-user AI limits.
+
+For each step write: what I click, what I say, and a backup
+line if something fails (e.g. AI is slow, so show a saved lesson).
+Add a short pre-demo checklist at the top: open the site 1 minute
+early, already logged in, phone ready, a saved lesson ready.
+No real kids' names or personal data anywhere.
+
+RULES
+- Docs only, no code changes. One small commit. Push.
+- Never print .env values. Don't touch other projects.
+
+REPORT BACK (one code block): commit hash, push result, and the
+total estimated time.
+
+Outcome: Replaced three-minute script with five timed sections totaling eight minutes. Added spoken lines, exact UI actions, backups, pre-demo checklist and a future heading-only coding-agent demonstration; no application change performed. Checked current Add selected, Kids draft approval, Fitness choices and read-only chat labels against source. Differentiated existing per-user chat limits from proposed per-user allowances across AI features. Timing is a script estimate, not a timed live rehearsal. Coding check may extend to nine minutes; bounded waits preserve the 5–10-minute range. No live draft/chat/media requests, private data, .env reads or other-project changes. CODE_WALKTHROUGH.md unchanged because no application source/configuration changed. Serial tests/build required by AGENTS.md before push. Previous chat fix commit: 7a0d15e. Commit subject: Rewrite CoachLab demo as eight-minute spoken script.
+
+Actual checks: 799 spoken words (directions, backups and pasted prompt excluded); scheduled sections total 8 minutes. npm test: 119 passed, zero failed/skipped, concurrency=1. npm run build passed. git diff --check passed. Reviewed documentation changes only. Initial word-count helper missed inline Say text; corrected the count before reporting timing. No changes to application source or configuration.
