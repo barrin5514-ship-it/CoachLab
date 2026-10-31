@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { openDatabase } from './database.js';
 import { migrate } from './migrations.js';
 import { prismaLessons } from './lesson-store.js';
+import { sqliteResearchLibrary, prismaResearchLibrary } from './research-library.js';
 import { createAuth } from './auth.js';
 import { consoleMailer } from './mailer.js';
 import { listenerSettings } from './web.js';
@@ -20,6 +21,7 @@ try {
   const selected = production ? 'postgresql' : process.env.COACHLAB_DATABASE || 'sqlite';
   let lessons;
   let classes;
+  let researchLibrary;
   let auth;
   const security = production ? productionSecuritySettings() : null;
   const publicUrl = security?.publicUrl || (process.env.COACHLAB_PUBLIC_URL || 'http://127.0.0.1:5174').replace(/\/+$/, '');
@@ -33,6 +35,7 @@ try {
     auth = createAuth({ ...authSettings, database });
     await auth.prepare();
     lessons = database;
+    researchLibrary = sqliteResearchLibrary(database);
   } else if (selected === 'postgresql') {
     startupStage = 'Prisma Client module loading and initialization';
     const module = await import(production ? './prisma-production.js' : './prisma-development.js');
@@ -49,11 +52,12 @@ try {
     auth = createAuth({ ...authSettings, prisma: client });
     lessons = prismaLessons(client);
     classes = prismaClasses(client);
+    researchLibrary = prismaResearchLibrary(client);
   } else {
     throw new Error('Unsupported database selection.');
   }
   startupStage = 'Express and built React initialization';
-  const server = createApp(lessons, { auth, allowedOrigins, production, classes }).listen(port, host, () => {
+  const server = createApp(lessons, { auth, allowedOrigins, production, classes, researchLibrary }).listen(port, host, () => {
     console.log(`CoachLab API listening on port ${port}; database=${selected}`);
   });
   server.on('error', async () => {

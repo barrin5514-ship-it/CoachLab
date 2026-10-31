@@ -38,6 +38,7 @@ export function createApp(database, options = {}) {
   const { verifyLink = defaultVerify, findMedia = defaultFind } = options;
   const logError = options.logError ?? (process.env.NODE_TEST_CONTEXT ? () => {} : error => console.error('CoachLab API error:', error?.name, error?.code ?? ''));
   const { auth, allowedOrigins = [] } = options;
+  const researchLibrary = options.researchLibrary;
   if (!auth || typeof auth.getUser !== 'function') throw new Error('An authentication adapter is required; CoachLab never serves lessons without one.');
   const app = express();
   app.disable('x-powered-by');
@@ -109,6 +110,23 @@ export function createApp(database, options = {}) {
   app.get('/api/auth-config', (request, response) => {
     response.json({ google: !!auth.google, mail: auth.mailMode ?? 'none', passwordReset: auth.passwordResetEnabled !== false });
   });
+  // Server-to-server import from the Research Agent. Token-guarded, saved under one owner only.
+  if (researchLibrary) {
+    app.post('/api/import/research-post', async (request, response) => {
+      if (!request.is('application/json')) return response.status(400).json({ error: 'Send JSON.' });
+      const token = process.env.COACHLAB_IMPORT_TOKEN;
+      if (!token || request.headers['x-coachlab-import-token'] !== token) return response.status(401).json({ error: 'Import is not authorized.' });
+      const ownerId = process.env.COACHLAB_IMPORT_OWNER_ID;
+      if (!ownerId) return response.status(500).json({ error: 'Import owner is not configured on the server.' });
+      const body = request.body || {};
+      const title = String(body.title || '').trim().slice(0, 300);
+      const url = String(body.url || '').trim().slice(0, 2000);
+      if (!title || !/^https:\/\//i.test(url)) return response.status(400).json({ error: 'A title and https link are required.' });
+      const post = { source_id: url, title, url, summary: String(body.summary || '').trim().slice(0, 4000), transcript: String(body.transcript || '').trim().slice(0, 60000), discipline: String(body.discipline || '').trim().slice(0, 60), drills: String(body.drills || '').trim().slice(0, 8000) };
+      const saved = await researchLibrary.add(ownerId, post);
+      response.status(saved ? 201 : 200).json({ ok: true, duplicate: !saved });
+    });
+  }
   app.use('/api', async (request, response, next) => {
     // Reject writes from other sites before trusting a session cookie.
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !allowedOrigins.includes(request.headers.origin)) {
@@ -142,6 +160,31 @@ export function createApp(database, options = {}) {
     if (!await lessons.remove(request.user.id, request.lessonId)) return response.status(404).json({ error: 'Lesson no longer exists.' });
     response.status(204).end();
   });
+
+  // Private Research Library: list, match, and turn a post into a lesson.
+  if (researchLibrary) {
+    app.get('/api/research-posts', async (request, response) => response.json(await researchLibrary.list(request.user.id)));
+    app.get('/api/research-posts/suggest', async (request, response) => {
+      const discipline = String(request.query.discipline || '').trim().toLowerCase();
+      const terms = String(request.query.q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const posts = await researchLibrary.list(request.user.id);
+      const matches = posts.filter(post => !discipline || post.discipline.toLowerCase() === discipline).map(post => {
+        const text = (post.title + ' ' + post.summary + ' ' + post.drills).toLowerCase();
+        return { post, score: terms.reduce((n, term) => n + (text.includes(term) ? 1 : 0), 0) };
+      }).filter(item => !terms.length || item.score > 0).sort((a, b) => b.score - a.score).slice(0, 10);
+      response.json(matches.map(item => item.post));
+    });
+    app.post('/api/lessons/from-post', async (request, response) => {
+      const postId = Number(request.body?.postId);
+      if (!Number.isInteger(postId) || postId < 1) return response.status(400).json({ error: 'Choose a post.' });
+      const posts = await researchLibrary.list(request.user.id);
+      const post = posts.find(p => p.id === postId);
+      if (!post) return response.status(404).json({ error: 'Post not found.' });
+      const valid = ['Boxing', 'Wrestling', 'Muay Thai', 'Brazilian Jiu-Jitsu', 'MMA', 'Personal Training'];
+      const lesson = { title: post.title, discipline: valid.includes(post.discipline) ? post.discipline : 'MMA', skill_level: 'Beginner', goal: '', drills: post.drills, coaching_notes: post.summary, audience: 'Unspecified' };
+      response.status(201).json(await lessons.create(request.user.id, lesson, null));
+    });
+  }
 
   // Lists attachment metadata for the signed-in coach only.
   app.get('/api/lesson-media', async (request, response) => {

@@ -177,6 +177,23 @@ model CoachingClass {
 }
 
 // A unique link permits a lesson in many classes without copying its content.
+model ResearchPost {
+  id         Int      @id @default(autoincrement())
+  owner_id   String
+  source_id  String
+  title      String   @default("")
+  url        String   @default("")
+  summary    String   @default("")
+  transcript String   @default("")
+  discipline String   @default("")
+  drills     String   @default("")
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  owner      User     @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  @@unique([owner_id, source_id])
+  @@index([owner_id])
+  @@map("research_posts")
+}
+
 model ClassLesson {
   class_id String
   lesson_id Int
