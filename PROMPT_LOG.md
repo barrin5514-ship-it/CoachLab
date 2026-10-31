@@ -5573,3 +5573,57 @@ Backend commit: e748445. Connected Classes navigation and saved-lesson Add to cl
 Reviewed all UI diffs and verified the five affected walkthrough listings against 533 actual source lines, including explanations and syntax checks. Final serial suite: 123 passed, zero failures/skips; production build passed (45 modules), Prisma validation and Client generation passed. These checks ran on the final executable files; only documentation changed afterward. No live provider calls, real database operations or .env reads. Browser verification was unavailable because local browser use is disabled in Work settings; phone layout was implemented responsively but has not been visually verified in a real browser. Production migration completion must be checked in Render after deployment.
 
 Containing UI commit subject: "feat: connect class setup and lesson assignments in the UI". Reviewed staged paths and whitespace; only intended code, tests, migration and documentation belong to this task. Normal push will preserve existing history. Final response records the resolved UI hash and actual push result.
+
+## 2026-10-30 — Assignment failure investigation and visible feedback
+
+Exact owner prompt:
+~~~text
+COACHLAB — BUG: ADDING A LESSON TO A CLASS DOESN'T WORK
+Project: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+Live site: https://coachlab-q2ck.onrender.com
+
+PROBLEM (live site, after bc2bea2)
+1. Created class "Kids Boxing Class" (Boxing, Kids, Tue/Thu,
+   goal + Beginner level). It saves and shows fine.
+2. On the class page: Add lesson -> chose saved lesson
+   "Beginner Kids Boxing Fundamentals" -> left date blank ->
+   clicked Add lesson. Nothing happened. No error shown.
+3. After refresh, the class page shows no assigned lessons.
+
+FIND AND FIX
+- Check the frontend click handler, the API request, the server
+  route, auth/ownership checks, and the database write.
+- Check that a blank optional date is accepted.
+- Check that production ran migration 20261030000100_create_classes
+  (Render logs) and the new tables exist.
+- Errors must show a clear message on screen, never fail silently.
+- Also verify the "Add to class" button on a lesson page works.
+
+RULES
+- Tests serially. Small commits. Push only if tests and build pass.
+- Never print .env values. Don't touch other projects.
+- Add tests: assign with blank date, assign with date, assigned
+  lesson appears on class page after reload, error shows a message.
+- Stop and report if anything risks breaking the live site.
+
+REPORT BACK (one code block): the cause in plain English, commit
+hash, push result, test/build results.
+~~~
+
+Exact owner follow-up after the request for safe migration/error log excerpts:
+~~~text
+Render logs: "Production migrations completed" is there.
+Searching "error" shows no matching logs, even after clicking
+Add lesson. So the request may never reach the server. Check
+the frontend Add lesson button and request first.
+~~~
+
+Investigation: started clean at bc2bea2. Read instructions, actual form handlers, class API helper, auth/origin guards, production request limiter, parameterized class store, migration and production startup. Both forms send null for a blank date. The existing PostgreSQL transaction and owner checks passed blank/datetime tests. An additional ignored local experiment used the generated Prisma Client and PrismaPg adapter over a disposable PGlite-backed pg transport: create class, assign a lesson with null date, and reload all succeeded. This is not a Neon test. Its first transport attempt incorrectly returned parsed JSON objects instead of pg's raw JSON strings; corrected that test-only transport conversion and reran successfully. No application data or credentials were accessed.
+
+The exact live failure was NOT reproduced or established. The owner's migration message confirms the production migration command returned successfully, but is not an independent table inspection. Successful class creation is supporting evidence, not direct verification of all tables. The browser tool reported local browser use disabled in Work settings, so Render logs/live DOM/database state were not directly inspected. No bypass was attempted. Missing error logs do not prove no request arrived: prior validation/state rejections were not logged.
+
+Verified gaps corrected: ClassesPage displayed errors above the class details, potentially off-screen, and gave no success notice; fetch had no timeout; native browser validation could suppress the submit handler without an app error. Both forms now invoke browser validity checks explicitly inside noValidate submit handlers and show a message for invalid input (server validation remains). ClassesPage shows feedback beside Add lesson, retains choices on failure, reloads and verifies the link before showing success. class-api.js provides a 20-second timeout and safe connection/unreadable-response messages, advising refresh before retry because a timed-out write may have completed. class-route.js logs only fixed stage labels: request_received, validation_rejected, saved, ownership_or_state_rejected, database_failed. No IDs, lesson text, error payloads, keys or URLs are logged. No schema, auth rules or SQL writes changed.
+
+Added tests in server/classes.test.js: blank-date database round trip, dated links and duplicate safety; actual ClassesPage JSX submit handlers, returned assignment visibility, inline validity/auth/missing-link errors and retained choice; actual AssignLesson handlers with blank/dates and failure message; safe fetch network, timeout, proxy and auth errors. UI tests use controlled React state, not a real browser. Five focused tests passed. Full serial npm test passed 125 tests, zero failures/skips, 64.8 seconds. Five changed walkthrough listings verified against 279 lines, with syntax checks. Production build result and final commit/push are recorded below after completion. Containing commit subject: "fix: surface class assignment failures and verify saved links". Root-cause confirmation still needs a live retry and its new stage/message; do not describe this diagnostic/feedback repair as proof that the owner's live incident is resolved.
+
+Production build passed: Prisma Client generation/TypeScript and Vite, 45 modules. Reviewed final code/test/documentation diffs and whitespace; no dependency or database changes. Push result and resolved commit hash will be reported in the final response. Browser/live incident remains unverified pending owner retry.

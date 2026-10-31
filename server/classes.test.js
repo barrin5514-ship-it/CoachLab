@@ -58,6 +58,9 @@ test('class API isolates coaches, preserves lessons, edits ladders, archives and
   assert.equal((await call('class-ladder', 'PUT', { discipline: 'Boxing', audience: 'Kids', levels: levels.filter(level => level.id !== 'level-0'), revision: saved.data.revision })).status, 409);
   assert.equal((await call('class-ladder', 'PUT', { discipline: 'Boxing', audience: 'Kids', levels: levels.filter(level => level.id !== 'extra'), revision: saved.data.revision })).status, 200);
   const assign = { class_ids: [first.data.id, second.data.id], lesson_id: 1, scheduled_date: '2026-10-30' };
+  assert.equal((await call('class-assignments', 'POST', { ...assign, scheduled_date: null })).status, 200);
+  const blankReload = (await call('classes')).data;
+  assert.ok(blankReload.every(row => row.assignments[0].lesson_id === 1 && row.assignments[0].scheduled_date === null));
   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
   let classes = (await call('classes')).data; assert.ok(classes.every(row => row.assignments.length === 1));
@@ -94,8 +97,63 @@ test('Add to class waits for explicit multi-selection, sends one link request an
   for (const box of boxes) box.props.onChange({ target: { checked: true } });
   assert.equal(writes, 0);
   await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
-  assert.equal(writes, 1); assert.equal(sent.lesson_id, 9); assert.equal(sent.class_ids.join(','), 'one,two');
+  assert.equal(writes, 1); assert.equal(sent.lesson_id, 9); assert.equal(sent.scheduled_date, null); assert.equal(sent.class_ids.join(','), 'one,two');
   assert.equal(all(render()).filter(node => node.type === 'input' && node.props.checked).length, 2);
+  assert.ok(all(render()).some(node => node.props.role === 'status' && node.children.includes('Retry later')));
+  all(render()).find(node => node.props.type === 'date').props.onChange({ target: { value: '2026-11-03' } });
   fail = false; await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.equal(sent.scheduled_date, '2026-11-03');
   assert.equal(all(render()).some(node => node.type === 'form'), false);
+});
+
+// Exercise the class-page form, including native-validation failures that previously blocked submit silently.
+test('class page submits blank/dates, reloads assignments and displays errors beside the form', async () => {
+  const { transformWithOxc } = await import('vite');
+  const { runInNewContext } = await import('node:vm');
+  const source = readFileSync(new URL('../client/src/ClassesPage.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
+  const { code } = await transformWithOxc(source, 'ClassesPage.jsx', { jsx: { runtime: 'classic' } });
+  const slots = []; let cursor = 0, sent, writes = 0, failure = '', omitLink = false;
+  const group = { id: 'one', name: 'Kids Boxing Class', days: ['Tuesday'], levels: [], assignments: [] };
+  slots[0] = [group];
+  const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
+  const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
+  const Component = runInNewContext(code + '; ClassesPage;', { React, useState, useEffect() {}, classApi: async (path, method, body) => {
+    if (method === 'POST') { writes++; sent = body; if (failure) throw new Error(failure); if (!omitLink) group.assignments = [{ lesson_id: body.lesson_id, title: 'Boxing fundamentals', scheduled_date: body.scheduled_date }]; return { assigned: 1 }; }
+    return [structuredClone(group)];
+  } });
+  const render = () => { cursor = 0; return Component({ lessons: [{ id: 7, title: 'Boxing fundamentals' }], lessonsLoading: false, lessonsError: '' }); };
+  const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+  all(render()).find(node => node.type === 'button' && node.props['aria-pressed'] === false).props.onClick();
+  all(render()).find(node => node.type === 'select').props.onChange({ target: { value: '7' } });
+  const submit = valid => all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {}, currentTarget: { checkValidity: () => valid } });
+  assert.equal(all(render()).find(node => node.type === 'form').props.noValidate, true);
+  await submit(false); assert.equal(writes, 0);
+  assert.ok(all(all(render()).find(node => node.type === 'form')).some(node => node.props.role === 'alert'));
+  await submit(true); assert.equal(sent.lesson_id, 7); assert.equal(sent.scheduled_date, null);
+  assert.equal(slots[0][0].assignments[0].lesson_id, 7);
+  assert.ok(all(render()).some(node => node.props.item?.title === 'Boxing fundamentals'));
+  assert.ok(all(render()).some(node => node.props.role === 'status' && node.children.includes('Lesson added to this class. The original is unchanged.')));
+  all(render()).find(node => node.props.type === 'date').props.onChange({ target: { value: '2026-11-03' } });
+  await submit(true); assert.equal(sent.scheduled_date, '2026-11-03'); assert.equal(slots[0][0].assignments[0].scheduled_date, '2026-11-03');
+  failure = 'Please sign in to continue.'; await submit(true);
+  assert.ok(all(all(render()).find(node => node.type === 'form')).some(node => node.props.role === 'alert' && node.children.includes(failure)));
+  assert.equal(all(render()).find(node => node.type === 'select').props.value, '7');
+  failure = ''; omitLink = true; group.assignments = []; await submit(true);
+  assert.ok(all(render()).some(node => node.props.role === 'alert' && node.children.some(text => typeof text === 'string' && text.includes('not returned'))));
+});
+
+// Network/proxy failures must become useful messages rather than JSON parser text or endless waiting.
+test('class API reports network, timeout, unreadable and server errors safely', async t => {
+  const { classApi } = await import('../client/src/class-api.js');
+  const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => { throw new TypeError('network'); };
+  await assert.rejects(classApi('classes'), /Could not reach CoachLab/);
+  globalThis.fetch = async () => ({ status: 502, ok: false, json: async () => { throw new SyntaxError('private proxy text'); } });
+  await assert.rejects(classApi('classes'), /unreadable response/);
+  globalThis.fetch = async () => ({ status: 401, ok: false, json: async () => ({ error: 'Please sign in to continue.' }) });
+  await assert.rejects(classApi('classes'), /Please sign in/);
+  const timeout = AbortSignal.timeout; t.after(() => { AbortSignal.timeout = timeout; });
+  AbortSignal.timeout = ms => { assert.equal(ms, 20000); return AbortSignal.abort(); };
+  globalThis.fetch = async () => { throw new Error('aborted'); };
+  await assert.rejects(classApi('classes'), /took too long/);
 });

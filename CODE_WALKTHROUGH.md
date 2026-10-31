@@ -15348,25 +15348,41 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Browser JSON requests to protected class routes; session cookies identify the coach, never a user-supplied owner ID.
 
-### Lines 1–7
+### Lines 1–15
 
 ```text
 1 | // Small JSON helper keeps safe API messages visible and never sends a coach ID.
 2 | export async function classApi(path, method = 'GET', body, signal) {
-3 |   const response = await fetch('/api/' + path, { method, signal, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-4 |   const data = response.status === 204 ? null : await response.json();
-5 |   if (!response.ok) throw new Error(data?.error || 'Classes could not be loaded. Try again.');
-6 |   return data;
-7 | }
+3 |   const timeout = AbortSignal.timeout(20000);
+4 |   let response;
+5 |   try { response = await fetch('/api/' + path, { method, signal: signal ? AbortSignal.any([signal, timeout]) : timeout, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
+6 |   catch (error) {
+7 |     if (signal?.aborted) throw error;
+8 |     throw new Error(timeout.aborted ? 'CoachLab took too long to respond. Refresh classes to check whether the lesson was added before retrying.' : 'Could not reach CoachLab. Check your connection and try again.');
+9 |   }
+10 |   let data;
+11 |   try { data = response.status === 204 ? null : await response.json(); }
+12 |   catch { throw new Error('CoachLab returned an unreadable response. Refresh classes and try again.'); }
+13 |   if (!response.ok) throw new Error(data?.error || 'Classes could not be loaded. Try again.');
+14 |   return data;
+15 | }
 ```
 
 - **Line 1:** Comment for the reader: Small JSON helper keeps safe API messages visible and never sends a coach ID. It does not execute.
 - **Line 2:** Defines the browser request helper; defaults to GET, accepts optional JSON data and a cancellation signal, and waits for the server response.
-- **Line 3:** Sends a JSON request to the named API route with an optional abort signal; no owner ID is attached.
-- **Line 4:** Skips JSON parsing for an empty HTTP 204 response; otherwise reads the JSON payload.
-- **Line 5:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
-- **Line 6:** Returns parsed successful API data to the component.
-- **Line 7:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 3:** Creates an abort signal after 20 seconds so a stalled request cannot keep the assignment button busy indefinitely.
+- **Line 4:** Declares the variable that will hold the HTTP response.
+- **Line 5:** Sends JSON to the same-origin protected API, combining caller cancellation with the timeout; session cookies identify the coach.
+- **Line 6:** Handles a failed network request; the following checks distinguish cancellation from connection trouble.
+- **Line 7:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 8:** Returns a safe timeout or connectivity explanation. After a timeout the coach should refresh first because the server may have completed the write.
+- **Line 9:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 10:** Declares the variable that will hold the parsed JSON response.
+- **Line 11:** Treats HTTP 204 as empty and parses other responses as JSON.
+- **Line 12:** Replaces unreadable proxy/server response details with a safe instruction to refresh and retry.
+- **Line 13:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 14:** Returns parsed successful API data to the component.
+- **Line 15:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## client/src/AssignLesson.jsx
 
@@ -15374,7 +15390,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 The saved-lesson assignment picker selects multiple owned active classes and sends links only after explicit submission.
 
-### Lines 1–18
+### Lines 1–19
 
 ```text
 1 | // Links a saved lesson to selected classes without changing lesson content.
@@ -15389,12 +15405,13 @@ The saved-lesson assignment picker selects multiple owned active classes and sen
 10 |     catch (error) { setMessage(error.message); } finally { setBusy(false); }
 11 |   }
 12 |   async function assign(event) {
-13 |     event.preventDefault(); setBusy(true); setMessage('');
-14 |     try { await classApi('class-assignments', 'POST', { class_ids: selected, lesson_id: lessonId, scheduled_date: date || null }); setClasses(null); setMessage('Lesson linked to the selected classes. The original is unchanged.'); }
-15 |     catch (error) { setMessage(error.message); } finally { setBusy(false); }
-16 |   }
-17 |   return <div className="class-assignment"><button type="button" className="secondary" disabled={disabled || busy} onClick={open}>Add to class</button>{classes && <form onSubmit={assign}><fieldset disabled={disabled || busy}><legend>Choose your classes</legend>{classes.length === 0 && <p>Create an active class on the Classes page first.</p>}{classes.map(item => <label className="check-label" key={item.id}><input type="checkbox" checked={selected.includes(item.id)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />{item.name}</label>)}<label>Optional lesson date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><small>This sets the date for each selected link. A blank date means unscheduled, including existing links.</small><div className="actions"><button disabled={!selected.length} type="submit">Assign lesson</button><button type="button" className="secondary" onClick={() => setClasses(null)}>Cancel</button></div></fieldset></form>}{message && <p role="status">{message}</p>}</div>;
-18 | }
+13 |     if (event.currentTarget?.checkValidity && !event.currentTarget.checkValidity()) { event.preventDefault(); setMessage('Choose a saved lesson or class and leave the date completely blank or enter a valid date.'); return; }
+14 |     event.preventDefault(); setBusy(true); setMessage('');
+15 |     try { await classApi('class-assignments', 'POST', { class_ids: selected, lesson_id: lessonId, scheduled_date: date || null }); setClasses(null); setMessage('Lesson linked to the selected classes. The original is unchanged.'); }
+16 |     catch (error) { setMessage(error.message); } finally { setBusy(false); }
+17 |   }
+18 |   return <div className="class-assignment"><button type="button" className="secondary" disabled={disabled || busy} onClick={open}>Add to class</button>{classes && <form noValidate onSubmit={assign}><fieldset disabled={disabled || busy}><legend>Choose your classes</legend>{classes.length === 0 && <p>Create an active class on the Classes page first.</p>}{classes.map(item => <label className="check-label" key={item.id}><input type="checkbox" checked={selected.includes(item.id)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />{item.name}</label>)}<label>Optional lesson date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><small>This sets the date for each selected link. A blank date means unscheduled, including existing links.</small><div className="actions"><button disabled={!selected.length} type="submit">Assign lesson</button><button type="button" className="secondary" onClick={() => setClasses(null)}>Cancel</button></div></fieldset></form>}{message && <p role="status">{message}</p>}</div>;
+19 | }
 ```
 
 - **Line 1:** Comment for the reader: Links a saved lesson to selected classes without changing lesson content. It does not execute.
@@ -15409,12 +15426,13 @@ The saved-lesson assignment picker selects multiple owned active classes and sen
 - **Line 10:** Displays the failed request message while preserving selection, and releases the busy flag.
 - **Line 11:** Closes the surrounding block, object or callback and completes the expression or statement.
 - **Line 12:** Defines assign with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
-- **Line 13:** Prevents page navigation, disables repeated submissions and clears the previous message.
-- **Line 14:** Sends the chosen IDs and optional date in one request; closes the picker only after successful linking.
-- **Line 15:** Displays the failed request message while preserving selection, and releases the busy flag.
-- **Line 16:** Closes the surrounding block, object or callback and completes the expression or statement.
-- **Line 17:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. The saved-lesson assignment picker selects multiple owned active classes and sends links only after explicit submission.
-- **Line 18:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 13:** Runs browser input validity checks inside the submit handler and shows a visible message instead of allowing native validation to silently block submission. A completely blank optional date remains valid.
+- **Line 14:** Prevents page navigation, disables repeated submissions and clears the previous message.
+- **Line 15:** Sends the chosen IDs and optional date in one request; closes the picker only after successful linking.
+- **Line 16:** Displays the failed request message while preserving selection, and releases the busy flag.
+- **Line 17:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 18:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. The saved-lesson assignment picker selects multiple owned active classes and sends links only after explicit submission.
+- **Line 19:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## server/class-store.js
 
@@ -15646,7 +15664,7 @@ Authenticated Express routes validate class, ladder and assignment input, then c
 - **Line 29:** Closes the surrounding block, object or callback and completes the expression or statement.
 - **Line 30:** Registers this exact HTTP method/path with its validated handler. The enclosing app has already checked session and origin; the following callback uses req.user.id rather than trusting a browser owner.
 
-### Lines 31–45
+### Lines 31–53
 
 ```text
 31 |   app.put('/api/classes/:classId', save(true));
@@ -15656,14 +15674,22 @@ Authenticated Express routes validate class, ladder and assignment input, then c
 35 |   }));
 36 |   app.post('/api/class-assignments', run(async (req, res) => {
 37 |     const body = req.body;
-38 |     if (!Array.isArray(body?.class_ids) || body.class_ids.length < 1 || body.class_ids.length > 50 || new Set(body.class_ids).size !== body.class_ids.length || !body.class_ids.every(uuid) || !lessonId(body.lesson_id) || !validClassDate(body.scheduled_date ?? null)) return reject(res, 'Choose 1–50 classes, a saved lesson and an optional valid date.');
-39 |     res.json(await store.assign(req.user.id, body.class_ids, body.lesson_id, body.scheduled_date ?? null));
-40 |   }));
-41 |   app.delete('/api/classes/:classId/lessons/:lessonId', run(async (req, res) => {
-42 |     if (!uuid(req.params.classId) || !/^\d+$/.test(req.params.lessonId) || !lessonId(Number(req.params.lessonId))) return reject(res, 'Invalid class or lesson ID.');
-43 |     await store.unassign(req.user.id, req.params.classId, Number(req.params.lessonId)); res.status(204).end();
-44 |   }));
-45 | }
+38 |     if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: request_received');
+39 |     if (!Array.isArray(body?.class_ids) || body.class_ids.length < 1 || body.class_ids.length > 50 || new Set(body.class_ids).size !== body.class_ids.length || !body.class_ids.every(uuid) || !lessonId(body.lesson_id) || !validClassDate(body.scheduled_date ?? null)) { if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: validation_rejected'); return reject(res, 'Choose 1–50 classes, a saved lesson and an optional valid date.'); }
+40 |     try {
+41 |       const result = await store.assign(req.user.id, body.class_ids, body.lesson_id, body.scheduled_date ?? null);
+42 |       if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: saved');
+43 |       res.json(result);
+44 |     } catch (error) {
+45 |       if (!process.env.NODE_TEST_CONTEXT) console.info(error instanceof ClassError ? 'Class assignment: ownership_or_state_rejected' : 'Class assignment: database_failed');
+46 |       throw error;
+47 |     }
+48 |   }));
+49 |   app.delete('/api/classes/:classId/lessons/:lessonId', run(async (req, res) => {
+50 |     if (!uuid(req.params.classId) || !/^\d+$/.test(req.params.lessonId) || !lessonId(Number(req.params.lessonId))) return reject(res, 'Invalid class or lesson ID.');
+51 |     await store.unassign(req.user.id, req.params.classId, Number(req.params.lessonId)); res.status(204).end();
+52 |   }));
+53 | }
 ```
 
 - **Line 31:** Registers this exact HTTP method/path with its validated handler. The enclosing app has already checked session and origin; the following callback uses req.user.id rather than trusting a browser owner.
@@ -15673,14 +15699,22 @@ Authenticated Express routes validate class, ladder and assignment input, then c
 - **Line 35:** Closes the surrounding block, object or callback and completes the expression or statement.
 - **Line 36:** Registers this exact HTTP method/path with its validated handler. The enclosing app has already checked session and origin; the following callback uses req.user.id rather than trusting a browser owner.
 - **Line 37:** Reads parsed JSON input for validation; ownership still comes exclusively from the authenticated session.
-- **Line 38:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
-- **Line 39:** Calls the named owner-scoped store operation using the authenticated user and validated fields, then returns its result (or an empty 204 for removal).
-- **Line 40:** Closes the surrounding block, object or callback and completes the expression or statement.
-- **Line 41:** Registers this exact HTTP method/path with its validated handler. The enclosing app has already checked session and origin; the following callback uses req.user.id rather than trusting a browser owner.
-- **Line 42:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 38:** Logs only a fixed assignment stage, without coach IDs, lesson text, URLs or credentials; suppresses diagnostic noise during automated tests.
+- **Line 39:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 40:** Starts guarded work whose following catch/finally handles failures or cleanup.
+- **Line 41:** Runs the owner-checked assignment transaction; a missing optional date becomes SQL null.
+- **Line 42:** Logs only a fixed assignment stage, without coach IDs, lesson text, URLs or credentials; suppresses diagnostic noise during automated tests.
 - **Line 43:** Calls the named owner-scoped store operation using the authenticated user and validated fields, then returns its result (or an empty 204 for removal).
-- **Line 44:** Closes the surrounding block, object or callback and completes the expression or statement.
-- **Line 45:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 44:** Ends the try block and captures a thrown exception in error for controlled reporting.
+- **Line 45:** Logs only a fixed assignment stage, without coach IDs, lesson text, URLs or credentials; suppresses diagnostic noise during automated tests.
+- **Line 46:** Forwards the original error to the existing safe route handler after logging only the stage.
+- **Line 47:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 48:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 49:** Registers this exact HTTP method/path with its validated handler. The enclosing app has already checked session and origin; the following callback uses req.user.id rather than trusting a browser owner.
+- **Line 50:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 51:** Calls the named owner-scoped store operation using the authenticated user and validated fields, then returns its result (or an empty 204 for removal).
+- **Line 52:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 53:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## server/classes.test.js
 
@@ -15823,44 +15857,44 @@ Disposable PGlite executes real PostgreSQL migrations and class SQL. A small ada
 ### Lines 61–90
 
 ```text
-61 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
-62 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
-63 |   let classes = (await call('classes')).data; assert.ok(classes.every(row => row.assignments.length === 1));
-64 |   assert.equal(classes.find(row => row.id === first.data.id).current_level, 'level-0'); assert.equal(classes.find(row => row.id === second.data.id).current_level, 'level-1');
-65 |   assert.equal(classes[0].assignments[0].scheduled_date, '2026-10-30');
-66 |   assert.equal((await call('class-assignments', 'POST', { ...assign, lesson_id: 2 })).status, 404);
-67 |   assert.equal((await call('class-assignments', 'POST', { ...assign, class_ids: [first.data.id, foreign.data.id], scheduled_date: null })).status, 404);
-68 |   assert.equal((await call('classes')).data[0].assignments[0].scheduled_date, '2026-10-30');
-69 |   assert.equal((await call('classes/' + first.data.id + '/lessons/1', 'DELETE', null, 'user-b')).status, 404);
-70 |   assert.equal((await call('classes/' + first.data.id + '/lessons/1', 'DELETE')).status, 204);
-71 |   assert.equal((await call('classes/' + second.data.id, 'PATCH', { archived: true })).data.archived, true);
-72 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 409);
-73 |   assert.equal((await call('classes/' + second.data.id, 'PATCH', { archived: false })).status, 200);
-74 |   assert.deepEqual((await db.query('SELECT * FROM lessons ORDER BY id')).rows, original);
-75 |   assert.equal((await call('lessons')).data[0].discipline, 'Personal Training');
-76 |   await db.query("UPDATE lessons SET title='Edited old lesson' WHERE id=1"); assert.equal((await call('lessons')).data[0].title, 'Edited old lesson');
-77 |   await db.query('DELETE FROM lessons WHERE id=1'); assert.equal((await db.query('SELECT * FROM class_lessons')).rows.length, 0);
-78 | });
-79 |
-80 | // Exercise actual selection handlers with React state slots and a fake API, without browser access.
-81 | test('Add to class waits for explicit multi-selection, sends one link request and preserves failed choices', async () => {
-82 |   const { transformWithOxc } = await import('vite');
-83 |   const { runInNewContext } = await import('node:vm');
-84 |   const source = readFileSync(new URL('../client/src/AssignLesson.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
-85 |   const { code } = await transformWithOxc(source, 'AssignLesson.jsx', { jsx: { runtime: 'classic' } });
-86 |   const slots = []; let cursor = 0, writes = 0, sent, fail = true;
-87 |   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
-88 |   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
-89 |   const Component = runInNewContext(code + '; AssignLesson;', { React, useState, classApi: async (path, method, body) => { if (method === 'POST') { writes++; sent = body; if (fail) throw new Error('Retry later'); return {}; } return [{ id: 'one', name: 'First group' }, { id: 'two', name: 'Second group' }, { id: 'old', name: 'Archived', archived: true }]; } });
-90 |   const render = () => { cursor = 0; return Component({ lessonId: 9 }); };
+61 |   assert.equal((await call('class-assignments', 'POST', { ...assign, scheduled_date: null })).status, 200);
+62 |   const blankReload = (await call('classes')).data;
+63 |   assert.ok(blankReload.every(row => row.assignments[0].lesson_id === 1 && row.assignments[0].scheduled_date === null));
+64 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
+65 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 200);
+66 |   let classes = (await call('classes')).data; assert.ok(classes.every(row => row.assignments.length === 1));
+67 |   assert.equal(classes.find(row => row.id === first.data.id).current_level, 'level-0'); assert.equal(classes.find(row => row.id === second.data.id).current_level, 'level-1');
+68 |   assert.equal(classes[0].assignments[0].scheduled_date, '2026-10-30');
+69 |   assert.equal((await call('class-assignments', 'POST', { ...assign, lesson_id: 2 })).status, 404);
+70 |   assert.equal((await call('class-assignments', 'POST', { ...assign, class_ids: [first.data.id, foreign.data.id], scheduled_date: null })).status, 404);
+71 |   assert.equal((await call('classes')).data[0].assignments[0].scheduled_date, '2026-10-30');
+72 |   assert.equal((await call('classes/' + first.data.id + '/lessons/1', 'DELETE', null, 'user-b')).status, 404);
+73 |   assert.equal((await call('classes/' + first.data.id + '/lessons/1', 'DELETE')).status, 204);
+74 |   assert.equal((await call('classes/' + second.data.id, 'PATCH', { archived: true })).data.archived, true);
+75 |   assert.equal((await call('class-assignments', 'POST', assign)).status, 409);
+76 |   assert.equal((await call('classes/' + second.data.id, 'PATCH', { archived: false })).status, 200);
+77 |   assert.deepEqual((await db.query('SELECT * FROM lessons ORDER BY id')).rows, original);
+78 |   assert.equal((await call('lessons')).data[0].discipline, 'Personal Training');
+79 |   await db.query("UPDATE lessons SET title='Edited old lesson' WHERE id=1"); assert.equal((await call('lessons')).data[0].title, 'Edited old lesson');
+80 |   await db.query('DELETE FROM lessons WHERE id=1'); assert.equal((await db.query('SELECT * FROM class_lessons')).rows.length, 0);
+81 | });
+82 |
+83 | // Exercise actual selection handlers with React state slots and a fake API, without browser access.
+84 | test('Add to class waits for explicit multi-selection, sends one link request and preserves failed choices', async () => {
+85 |   const { transformWithOxc } = await import('vite');
+86 |   const { runInNewContext } = await import('node:vm');
+87 |   const source = readFileSync(new URL('../client/src/AssignLesson.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
+88 |   const { code } = await transformWithOxc(source, 'AssignLesson.jsx', { jsx: { runtime: 'classic' } });
+89 |   const slots = []; let cursor = 0, writes = 0, sent, fail = true;
+90 |   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
 ```
 
 - **Line 61:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 62:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 63:** Reads both classes and verifies duplicate assignment requests did not create duplicate links.
+- **Line 62:** Loads class data again after assigning without a date, proving the API returns the persisted link.
+- **Line 63:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 64:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 65:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 66:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 66:** Reads both classes and verifies duplicate assignment requests did not create duplicate links.
 - **Line 67:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 68:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 69:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
@@ -15870,49 +15904,177 @@ Disposable PGlite executes real PostgreSQL migrations and class SQL. A small ada
 - **Line 73:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 74:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
 - **Line 75:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 76:** Executes the shown SQL only in disposable test storage to seed records, simulate an old lesson edit or delete it; any following assertion checks preservation or cascade cleanup.
-- **Line 77:** Executes the shown SQL only in disposable test storage to seed records, simulate an old lesson edit or delete it; any following assertion checks preservation or cascade cleanup.
-- **Line 78:** Closes the surrounding block, object or callback and completes the expression or statement.
-- **Line 79:** Blank line separates related operations for readability.
-- **Line 80:** Comment for the reader: Exercise actual selection handlers with React state slots and a fake API, without browser access. It does not execute.
-- **Line 81:** Registers the named automated scenario; its callback contains the checks and cleanup.
-- **Line 82:** Loads the named existing tool/module for this local test without installing dependencies.
-- **Line 83:** Loads the named existing tool/module for this local test without installing dependencies.
-- **Line 84:** Reads actual component source, strips imports/exports only for the isolated handler harness, and never edits production files.
-- **Line 85:** Compiles actual JSX with the existing Vite transformer for the handler test.
-- **Line 86:** Initializes fake React state storage and counters for assignment requests and injected failure.
-- **Line 87:** Emulates stable React state slots and functional setters to exercise real component handlers.
-- **Line 88:** Builds a lightweight element tree for finding and invoking actual component controls.
-- **Line 89:** Loads the actual component with mocked API calls: active/archived classes are returned and assignment failure is controlled.
-- **Line 90:** Resets the hook cursor and renders the same component state for a synthetic saved lesson.
+- **Line 76:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 77:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 78:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 79:** Executes the shown SQL only in disposable test storage to seed records, simulate an old lesson edit or delete it; any following assertion checks preservation or cascade cleanup.
+- **Line 80:** Executes the shown SQL only in disposable test storage to seed records, simulate an old lesson edit or delete it; any following assertion checks preservation or cascade cleanup.
+- **Line 81:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 82:** Blank line separates related operations for readability.
+- **Line 83:** Comment for the reader: Exercise actual selection handlers with React state slots and a fake API, without browser access. It does not execute.
+- **Line 84:** Registers the named automated scenario; its callback contains the checks and cleanup.
+- **Line 85:** Loads the named existing tool/module for this local test without installing dependencies.
+- **Line 86:** Loads the named existing tool/module for this local test without installing dependencies.
+- **Line 87:** Reads actual component source, strips imports/exports only for the isolated handler harness, and never edits production files.
+- **Line 88:** Compiles actual JSX with the existing Vite transformer for the handler test.
+- **Line 89:** Initializes fake React state storage and counters for assignment requests and injected failure.
+- **Line 90:** Emulates stable React state slots and functional setters to exercise real component handlers.
 
-### Lines 91–101
+### Lines 91–120
 
 ```text
-91 |   const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
-92 |   await all(render()).find(node => node.type === 'button').props.onClick();
-93 |   const boxes = all(render()).filter(node => node.type === 'input' && node.props.type === 'checkbox'); assert.equal(boxes.length, 2);
-94 |   for (const box of boxes) box.props.onChange({ target: { checked: true } });
-95 |   assert.equal(writes, 0);
-96 |   await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
-97 |   assert.equal(writes, 1); assert.equal(sent.lesson_id, 9); assert.equal(sent.class_ids.join(','), 'one,two');
-98 |   assert.equal(all(render()).filter(node => node.type === 'input' && node.props.checked).length, 2);
-99 |   fail = false; await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
-100 |   assert.equal(all(render()).some(node => node.type === 'form'), false);
-101 | });
+91 |   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
+92 |   const Component = runInNewContext(code + '; AssignLesson;', { React, useState, classApi: async (path, method, body) => { if (method === 'POST') { writes++; sent = body; if (fail) throw new Error('Retry later'); return {}; } return [{ id: 'one', name: 'First group' }, { id: 'two', name: 'Second group' }, { id: 'old', name: 'Archived', archived: true }]; } });
+93 |   const render = () => { cursor = 0; return Component({ lessonId: 9 }); };
+94 |   const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+95 |   await all(render()).find(node => node.type === 'button').props.onClick();
+96 |   const boxes = all(render()).filter(node => node.type === 'input' && node.props.type === 'checkbox'); assert.equal(boxes.length, 2);
+97 |   for (const box of boxes) box.props.onChange({ target: { checked: true } });
+98 |   assert.equal(writes, 0);
+99 |   await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+100 |   assert.equal(writes, 1); assert.equal(sent.lesson_id, 9); assert.equal(sent.scheduled_date, null); assert.equal(sent.class_ids.join(','), 'one,two');
+101 |   assert.equal(all(render()).filter(node => node.type === 'input' && node.props.checked).length, 2);
+102 |   assert.ok(all(render()).some(node => node.props.role === 'status' && node.children.includes('Retry later')));
+103 |   all(render()).find(node => node.props.type === 'date').props.onChange({ target: { value: '2026-11-03' } });
+104 |   fail = false; await all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+105 |   assert.equal(sent.scheduled_date, '2026-11-03');
+106 |   assert.equal(all(render()).some(node => node.type === 'form'), false);
+107 | });
+108 |
+109 | // Exercise the class-page form, including native-validation failures that previously blocked submit silently.
+110 | test('class page submits blank/dates, reloads assignments and displays errors beside the form', async () => {
+111 |   const { transformWithOxc } = await import('vite');
+112 |   const { runInNewContext } = await import('node:vm');
+113 |   const source = readFileSync(new URL('../client/src/ClassesPage.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export default function', 'function');
+114 |   const { code } = await transformWithOxc(source, 'ClassesPage.jsx', { jsx: { runtime: 'classic' } });
+115 |   const slots = []; let cursor = 0, sent, writes = 0, failure = '', omitLink = false;
+116 |   const group = { id: 'one', name: 'Kids Boxing Class', days: ['Tuesday'], levels: [], assignments: [] };
+117 |   slots[0] = [group];
+118 |   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
+119 |   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
+120 |   const Component = runInNewContext(code + '; ClassesPage;', { React, useState, useEffect() {}, classApi: async (path, method, body) => {
 ```
 
-- **Line 91:** Recursively walks the fake React element tree, including nested child arrays, to find real rendered controls.
-- **Line 92:** Invokes the rendered button or form handler, as specified, without a real browser or provider call.
-- **Line 93:** Finds rendered checkboxes and verifies archived classes were omitted.
-- **Line 94:** Checks both active classes using the actual input handlers.
-- **Line 95:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 96:** Invokes the rendered button or form handler, as specified, without a real browser or provider call.
-- **Line 97:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 91:** Builds a lightweight element tree for finding and invoking actual component controls.
+- **Line 92:** Loads the actual component with mocked API calls: active/archived classes are returned and assignment failure is controlled.
+- **Line 93:** Resets the hook cursor and renders the same component state for a synthetic saved lesson.
+- **Line 94:** Recursively walks the fake React element tree, including nested child arrays, to find real rendered controls.
+- **Line 95:** Invokes the rendered button or form handler, as specified, without a real browser or provider call.
+- **Line 96:** Finds rendered checkboxes and verifies archived classes were omitted.
+- **Line 97:** Checks both active classes using the actual input handlers.
 - **Line 98:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 99:** Switches the fake API to success and resubmits, verifying the picker closes only after success.
+- **Line 99:** Invokes the rendered button or form handler, as specified, without a real browser or provider call.
 - **Line 100:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
-- **Line 101:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 101:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 102:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 103:** Invokes the real rendered control handler in the test: selects the class or lesson, or enters the optional date shown in the argument.
+- **Line 104:** Switches the fake API to success and resubmits, verifying the picker closes only after success.
+- **Line 105:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 106:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 107:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 108:** Blank line separates related operations for readability.
+- **Line 109:** Comment for the reader: Exercise the class-page form, including native-validation failures that previously blocked submit silently. It does not execute.
+- **Line 110:** Registers the named automated scenario; its callback contains the checks and cleanup.
+- **Line 111:** Loads the named existing tool/module for this local test without installing dependencies.
+- **Line 112:** Loads the named existing tool/module for this local test without installing dependencies.
+- **Line 113:** Reads actual component source, strips imports/exports only for the isolated handler harness, and never edits production files.
+- **Line 114:** Compiles actual JSX with the existing Vite transformer for the handler test.
+- **Line 115:** Initializes fake React state storage and counters for assignment requests and injected failure.
+- **Line 116:** Creates a disposable class fixture with no assignments for the class-page test.
+- **Line 117:** Seeds the fake React class-list state with this test group.
+- **Line 118:** Emulates stable React state slots and functional setters to exercise real component handlers.
+- **Line 119:** Builds a lightweight element tree for finding and invoking actual component controls.
+- **Line 120:** Loads the actual component with mocked API calls: active/archived classes are returned and assignment failure is controlled.
+
+### Lines 121–150
+
+```text
+121 |     if (method === 'POST') { writes++; sent = body; if (failure) throw new Error(failure); if (!omitLink) group.assignments = [{ lesson_id: body.lesson_id, title: 'Boxing fundamentals', scheduled_date: body.scheduled_date }]; return { assigned: 1 }; }
+122 |     return [structuredClone(group)];
+123 |   } });
+124 |   const render = () => { cursor = 0; return Component({ lessons: [{ id: 7, title: 'Boxing fundamentals' }], lessonsLoading: false, lessonsError: '' }); };
+125 |   const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+126 |   all(render()).find(node => node.type === 'button' && node.props['aria-pressed'] === false).props.onClick();
+127 |   all(render()).find(node => node.type === 'select').props.onChange({ target: { value: '7' } });
+128 |   const submit = valid => all(render()).find(node => node.type === 'form').props.onSubmit({ preventDefault() {}, currentTarget: { checkValidity: () => valid } });
+129 |   assert.equal(all(render()).find(node => node.type === 'form').props.noValidate, true);
+130 |   await submit(false); assert.equal(writes, 0);
+131 |   assert.ok(all(all(render()).find(node => node.type === 'form')).some(node => node.props.role === 'alert'));
+132 |   await submit(true); assert.equal(sent.lesson_id, 7); assert.equal(sent.scheduled_date, null);
+133 |   assert.equal(slots[0][0].assignments[0].lesson_id, 7);
+134 |   assert.ok(all(render()).some(node => node.props.item?.title === 'Boxing fundamentals'));
+135 |   assert.ok(all(render()).some(node => node.props.role === 'status' && node.children.includes('Lesson added to this class. The original is unchanged.')));
+136 |   all(render()).find(node => node.props.type === 'date').props.onChange({ target: { value: '2026-11-03' } });
+137 |   await submit(true); assert.equal(sent.scheduled_date, '2026-11-03'); assert.equal(slots[0][0].assignments[0].scheduled_date, '2026-11-03');
+138 |   failure = 'Please sign in to continue.'; await submit(true);
+139 |   assert.ok(all(all(render()).find(node => node.type === 'form')).some(node => node.props.role === 'alert' && node.children.includes(failure)));
+140 |   assert.equal(all(render()).find(node => node.type === 'select').props.value, '7');
+141 |   failure = ''; omitLink = true; group.assignments = []; await submit(true);
+142 |   assert.ok(all(render()).some(node => node.props.role === 'alert' && node.children.some(text => typeof text === 'string' && text.includes('not returned'))));
+143 | });
+144 |
+145 | // Network/proxy failures must become useful messages rather than JSON parser text or endless waiting.
+146 | test('class API reports network, timeout, unreadable and server errors safely', async t => {
+147 |   const { classApi } = await import('../client/src/class-api.js');
+148 |   const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
+149 |   globalThis.fetch = async () => { throw new TypeError('network'); };
+150 |   await assert.rejects(classApi('classes'), /Could not reach CoachLab/);
+```
+
+- **Line 121:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 122:** Simulates a fresh GET response using a separate copy rather than shared object state.
+- **Line 123:** Closes the injected fetch function, options object and generateDraft call.
+- **Line 124:** Resets the hook cursor and renders the same component state for a synthetic saved lesson.
+- **Line 125:** Recursively walks the fake React element tree, including nested child arrays, to find real rendered controls.
+- **Line 126:** Invokes the real rendered control handler in the test: selects the class or lesson, or enters the optional date shown in the argument.
+- **Line 127:** Invokes the real rendered control handler in the test: selects the class or lesson, or enters the optional date shown in the argument.
+- **Line 128:** Calls the real form handler with a controlled browser-validity result and a preventDefault stub.
+- **Line 129:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 130:** Submits the form and checks the captured write or reloaded data; false validity must make no request, while valid blank and dated inputs are retained correctly.
+- **Line 131:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 132:** Submits the form and checks the captured write or reloaded data; false validity must make no request, while valid blank and dated inputs are retained correctly.
+- **Line 133:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 134:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 135:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 136:** Invokes the real rendered control handler in the test: selects the class or lesson, or enters the optional date shown in the argument.
+- **Line 137:** Submits the form and checks the captured write or reloaded data; false validity must make no request, while valid blank and dated inputs are retained correctly.
+- **Line 138:** Simulates an expired session so the test can check that its message appears beside the assignment form.
+- **Line 139:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 140:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 141:** Simulates a server response missing the new link; the UI must show an error rather than claim success.
+- **Line 142:** Asserts the actual result, status, contents or match against the expected value shown; a mismatch fails this test. Compound assertions on this line each verify a separate stated result.
+- **Line 143:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 144:** Blank line separates related operations for readability.
+- **Line 145:** Comment for the reader: Network/proxy failures must become useful messages rather than JSON parser text or endless waiting. It does not execute.
+- **Line 146:** Registers the named automated scenario; its callback contains the checks and cleanup.
+- **Line 147:** Loads the named existing tool/module for this local test without installing dependencies.
+- **Line 148:** Saves the real network function and restores it after the test so mocks cannot affect later tests.
+- **Line 149:** Replaces network access with the specified failure response, exercising safe error messages without contacting any external service.
+- **Line 150:** Checks that the API helper rejects with the expected useful message for this simulated failure.
+
+### Lines 151–159
+
+```text
+151 |   globalThis.fetch = async () => ({ status: 502, ok: false, json: async () => { throw new SyntaxError('private proxy text'); } });
+152 |   await assert.rejects(classApi('classes'), /unreadable response/);
+153 |   globalThis.fetch = async () => ({ status: 401, ok: false, json: async () => ({ error: 'Please sign in to continue.' }) });
+154 |   await assert.rejects(classApi('classes'), /Please sign in/);
+155 |   const timeout = AbortSignal.timeout; t.after(() => { AbortSignal.timeout = timeout; });
+156 |   AbortSignal.timeout = ms => { assert.equal(ms, 20000); return AbortSignal.abort(); };
+157 |   globalThis.fetch = async () => { throw new Error('aborted'); };
+158 |   await assert.rejects(classApi('classes'), /took too long/);
+159 | });
+```
+
+- **Line 151:** Replaces network access with the specified failure response, exercising safe error messages without contacting any external service.
+- **Line 152:** Checks that the API helper rejects with the expected useful message for this simulated failure.
+- **Line 153:** Replaces network access with the specified failure response, exercising safe error messages without contacting any external service.
+- **Line 154:** Checks that the API helper rejects with the expected useful message for this simulated failure.
+- **Line 155:** Saves and restores the timeout function around the immediate-timeout test.
+- **Line 156:** Confirms the configured 20-second timeout and simulates it immediately without waiting.
+- **Line 157:** Replaces network access with the specified failure response, exercising safe error messages without contacting any external service.
+- **Line 158:** Checks that the API helper rejects with the expected useful message for this simulated failure.
+- **Line 159:** Closes the surrounding block, object or callback and completes the expression or statement.
 
 ## prisma/migrations/20261030000100_create_classes/migration.sql
 
@@ -16112,7 +16274,7 @@ Exact path: `C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab\clie
 
 Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
 
-### Lines 1–20
+### Lines 1–30
 
 ```text
 1 | // Shows only server-authorized classes, with explicit archive and assignment actions.
@@ -16127,14 +16289,24 @@ Lists the signed-in coach’s classes and links, supports archive/restore and op
 10 | export default function ClassesPage({ lessons, lessonsLoading, lessonsError }) {
 11 |   const [classes, setClasses] = useState([]), [selected, setSelected] = useState(''), [editor, setEditor] = useState(null);
 12 |   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [showArchived, setShowArchived] = useState(false), [lessonId, setLessonId] = useState(''), [date, setDate] = useState('');
-13 |   const current = classes.find(item => item.id === selected);
-14 |   async function load() { setClasses(await classApi('classes')); }
-15 |   useEffect(() => { const controller = new AbortController(); setBusy(true); classApi('classes', 'GET', undefined, controller.signal).then(setClasses).catch(failure => { if (!controller.signal.aborted) setError(failure.message); }).finally(() => { if (!controller.signal.aborted) setBusy(false); }); return () => controller.abort(); }, []);
-16 |   // A failed mutation leaves the current selection and editor data available.
-17 |   async function run(action) { setBusy(true); setError(''); try { await action(); await load(); } catch (failure) { setError(failure.message); } finally { setBusy(false); } }
-18 |   if (editor) return <ClassEditor key={editor.id || 'new'} item={editor.id ? editor : null} onCancel={() => { setEditor(null); run(async () => {}); }} onSaved={() => { setEditor(null); run(async () => {}); }} />;
-19 |   return <section className="classes-page"><h2>Classes</h2><p>Organize the groups you coach. Assigned lessons are links to originals; class levels and schedules stay separate.</p><div className="actions"><button disabled={busy} onClick={() => setEditor({})}>Create class</button><button className="secondary" disabled={busy} onClick={() => run(async () => {})}>Refresh classes</button></div><label className="check-label"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived classes</label>{busy && <p role="status">Updating classes…</p>}{error && <p className="error" role="alert">{error}</p>}<div className="class-layout"><nav aria-label="Your classes">{classes.filter(item => showArchived || !item.archived).map(item => <button className="secondary" key={item.id} aria-pressed={selected === item.id} onClick={() => { setSelected(item.id); setLessonId(''); setDate(''); }}>{item.name}{item.archived ? ' (archived)' : ''}</button>)}{!busy && !classes.length && <p>No classes yet. Create your first group.</p>}</nav>{current && <article className="lesson-card"><h3>{current.name}</h3><p>{current.discipline} {current.class_type || ''} · {current.audience}</p><p>{current.days.join(', ')} ({current.days_per_week} days per week)</p><p>Goal: {current.goal || 'Not set'}</p><p>Current level: <strong>{current.levels.find(level => level.id === current.current_level)?.name || 'Choose a level'}</strong></p><ul>{current.levels.find(level => level.id === current.current_level)?.skills.map((skill, index) => <li key={index}>{skill}</li>)}</ul><div className="actions"><button className="secondary" disabled={busy} onClick={() => setEditor(current)}>Edit class / ladder</button><button className="secondary" disabled={busy} onClick={() => run(() => classApi('classes/' + current.id, 'PATCH', { archived: !current.archived }))}>{current.archived ? 'Restore class' : 'Archive class'}</button></div><small>Archiving keeps the class and its links. It does not delete lessons.</small><h4>Assigned lessons</h4><ul className="class-links">{current.assignments.map(item => <Assignment key={current.id + ':' + item.lesson_id + ':' + item.scheduled_date} item={item} classId={current.id} run={run} busy={busy || current.archived} />)}</ul>{!current.assignments.length && <p>No lessons assigned yet.</p>}{!current.archived && <form onSubmit={event => { event.preventDefault(); run(() => classApi('class-assignments', 'POST', { class_ids: [current.id], lesson_id: Number(lessonId), scheduled_date: date || null })); }}><h4>Add lesson</h4>{lessonsError && <p role="alert">Your lessons could not load. Return to the dashboard and retry.</p>}<fieldset disabled={busy || lessonsLoading || !!lessonsError}><label>Saved lesson<select required value={lessonId} onChange={event => setLessonId(event.target.value)}><option value="">Choose a saved lesson</option>{lessons.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><label>Optional date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><button type="submit" disabled={!lessonId}>Add lesson</button></fieldset></form>}</article>}</div></section>;
-20 | }
+13 |   const [assignmentMessage, setAssignmentMessage] = useState('');
+14 |   const current = classes.find(item => item.id === selected);
+15 |   async function load() { const fresh = await classApi('classes'); setClasses(fresh); return fresh; }
+16 |   useEffect(() => { const controller = new AbortController(); setBusy(true); classApi('classes', 'GET', undefined, controller.signal).then(setClasses).catch(failure => { if (!controller.signal.aborted) setError(failure.message); }).finally(() => { if (!controller.signal.aborted) setBusy(false); }); return () => controller.abort(); }, []);
+17 |   // A failed mutation leaves the current selection and editor data available.
+18 |   async function run(action) { setBusy(true); setError(''); try { await action(); await load(); } catch (failure) { setError(failure.message); } finally { setBusy(false); } }
+19 |   // Verify the new link is returned by the server before showing success next to the form.
+20 |   async function addLesson(event) {
+21 |     if (event.currentTarget?.checkValidity && !event.currentTarget.checkValidity()) { event.preventDefault(); setError('Choose a saved lesson or class and leave the date completely blank or enter a valid date.'); return; }
+22 |     event.preventDefault(); setBusy(true); setAssignmentMessage(''); setError('');
+23 |     try {
+24 |       await classApi('class-assignments', 'POST', { class_ids: [current.id], lesson_id: Number(lessonId), scheduled_date: date || null });
+25 |       const fresh = await load();
+26 |       if (!fresh.find(item => item.id === current.id)?.assignments.some(item => item.lesson_id === Number(lessonId))) throw new Error('The lesson was not returned in this class. Refresh classes and try again.');
+27 |       setAssignmentMessage('Lesson added to this class. The original is unchanged.');
+28 |     } catch (failure) { setError(failure.message || 'Could not add the lesson. Please try again.'); }
+29 |     finally { setBusy(false); }
+30 |   }
 ```
 
 - **Line 1:** Comment for the reader: Shows only server-authorized classes, with explicit archive and assignment actions. It does not execute.
@@ -16149,11 +16321,33 @@ Lists the signed-in coach’s classes and links, supports archive/restore and op
 - **Line 10:** Defines ClassesPage with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
 - **Line 11:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
 - **Line 12:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
-- **Line 13:** Finds the currently selected class in the latest owner-authorized response.
-- **Line 14:** Reloads classes from the protected API after a successful action.
-- **Line 15:** Loads classes once when the page opens, handling failures and cancelling work on unmount.
-- **Line 16:** Comment for the reader: A failed mutation leaves the current selection and editor data available. It does not execute.
-- **Line 17:** Runs an explicit mutation, reloads fresh classes, reports failures and releases busy state without discarding the selection.
-- **Line 18:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
-- **Line 19:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
-- **Line 20:** Closes the surrounding block, object or callback and completes the expression or statement.
+- **Line 13:** Keeps the named local state values and setter functions. These track UI selection, input, loading or errors without saving until an explicit action.
+- **Line 14:** Finds the currently selected class in the latest owner-authorized response.
+- **Line 15:** Reloads classes from the protected API after a successful action.
+- **Line 16:** Loads classes once when the page opens, handling failures and cancelling work on unmount.
+- **Line 17:** Comment for the reader: A failed mutation leaves the current selection and editor data available. It does not execute.
+- **Line 18:** Runs an explicit mutation, reloads fresh classes, reports failures and releases busy state without discarding the selection.
+- **Line 19:** Comment for the reader: Verify the new link is returned by the server before showing success next to the form. It does not execute.
+- **Line 20:** Defines addLesson with the shown inputs; the following body implements this file’s described role. async permits waiting for requests or transactions; export makes it usable by other modules.
+- **Line 21:** Runs browser input validity checks inside the submit handler and shows a visible message instead of allowing native validation to silently block submission. A completely blank optional date remains valid.
+- **Line 22:** Prevents page navigation, disables repeated submissions and clears the previous message.
+- **Line 23:** Starts guarded work whose following catch/finally handles failures or cleanup.
+- **Line 24:** Posts the selected class and numeric lesson ID; blank date text becomes null, leaving the link unscheduled.
+- **Line 25:** Reloads the classes from the server and keeps that response for checking the new link.
+- **Line 26:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 27:** Shows success beside the form only after the reloaded class contains the requested lesson.
+- **Line 28:** Keeps the selected lesson and date while displaying the safe failure message next to the form.
+- **Line 29:** Re-enables controls after either success or failure.
+- **Line 30:** Closes the surrounding block, object or callback and completes the expression or statement.
+
+### Lines 31–33
+
+```text
+31 |   if (editor) return <ClassEditor key={editor.id || 'new'} item={editor.id ? editor : null} onCancel={() => { setEditor(null); run(async () => {}); }} onSaved={() => { setEditor(null); run(async () => {}); }} />;
+32 |   return <section className="classes-page"><h2>Classes</h2><p>Organize the groups you coach. Assigned lessons are links to originals; class levels and schedules stay separate.</p><div className="actions"><button disabled={busy} onClick={() => setEditor({})}>Create class</button><button className="secondary" disabled={busy} onClick={() => run(async () => {})}>Refresh classes</button></div><label className="check-label"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived classes</label>{busy && <p role="status">Updating classes…</p>}{error && <p className="error" role="alert">{error}</p>}<div className="class-layout"><nav aria-label="Your classes">{classes.filter(item => showArchived || !item.archived).map(item => <button className="secondary" key={item.id} aria-pressed={selected === item.id} onClick={() => { setSelected(item.id); setLessonId(''); setDate(''); setAssignmentMessage(''); setError(''); }}>{item.name}{item.archived ? ' (archived)' : ''}</button>)}{!busy && !classes.length && <p>No classes yet. Create your first group.</p>}</nav>{current && <article className="lesson-card"><h3>{current.name}</h3><p>{current.discipline} {current.class_type || ''} · {current.audience}</p><p>{current.days.join(', ')} ({current.days_per_week} days per week)</p><p>Goal: {current.goal || 'Not set'}</p><p>Current level: <strong>{current.levels.find(level => level.id === current.current_level)?.name || 'Choose a level'}</strong></p><ul>{current.levels.find(level => level.id === current.current_level)?.skills.map((skill, index) => <li key={index}>{skill}</li>)}</ul><div className="actions"><button className="secondary" disabled={busy} onClick={() => setEditor(current)}>Edit class / ladder</button><button className="secondary" disabled={busy} onClick={() => run(() => classApi('classes/' + current.id, 'PATCH', { archived: !current.archived }))}>{current.archived ? 'Restore class' : 'Archive class'}</button></div><small>Archiving keeps the class and its links. It does not delete lessons.</small><h4>Assigned lessons</h4><ul className="class-links">{current.assignments.map(item => <Assignment key={current.id + ':' + item.lesson_id + ':' + item.scheduled_date} item={item} classId={current.id} run={run} busy={busy || current.archived} />)}</ul>{!current.assignments.length && <p>No lessons assigned yet.</p>}{!current.archived && <form noValidate onSubmit={addLesson}><h4>Add lesson</h4>{lessonsError && <p role="alert">Your lessons could not load. Return to the dashboard and retry.</p>}<fieldset disabled={busy || lessonsLoading || !!lessonsError}><label>Saved lesson<select required value={lessonId} onChange={event => setLessonId(event.target.value)}><option value="">Choose a saved lesson</option>{lessons.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><label>Optional date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><button type="submit" disabled={!lessonId}>{busy ? 'Adding lesson…' : 'Add lesson'}</button></fieldset>{error && <p role="alert" className="error">{error}</p>}{assignmentMessage && <p role="status">{assignmentMessage}</p>}</form>}</article>}</div></section>;
+33 | }
+```
+
+- **Line 31:** Checks the stated condition and stops invalid or unauthorized work with the precise safe error shown. No later database write runs on this branch.
+- **Line 32:** Renders this component’s actual labeled controls and content. Braces insert current values, map renders repeated options/rows, conditionals show available sections, and onClick/onChange/onSubmit connect the named handlers. Disabled states prevent actions while busy; controlled inputs retain edits on failure. Lists the signed-in coach’s classes and links, supports archive/restore and optional lesson dates, and leaves original lessons unchanged.
+- **Line 33:** Closes the surrounding block, object or callback and completes the expression or statement.

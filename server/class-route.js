@@ -35,8 +35,16 @@ export function registerClassRoutes(app, store) {
   }));
   app.post('/api/class-assignments', run(async (req, res) => {
     const body = req.body;
-    if (!Array.isArray(body?.class_ids) || body.class_ids.length < 1 || body.class_ids.length > 50 || new Set(body.class_ids).size !== body.class_ids.length || !body.class_ids.every(uuid) || !lessonId(body.lesson_id) || !validClassDate(body.scheduled_date ?? null)) return reject(res, 'Choose 1–50 classes, a saved lesson and an optional valid date.');
-    res.json(await store.assign(req.user.id, body.class_ids, body.lesson_id, body.scheduled_date ?? null));
+    if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: request_received');
+    if (!Array.isArray(body?.class_ids) || body.class_ids.length < 1 || body.class_ids.length > 50 || new Set(body.class_ids).size !== body.class_ids.length || !body.class_ids.every(uuid) || !lessonId(body.lesson_id) || !validClassDate(body.scheduled_date ?? null)) { if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: validation_rejected'); return reject(res, 'Choose 1–50 classes, a saved lesson and an optional valid date.'); }
+    try {
+      const result = await store.assign(req.user.id, body.class_ids, body.lesson_id, body.scheduled_date ?? null);
+      if (!process.env.NODE_TEST_CONTEXT) console.info('Class assignment: saved');
+      res.json(result);
+    } catch (error) {
+      if (!process.env.NODE_TEST_CONTEXT) console.info(error instanceof ClassError ? 'Class assignment: ownership_or_state_rejected' : 'Class assignment: database_failed');
+      throw error;
+    }
   }));
   app.delete('/api/classes/:classId/lessons/:lessonId', run(async (req, res) => {
     if (!uuid(req.params.classId) || !/^\d+$/.test(req.params.lessonId) || !lessonId(Number(req.params.lessonId))) return reject(res, 'Invalid class or lesson ID.');
