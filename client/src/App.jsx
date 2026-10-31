@@ -129,7 +129,7 @@ export default function App({ user, onLogOut }) {
         <div><h1 className="coach-wordmark" aria-label="CoachLab">COACH<span>LAB</span></h1><p className="coach-tagline">Plan • Teach • Train</p><p>Plan your next session. Coach with confidence.</p><p className="account-line">Signed in as <strong>{user.name}</strong> ({user.email}) · <button type="button" className="link" onClick={onLogOut}>Log out</button></p></div>
         {!classesOpen && <div className="actions"><button disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('manual'); }}>+ New Lesson</button><button className="secondary" disabled={loading || !!formOpen} onClick={() => { setNotice(null); setFormOpen('ai'); }}>AI lesson draft</button></div>}
       </header>
-      {classesOpen ? <ClassesPage lessons={lessons} lessonsLoading={loading} lessonsError={error} /> : <>
+      {classesOpen ? <ClassesPage onLessonsChanged={() => setReload(current => current + 1)} lessons={lessons} lessonsLoading={loading} lessonsError={error} media={media} mediaError={mediaError} /> : <>
       <DisciplineHeader discipline={discipline} classType={classType} />
       {discipline === 'All' && !formOpen && <DisciplineCards disabled={loading} onSelect={card => { setDiscipline(card.discipline); setClassType(card.classType || 'All'); }} />}
       {notice && <div className={`notice-bar ${notice.tone}`} role="status"><span>{notice.text}</span><button type="button" className="secondary" onClick={() => setNotice(null)}>Dismiss</button></div>}
@@ -144,7 +144,7 @@ export default function App({ user, onLogOut }) {
         {mediaError && <div className="error" role="alert"><p>{mediaError}</p><button className="secondary" onClick={() => setMediaReload(value => value + 1)}>Retry loading media</button></div>}
         {error && <div className="error" role="alert"><p>{error}</p><button className="secondary" disabled={loading || !!formOpen} onClick={() => setReload(value => value + 1)}>Retry loading</button></div>}
         {!loading && !error && lessons.length === 0 && <div className="empty"><h3>A fresh start for your next session</h3><p>Select New Lesson to create your first plan. Saved lessons will appear here.</p></div>}
-        <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
+        <div className="lesson-grid">{visibleLessons.map(lesson => <LessonCard onAssigned={() => setReload(current => current + 1)} key={lesson.id} lesson={lesson} media={mediaFor(lesson.id)} disabled={!!formOpen || opening} onApproveVideo={item => handleEdit(lesson, item)} onEdit={() => handleEdit(lesson)} onDeleted={() => { setLessons(current => current.filter(item => item.id !== lesson.id)); setMedia(current => current.filter(item => item.lesson_id !== lesson.id)); setNotice({ tone: 'success', text: 'Lesson deleted.' }); }} />)}</div>
       </section>
       </>}
       <CoachingChat key={user.id} />

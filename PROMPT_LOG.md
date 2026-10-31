@@ -5627,3 +5627,42 @@ Verified gaps corrected: ClassesPage displayed errors above the class details, p
 Added tests in server/classes.test.js: blank-date database round trip, dated links and duplicate safety; actual ClassesPage JSX submit handlers, returned assignment visibility, inline validity/auth/missing-link errors and retained choice; actual AssignLesson handlers with blank/dates and failure message; safe fetch network, timeout, proxy and auth errors. UI tests use controlled React state, not a real browser. Five focused tests passed. Full serial npm test passed 125 tests, zero failures/skips, 64.8 seconds. Five changed walkthrough listings verified against 279 lines, with syntax checks. Production build result and final commit/push are recorded below after completion. Containing commit subject: "fix: surface class assignment failures and verify saved links". Root-cause confirmation still needs a live retry and its new stage/message; do not describe this diagnostic/feedback repair as proof that the owner's live incident is resolved.
 
 Production build passed: Prisma Client generation/TypeScript and Vite, 45 modules. Reviewed final code/test/documentation diffs and whitespace; no dependency or database changes. Push result and resolved commit hash will be reported in the final response. Browser/live incident remains unverified pending owner retry.
+
+## 2026-10-30 — Full assigned lessons and next-day progression
+
+Exact owner prompt:
+~~~text
+CoachLab project only: C:\Users\barri\OneDrive\Desktop\Next Chapter Projects\CoachLab
+
+Rules: low-RAM PC, run tests one at a time (serially). Small commits. Push only if all tests and the build pass. Never print .env values. Do not touch Dev Squad AI, Research Agent, or Personafy. Stop and report if anything could break the live site. Add short, plain-English beginner comments to any new code. Keep this small: no new buttons, pages, or features beyond what's listed.
+
+Current behavior (live site): the class "Kids Boxing" is set to Tuesday/Thursday, 2 days per week. I added the saved lesson "Beginner Kids Boxing Fundamentals". Under "Assigned lessons" it only shows the title. Nothing is under it, and only one lesson exists for the week.
+
+Fix only these two things:
+1. Under "Assigned lessons", show the full lesson content (warm-up, drills, videos, everything) the same way it shows in the Boxing section. Reuse the existing lesson display.
+2. When a lesson is added to a class and the class still has fewer lessons this week than its days per week, use Gemini to create the next day's lesson as a progression of the previous one (same skills, slightly harder, plus one new piece), using the class's discipline, Kids/Adults, and level. Example: Tuesday = the added lesson, Thursday = the auto-made progression. Save it as a normal saved lesson, assign it to the class, and label each lesson with its day (Tue / Thu). For kids classes, no hard sparring or head contact.
+
+Add tests. Run tests and the build, then commit and push.
+
+Report back in plain English: what you changed, the commit hashes, and the test count.
+~~~
+
+Exact clarification asked: "For automatic weekly progression, should an undated lesson use the first class day in the current Monday–Sunday week (America/New_York), even if that day has passed? An explicitly dated lesson would use that date’s week."
+Exact owner answer: "Use the next upcoming class week"
+Assistant interpretation communicated before implementation: use the next week whose full class schedule has not passed; a Friday addition for Tue/Thu starts the following Tuesday. Explicit dates retain their own week.
+
+Starting HEAD b905a41; working tree clean. Read AGENTS, actual class routes/store/forms, shared lesson renderer/media and Gemini generation/validation/quota code. No .env values read, other projects touched, dependencies installed separately, database migrations or real lesson writes. The approved build invokes its existing npm install step without changing dependencies.
+
+Changes: LessonCard supports read-only content reuse in ClassesPage; App passes the existing owned lessons/media and refreshes them after automatic generation. Date labels show Tue/Thu etc. Existing playback and fallbacks remain; class cards do not introduce edit/delete/assignment buttons. class-progression.js chooses dates and bounded previous-lesson/class-level context. Class assignment optionally performs one immediate next-day progression, using the same shared generation quota and existing prompt/structure/timing validation as manual drafts. Adding opts in; editing a date does not. Source duration and discipline must be compatible (15–180 minutes). Custom class ladder names/skills reach the provider with conservative Beginner intensity for names outside the saved lesson enum. The prompt includes Kids safety and exactly one new piece; output remains subject to coach review, not a guarantee of technique suitability.
+
+The original link saves first. AI runs outside database transactions. A final owner-scoped transaction rechecks class settings/ladder, original source, schedule and occupied target date before creating a normal lesson and its link together. Failure preserves the original; duplicate retries do not fill the same next day twice. Automatically saved notes explicitly remove the claim that a coach already approved the draft. Multi-class generation is bounded to the first three selected classes, with an explanatory message; the original is assigned to all. The browser waits up to three minutes for progression requests; ordinary requests retain twenty seconds. No new buttons, pages, schema or providers.
+
+Tests: seven targeted class tests passed. Full npm test passed 128 tests, zero failures/skips, serial (31.4 seconds). Includes existing SQLite/manual/API/Gemini/auth tests, blank/dated class assignments, owner isolation, next-upcoming/explicit dates, one-day/full-week behavior, generated lesson retrieval, Kids notes, renamed ladder context, duplicate retries, AI failure with preserved original, stale settings rejection, rollback on invalid generated save, shared quota with manual drafts, read-only content/media reuse and Gemini prompt payload with a mocked fetcher. UI tests exercise actual transformed JSX with controlled state, not a real browser. Provider tests are mocked; no live generation claim.
+
+Additional disposable experiment: generated Prisma Client + PrismaPg adapter over a local PGlite-backed pg transport successfully saved one progression, skipped a second save to the occupied day and reloaded two links. This is not Neon connectivity testing. Production build passed (Prisma generation/TypeScript, Vite 45 modules). No real data/SQLite backups changed.
+
+Genuine test mistake: the first progression test expected the default Beginner label, but an earlier part of the same fixture had renamed it Foundations. The implementation correctly sent Foundations. Corrected that assertion; all targeted and full tests passed afterward. Walkthrough generation also detected older unexplained AI test lines; these were documented from actual source, not invented history. Numbered walkthrough/source checks and final staged review are recorded below. Containing commit subject: "feat: show full class lessons and save next-day progressions". Final response will report the resolved hash and push result. Live Gemini/browser behavior still requires the owner's post-deploy check.
+
+Final documentation check: corrected an extra closing parenthesis in the ignored helper command that selects the audit file list; its first run checked only the previous five-file list. Explicitly regenerated the list for all thirteen changed source/test files and reran the check successfully. No commit was made before that correction.
+
+Final verification: thirteen source/test listings, 1,521 lines and explanations match current files; JavaScript syntax and git diff --check passed. Reviewed all changed paths and relevant UI, quota, ownership, transaction and prompt diffs. No .env, database, generated output or dependency changes are staged.

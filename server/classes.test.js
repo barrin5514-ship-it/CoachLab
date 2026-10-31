@@ -7,6 +7,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { prismaClasses } from './class-store.js';
 import { createApp } from './app.js';
 import { testOptions, authedFetch } from './test-auth.js';
+import { progressionDates, progressionRequest } from './class-progression.js';
+import { details, sections, toLesson } from '../client/src/lesson-draft.js';
 import { defaultLevels, validateClass, validateLevels, validClassDate } from '../client/src/classes.js';
 // Tagged-template values stay separate from SQL text, matching Prisma's parameterized call interface.
 function adapter(db) {
@@ -34,8 +36,11 @@ test('class API isolates coaches, preserves lessons, edits ladders, archives and
   const sql = readFileSync(new URL('20261030000100_create_classes/migration.sql', root), 'utf8');
   assert.doesNotMatch(sql, /ALTER TABLE|DROP TABLE|UPDATE lessons|DELETE FROM/i); await db.exec(sql);
   assert.deepEqual((await db.query('SELECT * FROM lessons ORDER BY id')).rows, original);
+  let generationCalls = 0, providerFails = false, capturedContext;
+  const generatedDraft = { title: 'Next boxing lesson', objectives: 'Revisit footwork and add one direction change.', ...Object.fromEntries(details.map(key => [key, 'Controlled non-contact coaching guidance.'])), sections: sections.map(name => ({ name, minutes: 12, instructions: '1. Demonstrate slowly.\n2. Practice with control.', common_mistakes: 'Rushing.', easier: 'Slow down.', harder: 'Add precision.' })) };
+  const provider = async (request, options, context) => { generationCalls++; capturedContext = context; if (providerFails) throw new Error('private provider failure'); return structuredClone(generatedDraft); };
   const store = prismaClasses(adapter(db));
-  const server = createApp({ list: async owner => (await db.query('SELECT * FROM lessons WHERE owner_id=$1', [owner])).rows }, { ...testOptions, classes: store }).listen(0, '127.0.0.1');
+  const server = createApp({ list: async owner => (await db.query('SELECT * FROM lessons WHERE owner_id=$1', [owner])).rows }, { ...testOptions, classes: store, provider }).listen(0, '127.0.0.1');
   await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
   const call = async (route, method = 'GET', body, user = 'user-a') => {
     const response = await authedFetch('http://127.0.0.1:' + server.address().port + '/api/' + route, { method, headers: { 'Content-Type': 'application/json', 'x-test-user': user }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -78,6 +83,37 @@ test('class API isolates coaches, preserves lessons, edits ladders, archives and
   assert.equal((await call('lessons')).data[0].discipline, 'Personal Training');
   await db.query("UPDATE lessons SET title='Edited old lesson' WHERE id=1"); assert.equal((await call('lessons')).data[0].title, 'Edited old lesson');
   await db.query('DELETE FROM lessons WHERE id=1'); assert.equal((await db.query('SELECT * FROM class_lessons')).rows.length, 0);
+  // The next-day lesson and its link must save together, without copying or overwriting the source.
+  const seed = (await db.query("INSERT INTO lessons (title,discipline,owner_id,audience,duration_minutes) VALUES ('Footwork','Boxing','user-a','Kids',60) RETURNING id")).rows[0].id;
+  const weekly = (await call('classes', 'POST', input)).data;
+  const auto = { class_ids: [weekly.id], lesson_id: seed, scheduled_date: null, progression: true };
+  const generated = await call('class-assignments', 'POST', auto); assert.equal(generated.status, 200); assert.match(generated.data.progression_messages[0], /Next class lesson created/);
+  const week = (await call('classes')).data.find(item => item.id === weekly.id);
+  assert.equal(week.assignments.length, 2); assert.equal(new Date(week.assignments[0].scheduled_date).getUTCDay(), 2); assert.equal(new Date(week.assignments[1].scheduled_date).getUTCDay(), 4);
+  const savedLesson = (await call('lessons')).data.find(item => item.id === week.assignments[1].lesson_id);
+  assert.equal(savedLesson.audience, 'Kids'); assert.match(savedLesson.coaching_notes, /no hard sparring, no head contact/); assert.doesNotMatch(savedLesson.coaching_notes, /reviewed and approved/);
+  assert.equal(capturedContext.previous.title, 'Footwork'); assert.equal(capturedContext.level, 'Foundations');
+  await call('class-assignments', 'POST', auto); assert.equal(generationCalls, 1); assert.equal((await call('classes')).data.find(item => item.id === weekly.id).assignments.length, 2);
+  providerFails = true;
+  const failedClass = (await call('classes', 'POST', { ...input, name: 'Provider failure' })).data;
+  const failed = await call('class-assignments', 'POST', { ...auto, class_ids: [failedClass.id] });
+  assert.match(failed.data.progression_messages[0], /Original lesson is assigned/); assert.doesNotMatch(failed.data.progression_messages[0], /private provider/);
+  assert.equal((await call('classes')).data.find(item => item.id === failedClass.id).assignments.length, 1);
+  // A stale AI response cannot write after a coach changes the class settings.
+  const plan = await store.prepareProgression('user-a', failedClass.id, seed, '2026-10-30');
+  const generatedLesson = toLesson(generatedDraft, progressionRequest(plan).request);
+  await store.save('user-a', failedClass.id, { ...input, goal: 'Changed goal' });
+  await assert.rejects(store.saveProgression('user-a', plan, generatedLesson), /settings changed/);
+  const freshPlan = await store.prepareProgression('user-a', failedClass.id, seed, '2026-10-30');
+  const beforeCount = (await db.query('SELECT count(*) FROM lessons')).rows[0].count;
+  await assert.rejects(store.saveProgression('user-a', freshPlan, { ...generatedLesson, discipline: 'invalid' }));
+  assert.equal((await db.query('SELECT count(*) FROM lessons')).rows[0].count, beforeCount);
+  const firstSave = await store.saveProgression('user-a', freshPlan, generatedLesson); assert.equal(firstSave.generated, true);
+  assert.equal((await store.saveProgression('user-a', freshPlan, generatedLesson)).generated, false);
+  const manualRequest = progressionRequest(freshPlan).request;
+  await call('ai/lesson-draft', 'POST', manualRequest);
+  assert.equal((await call('ai/lesson-draft', 'POST', manualRequest)).status, 429);
+
 });
 
 // Exercise actual selection handlers with React state slots and a fake API, without browser access.
@@ -117,7 +153,7 @@ test('class page submits blank/dates, reloads assignments and displays errors be
   slots[0] = [group];
   const useState = initial => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; };
   const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
-  const Component = runInNewContext(code + '; ClassesPage;', { React, useState, useEffect() {}, classApi: async (path, method, body) => {
+  const Component = runInNewContext(code + '; ClassesPage.Assignment = Assignment; ClassesPage;', { React, useState, LessonCard: 'SharedLessonCard', useEffect() {}, classApi: async (path, method, body) => {
     if (method === 'POST') { writes++; sent = body; if (failure) throw new Error(failure); if (!omitLink) group.assignments = [{ lesson_id: body.lesson_id, title: 'Boxing fundamentals', scheduled_date: body.scheduled_date }]; return { assigned: 1 }; }
     return [structuredClone(group)];
   } });
@@ -138,6 +174,10 @@ test('class page submits blank/dates, reloads assignments and displays errors be
   failure = 'Please sign in to continue.'; await submit(true);
   assert.ok(all(all(render()).find(node => node.type === 'form')).some(node => node.props.role === 'alert' && node.children.includes(failure)));
   assert.equal(all(render()).find(node => node.type === 'select').props.value, '7');
+  const content = Component.Assignment({ item: { title: 'Boxing fundamentals', scheduled_date: '2026-11-03' }, lesson: { id: 7, drills: 'Warm-up and drills' }, media: [{ id: 4, kind: 'youtube' }] });
+  const card = all(content).find(node => node.type === 'SharedLessonCard');
+  assert.equal(card.props.readOnly, true); assert.equal(card.props.lesson.drills, 'Warm-up and drills'); assert.equal(card.props.media[0].id, 4);
+  assert.ok(all(content).some(node => node.type === 'strong' && node.children.includes('Tue')));
   failure = ''; omitLink = true; group.assignments = []; await submit(true);
   assert.ok(all(render()).some(node => node.props.role === 'alert' && node.children.some(text => typeof text === 'string' && text.includes('not returned'))));
 });
@@ -156,4 +196,35 @@ test('class API reports network, timeout, unreadable and server errors safely', 
   AbortSignal.timeout = ms => { assert.equal(ms, 20000); return AbortSignal.abort(); };
   globalThis.fetch = async () => { throw new Error('aborted'); };
   await assert.rejects(classApi('classes'), /took too long/);
+});
+
+// Calendar examples use fixed dates and never depend on the machine timezone.
+test('progression uses the next full class week, explicit dates, and only the immediate next day', () => {
+  const group = { days: ['Thursday', 'Tuesday'] };
+  assert.deepEqual(progressionDates(group, [{ lesson_id: 1, scheduled_date: null }], 1, '2026-10-30'), { sourceDate: '2026-11-03', nextDate: '2026-11-05' });
+  assert.deepEqual(progressionDates(group, [{ lesson_id: 1, scheduled_date: '2026-10-27' }], 1, '2026-10-30'), { sourceDate: '2026-10-27', nextDate: '2026-10-29' });
+  assert.equal(progressionDates(group, [{ lesson_id: 1, scheduled_date: '2026-11-03' }, { lesson_id: 2, scheduled_date: '2026-11-05' }], 1, '2026-10-30').nextDate, null);
+  assert.equal(progressionDates({ days: ['Tuesday'] }, [{ lesson_id: 1, scheduled_date: null }], 1, '2026-10-30').nextDate, null);
+});
+
+
+// The same card keeps its full content/media while class mode hides destructive or unrelated controls.
+test('read-only class lesson card reuses the timeline, coaching notes and media display', async () => {
+  const { transformWithOxc } = await import('vite');
+  const { runInNewContext } = await import('node:vm');
+  const { activityBlocks, activityMinutes } = await import('../client/src/activities.js');
+  const { timelineEntries } = await import('../client/src/lesson-view.js');
+  const { groupMedia, mediaKey } = await import('../client/src/media.js');
+  const source = readFileSync(new URL('../client/src/LessonCard.jsx', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function').replace('export default function', 'function');
+  const { code } = await transformWithOxc(source, 'LessonCard.jsx', { jsx: { runtime: 'classic' } });
+  const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
+  const Card = runInNewContext(code + '; LessonCard;', { React, useState: initial => [initial, () => {}], activityBlocks, activityMinutes, timelineEntries, groupMedia, mediaKey, SafetyNotes: 'SafetyNotes', LessonMedia: 'LessonMedia', MediaItem: 'MediaItem' });
+  const lesson = { id: 7, title: 'Fundamentals', discipline: 'Boxing', drills: 'Warm-up — 5 minutes\nWalk slowly.\n\nDrills — 10 minutes\nPractice guard.', goal: 'Learn balance', coaching_notes: 'No head contact.', created_at: '2026-10-30' };
+  const tree = Card({ lesson, readOnly: true, media: [{ id: 1, kind: 'youtube', activity: '' }] });
+  const all = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(all) : [node, ...node.children.flatMap(all)];
+  assert.ok(all(tree).some(node => node.type === 'h5' && node.children.includes('Warm-up')));
+  assert.ok(all(tree).some(node => node.props.text === 'No head contact.'));
+  assert.ok(all(tree).some(node => node.type === 'MediaItem' && node.props.item.id === 1));
+  assert.ok(all(tree).some(node => node.type === 'LessonMedia' && node.props.lesson.id === 7));
+  assert.equal(all(tree).filter(node => node.type === 'button').length, 0);
 });

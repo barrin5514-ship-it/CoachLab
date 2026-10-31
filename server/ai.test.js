@@ -437,3 +437,13 @@ test('all reported questions reach Gemini with child-safe semantic topic instruc
   assert.equal(seen.length, 5);
   assert.equal(chatGuard('How can I teach balance?'), null);
 });
+
+// Check the actual Gemini payload without sending any network request.
+test('progression context reaches Gemini as data while Kids safety stays in the fixed prompt', async () => {
+  let payload;
+  const context = { level: 'Foundations', skills: ['Guard'], previous: { title: 'Footwork', drills: 'Controlled steps' } };
+  await generateDraft({ ...request, discipline: 'Boxing', audience: 'Kids' }, { env, fetcher: async (url, options) => { payload = JSON.parse(options.body); return new Response(JSON.stringify(envelope(draft))); } }, context);
+  assert.match(payload.systemInstruction.parts[0].text, /no hard sparring, no head contact/);
+  assert.match(payload.systemInstruction.parts[0].text, /exactly one small new piece/);
+  assert.deepEqual(JSON.parse(payload.contents[0].parts[0].text).progression, context);
+});

@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { defaultLevels } from '../client/src/classes.js';
 import { fitnessFields } from '../client/src/fitness.js';
+import { progressionDates } from './class-progression.js';
 export class ClassError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -58,6 +59,38 @@ export function prismaClasses(client) {
       if (!lessons.length) throw new ClassError(404, 'Lesson not found.');
       for (const id of ids) await tx.$executeRaw`INSERT INTO class_lessons (class_id, lesson_id, scheduled_date) VALUES (${id}, ${lessonId}, ${date}::date) ON CONFLICT (class_id, lesson_id) DO UPDATE SET scheduled_date = EXCLUDED.scheduled_date`;
       return { assigned: ids.length };
+    }),
+    // Read and lock only this coach's class; AI runs later, outside the database transaction.
+    prepareProgression: (owner, id, lessonId, today) => client.$transaction(async tx => {
+      const group = await ownedClass(tx, owner, id, true);
+      const ladders = await tx.$queryRaw`SELECT levels FROM class_ladders WHERE id = ${group.ladder_id} AND owner_id = ${owner}`;
+      group.levels = ladders[0].levels;
+      const rows = await tx.$queryRaw`SELECT s.* FROM lessons s JOIN class_lessons a ON a.lesson_id = s.id WHERE a.class_id = ${id} AND s.id = ${lessonId} AND s.owner_id = ${owner}`;
+      if (!rows.length) throw new ClassError(404, 'Assigned lesson not found.');
+      const source = rows[0];
+      const links = await tx.$queryRaw`SELECT lesson_id, scheduled_date FROM class_lessons WHERE class_id = ${id} ORDER BY lesson_id`;
+      const dates = progressionDates(group, links, lessonId, today);
+      if (!dates) return null;
+      await tx.$executeRaw`UPDATE class_lessons SET scheduled_date = ${dates.sourceDate}::date WHERE class_id = ${id} AND lesson_id = ${lessonId}`;
+      if (!dates.nextDate) return null;
+      if (source.discipline !== group.discipline || !Number.isInteger(source.duration_minutes) || source.duration_minutes < 15 || source.duration_minutes > 180) throw new ClassError(400, 'Original lesson is assigned. Automatic progression needs a matching discipline and a 15–180 minute lesson.');
+      return { group, source, ...dates };
+    }),
+    // Recheck after Gemini finishes; the lock makes concurrent retries save at most one next-day lesson.
+    saveProgression: (owner, plan, lesson) => client.$transaction(async tx => {
+      const group = await ownedClass(tx, owner, plan.group.id, true);
+      for (const key of ['discipline', 'audience', 'current_level', 'goal', 'class_type', 'class_type_other', 'class_format']) if (group[key] !== plan.group[key]) throw new ClassError(409, 'Class settings changed. Original lesson remains assigned; retry with the current settings.');
+      if (JSON.stringify(group.days) !== JSON.stringify(plan.group.days)) throw new ClassError(409, 'Class days changed. Refresh before retrying.');
+      const ladders = await tx.$queryRaw`SELECT levels FROM class_ladders WHERE id = ${group.ladder_id} AND owner_id = ${owner}`;
+      if (JSON.stringify(ladders[0].levels) !== JSON.stringify(plan.group.levels)) throw new ClassError(409, 'Class ladder changed. Refresh before retrying.');
+      const source = await tx.$queryRaw`SELECT s.* FROM lessons s JOIN class_lessons a ON a.lesson_id = s.id WHERE a.class_id = ${group.id} AND s.id = ${plan.source.id} AND s.owner_id = ${owner} AND a.scheduled_date = ${plan.sourceDate}::date FOR KEY SHARE OF s`;
+      if (!source.length || ['title', 'goal', 'drills', 'duration_minutes'].some(key => source[0][key] !== plan.source[key])) throw new ClassError(409, 'Original lesson changed. Refresh before retrying.');
+      const links = await tx.$queryRaw`SELECT lesson_id, scheduled_date FROM class_lessons WHERE class_id = ${group.id}`;
+      if (progressionDates(group, links, plan.source.id, plan.sourceDate)?.nextDate !== plan.nextDate) return { generated: false };
+      const fields = fitnessFields(lesson);
+      const rows = await tx.$queryRaw`INSERT INTO lessons (owner_id, title, discipline, audience, skill_level, duration_minutes, goal, drills, coaching_notes, class_type, class_type_other, class_format) VALUES (${owner}, ${lesson.title}, ${lesson.discipline}, ${lesson.audience}, ${lesson.skill_level}, ${lesson.duration_minutes}, ${lesson.goal}, ${lesson.drills}, ${lesson.coaching_notes}, ${fields.class_type}, ${fields.class_type_other}, ${fields.class_format}) RETURNING id`;
+      await tx.$executeRaw`INSERT INTO class_lessons (class_id, lesson_id, scheduled_date) VALUES (${group.id}, ${rows[0].id}, ${plan.nextDate}::date)`;
+      return { generated: true, lesson_id: rows[0].id };
     }),
     unassign: (owner, id, lessonId) => client.$transaction(async tx => {
       await ownedClass(tx, owner, id);

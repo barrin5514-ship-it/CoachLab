@@ -6,7 +6,7 @@ import { youtubeQuota as defaultYouTubeQuota } from './youtube-quota.js';
 import express from 'express';
 import { sqliteLessons, MediaReferenceError } from './lesson-store.js';
 import { validateLesson } from './validate-lesson.js';
-import { registerAiRoute } from './ai-route.js';
+import { registerAiRoute, createDraftGenerator } from './ai-route.js';
 import { validateMediaList } from './media-validate.js';
 import { verifyLink as defaultVerify, MediaLinkError } from './media-verify.js';
 import { findMedia as defaultFind } from './media-finder.js';
@@ -211,8 +211,9 @@ export function createApp(database, options = {}) {
     }
   });
 
-  registerClassRoutes(app, options.classes);
-  registerAiRoute(app, options);
+  const generate = createDraftGenerator(options);
+  registerClassRoutes(app, options.classes, generate);
+  registerAiRoute(app, { ...options, generate });
   registerChatRoute(app, options);
   registerVideoSuggestions(app, lessons, options);
   if (options.production) serveFrontend(app, options.frontendDirectory);

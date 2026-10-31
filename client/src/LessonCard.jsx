@@ -23,8 +23,8 @@ export function CoachingText({ text, after }) {
     </section>;
   })}</>;
 }
-// Shows saved data without writing changes until the coach takes an explicit action.
-export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [] }) {
+// Read-only class cards reuse all lesson content and media without adding editing controls.
+export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, disabled, media = [], readOnly = false, onAssigned }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,11 +53,13 @@ export default function LessonCard({ lesson, onEdit, onDeleted, onApproveVideo, 
     {rest.length > 0 && <><h4>Pictures and videos for the whole lesson</h4>{gallery(rest)}</>}
     <SafetyNotes><CoachingText text={lesson.coaching_notes} /></SafetyNotes>
     <LessonMedia lesson={lesson} />
+    {!readOnly && <>
     <VideoSuggestions lesson={lesson} media={media} onApprove={onApproveVideo} disabled={disabled || busy} />
-    <AssignLesson lessonId={lesson.id} disabled={disabled || busy} />
+    <AssignLesson onAssigned={onAssigned} lessonId={lesson.id} disabled={disabled || busy} />
     <div className="actions"><button className="secondary" disabled={disabled || busy} onClick={onEdit}>Edit lesson</button><button className="secondary danger" disabled={disabled || busy} onClick={() => setConfirming(true)}>Delete lesson</button></div>
     {confirming && <div className="error" role="alert"><p>Delete “{lesson.title}”? This permanently removes this saved lesson.</p><div className="actions"><button disabled={busy || disabled} onClick={remove}>Confirm delete</button><button className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep lesson</button></div></div>}
     {error && <p className="error" role="alert">{error}</p>}
+    </>}
     <footer>Created <time dateTime={lesson.created_at}>{new Date(lesson.created_at).toLocaleString()}</time></footer>
   </article>;
 }

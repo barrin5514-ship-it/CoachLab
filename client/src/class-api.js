@@ -1,6 +1,6 @@
 // Small JSON helper keeps safe API messages visible and never sends a coach ID.
 export async function classApi(path, method = 'GET', body, signal) {
-  const timeout = AbortSignal.timeout(20000);
+  const timeout = AbortSignal.timeout(body?.progression ? 180000 : 20000);
   let response;
   try { response = await fetch('/api/' + path, { method, signal: signal ? AbortSignal.any([signal, timeout]) : timeout, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
   catch (error) {
