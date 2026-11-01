@@ -116,7 +116,9 @@ export function createApp(database, options = {}) {
       if (!request.is('application/json')) return response.status(400).json({ error: 'Send JSON.' });
       const token = process.env.COACHLAB_IMPORT_TOKEN;
       if (!token || request.headers['x-coachlab-import-token'] !== token) return response.status(401).json({ error: 'Import is not authorized.' });
-      const ownerId = process.env.COACHLAB_IMPORT_OWNER_ID;
+      // With a single coach account the import saves under it automatically;
+      // COACHLAB_IMPORT_OWNER_ID is only needed when more than one account exists.
+      const ownerId = process.env.COACHLAB_IMPORT_OWNER_ID || (researchLibrary.defaultOwner ? await researchLibrary.defaultOwner() : null);
       if (!ownerId) return response.status(500).json({ error: 'Import owner is not configured on the server.' });
       const body = request.body || {};
       const title = String(body.title || '').trim().slice(0, 300);

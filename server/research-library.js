@@ -7,7 +7,7 @@ export function sqliteResearchLibrary(database) {
     const result = database.prepare('INSERT INTO research_posts (owner_id, source_id, title, url, summary, transcript, discipline, drills) VALUES (@ownerId, @source_id, @title, @url, @summary, @transcript, @discipline, @drills)').run({ ownerId, ...post });
     return { id: Number(result.lastInsertRowid), ...post };
   };
-  return { list: ownerId => list.all(ownerId), add };
+  return { list: ownerId => list.all(ownerId), add, defaultOwner: () => { const rows = database.prepare('SELECT id FROM auth_users ORDER BY created_at LIMIT 2').all(); return rows.length === 1 ? rows[0].id : null; } };
 }
 export function prismaResearchLibrary(client) {
   const serialize = ({ owner_id, source_id, ...row }) => ({ ...row, created_at: row.created_at.toISOString() });
@@ -17,6 +17,7 @@ export function prismaResearchLibrary(client) {
       const existing = await client.researchPost.findUnique({ where: { owner_id_source_id: { owner_id: ownerId, source_id: post.source_id } } });
       if (existing) return null;
       return serialize(await client.researchPost.create({ data: { owner_id: ownerId, ...post } }));
-    }
+    },
+    defaultOwner: async () => { const rows = await client.user.findMany({ take: 2, select: { id: true } }); return rows.length === 1 ? rows[0].id : null; }
   };
 }
