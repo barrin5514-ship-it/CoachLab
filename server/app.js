@@ -118,8 +118,10 @@ export function createApp(database, options = {}) {
       if (!token || request.headers['x-coachlab-import-token'] !== token) return response.status(401).json({ error: 'Import is not authorized.' });
       const users = researchLibrary.countUsers ? await researchLibrary.countUsers() : null;
       const configuredId = process.env.COACHLAB_IMPORT_OWNER_ID || null;
-      const autoOwner = configuredId ? null : (researchLibrary.defaultOwner ? await researchLibrary.defaultOwner() : null);
-      response.json({ service: 'coachlab', users, ownerConfigured: Boolean(configuredId || autoOwner), ownerSource: configuredId ? 'environment' : autoOwner ? 'single-account' : null });
+      const email = String(request.query.ownerEmail || '').trim().toLowerCase();
+      let resolvedId = configuredId || (email && researchLibrary.findUserByEmail ? await researchLibrary.findUserByEmail(email) : null) || (researchLibrary.defaultOwner ? await researchLibrary.defaultOwner() : null);
+      const posts = resolvedId && researchLibrary.countPosts ? await researchLibrary.countPosts(resolvedId) : null;
+      response.json({ service: 'coachlab', users, posts, ownerConfigured: Boolean(resolvedId), ownerSource: configuredId ? 'environment' : resolvedId ? 'account' : null });
     });
     app.post('/api/import/research-post', async (request, response) => {
       if (!request.is('application/json')) return response.status(400).json({ error: 'Send JSON.' });
