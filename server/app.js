@@ -112,15 +112,39 @@ export function createApp(database, options = {}) {
   });
   // Server-to-server import from the Research Agent. Token-guarded, saved under one owner only.
   if (researchLibrary) {
+    // Token-guarded connection check. It never returns ids or emails.
+    app.get('/api/import/status', async (request, response) => {
+      const token = process.env.COACHLAB_IMPORT_TOKEN;
+      if (!token || request.headers['x-coachlab-import-token'] !== token) return response.status(401).json({ error: 'Import is not authorized.' });
+      const users = researchLibrary.countUsers ? await researchLibrary.countUsers() : null;
+      const configuredId = process.env.COACHLAB_IMPORT_OWNER_ID || null;
+      const autoOwner = configuredId ? null : (researchLibrary.defaultOwner ? await researchLibrary.defaultOwner() : null);
+      response.json({ service: 'coachlab', users, ownerConfigured: Boolean(configuredId || autoOwner), ownerSource: configuredId ? 'environment' : autoOwner ? 'single-account' : null });
+    });
     app.post('/api/import/research-post', async (request, response) => {
       if (!request.is('application/json')) return response.status(400).json({ error: 'Send JSON.' });
       const token = process.env.COACHLAB_IMPORT_TOKEN;
       if (!token || request.headers['x-coachlab-import-token'] !== token) return response.status(401).json({ error: 'Import is not authorized.' });
-      // With a single coach account the import saves under it automatically;
-      // COACHLAB_IMPORT_OWNER_ID is only needed when more than one account exists.
-      const ownerId = process.env.COACHLAB_IMPORT_OWNER_ID || (researchLibrary.defaultOwner ? await researchLibrary.defaultOwner() : null);
-      if (!ownerId) return response.status(500).json({ error: 'Import owner is not configured on the server.' });
       const body = request.body || {};
+      // The Research Agent can name the coach account, so the owner does not have
+      // to copy a database id into Render just to make imports work.
+      const requestedEmail = String(body.ownerEmail || '').trim().toLowerCase().slice(0, 320);
+      let ownerId = process.env.COACHLAB_IMPORT_OWNER_ID || null;
+      let ownerError = '';
+      if (!ownerId && requestedEmail && researchLibrary.findUserByEmail) {
+        ownerId = await researchLibrary.findUserByEmail(requestedEmail);
+        if (!ownerId) ownerError = `No CoachLab account uses ${requestedEmail}. Sign up or sign in with that email, then send again.`;
+      }
+      if (!ownerId && !ownerError && researchLibrary.defaultOwner) ownerId = await researchLibrary.defaultOwner();
+      if (!ownerId) {
+        const users = researchLibrary.countUsers ? await researchLibrary.countUsers() : null;
+        const message = ownerError || (users === 0
+          ? 'No CoachLab coach account exists yet. Sign up once in CoachLab, then send again.'
+          : users > 1
+            ? 'More than one CoachLab account exists. Set COACHLAB_IMPORT_OWNER_ID or send the coach email.'
+            : 'Import owner is not configured on the server.');
+        return response.status(409).json({ error: message });
+      }
       const title = String(body.title || '').trim().slice(0, 300);
       const url = String(body.url || '').trim().slice(0, 2000);
       if (!title || !/^https:\/\//i.test(url)) return response.status(400).json({ error: 'A title and https link are required.' });
