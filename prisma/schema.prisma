@@ -75,6 +75,7 @@ model User {
   accounts      Account[]
   lessons       Lesson[]
   media         LessonMedia[]
+  researchPosts ResearchPost[]
 
   @@map("auth_users")
 }
