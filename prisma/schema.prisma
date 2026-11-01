@@ -75,6 +75,7 @@ model User {
   accounts      Account[]
   lessons       Lesson[]
   media         LessonMedia[]
+  // Posts sent from the Research Agent; each one belongs to this account only.
   researchPosts ResearchPost[]
 
   @@map("auth_users")
@@ -178,6 +179,7 @@ model CoachingClass {
 }
 
 // A unique link permits a lesson in many classes without copying its content.
+// One imported Research Agent post, stored per owner and deduplicated by its link.
 model ResearchPost {
   id         Int      @id @default(autoincrement())
   owner_id   String
