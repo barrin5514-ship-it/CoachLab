@@ -1,0 +1,507 @@
+
+> coachlab@0.1.0 test
+> node --test --test-concurrency=1 server/database.test.js server/api.test.js server/ai.test.js server/lesson-ui.test.js server/media.test.js server/media-api.test.js server/auth.test.js server/claim.test.js server/production.test.js server/fitness.test.js server/classes.test.js server/research-library.test.js
+
+✔ contract accepts supported and legacy disciplines and rejects invalid inputs and incomplete or mistimed drafts (4.4055ms)
+✔ mocked Gemini transport uses server header, JSON schema and bounded output (46.8608ms)
+✔ provider configuration, HTTP failures, truncation, oversized output and timeout produce safe errors (21.7237ms)
+✔ AI API generates without saving; approved mapped lesson persists; limits and failures leave manual API usable (713.2307ms)
+✔ audience safety rules reach Gemini for every discipline and cannot be replaced by class instructions (12.7198ms)
+✔ every timed section requires numbered cues and bounded mistake and progression guidance (1.6401ms)
+✔ exact section schedules sum to every supported class length and timing repair stays narrow (4.799ms)
+✔ 60 and 90 minute AI requests succeed through mocked Gemini and HTTP; invalid output stays rejected (236.3473ms)
+✔ chat requires sign-in and origin checks; rejects invalid input and never touches lesson storage (105.2384ms)
+✔ chat guards redirect off-topic, medical, unsafe kids and obvious personal details without Gemini (102.5448ms)
+✔ chat per-user and shared daily caps expire independently of lesson draft counters (664.7738ms)
+[CoachLab chat] invalid_answer_or_provider_failure
+[CoachLab chat] invalid_answer_or_provider_failure
+✔ chat failures are safe, count against caps and release the busy flag (36.353ms)
+✔ chat reuses Gemini with bounded output and fixed coaching/app safety instructions (2.6786ms)
+✔ numbering styles and conservative repair preserve cues and reject incomplete output (3.8774ms)
+✔ mocked route repairs steps across disciplines, Fitness types and audiences without saving (727.6735ms)
+✔ chat app help is specific, coaching reaches AI, off-topic redirects, and failures are distinct (86.0785ms)
+✔ chat failure logs only a fixed category and shows unavailable rather than off-topic (36.5602ms)
+✔ all reported questions reach Gemini with child-safe semantic topic instructions (52.1819ms)
+✔ progression context reaches Gemini as data while Kids safety stays in the fixed prompt (1.5345ms)
+✔ GET starts empty and health remains available (253.2844ms)
+✔ POST saves actual SQLite data, GET orders it, and reopening preserves it (292.8833ms)
+▶ invalid lesson inputs return 400 without saving records
+  ✔ invalid case 1 (12.5263ms)
+  ✔ invalid case 2 (9.0669ms)
+  ✔ invalid case 3 (7.0823ms)
+  ✔ invalid case 4 (12.4519ms)
+  ✔ invalid case 5 (7.2577ms)
+  ✔ invalid case 6 (8.3259ms)
+  ✔ invalid case 7 (8.3684ms)
+  ✔ invalid case 8 (7.0385ms)
+  ✔ invalid case 9 (7.504ms)
+  ✔ invalid case 10 (6.5712ms)
+  ✔ invalid case 11 (4.3809ms)
+  ✔ invalid case 12 (11.5165ms)
+  ✔ invalid case 13 (6.2824ms)
+  ✔ invalid case 14 (7.2529ms)
+  ✔ invalid case 15 (6.3542ms)
+  ✔ invalid case 16 (10.0153ms)
+  ✔ invalid case 17 (7.1932ms)
+✔ invalid lesson inputs return 400 without saving records (296.9131ms)
+✔ malformed JSON, non-object bodies, wrong media type, and oversized bodies fail safely (157.6851ms)
+✔ database failures return generic 500 errors for both routes (104.1669ms)
+✔ fresh database is migrated before app creation without changing the schema (94.4867ms)
+✔ update preserves identity without duplicates; delete persists; invalid and missing IDs fail safely (473.0482ms)
+✔ audience defaults for old clients, validates values and survives update and restart (393.0864ms)
+2026-11-01T05:37:47.817Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ password and profile rules reject weak, common and personal passwords with clear reasons (3.0151ms)
+✔ the server refuses to start authentication without a long random secret (15.8532ms)
+2026-11-01T05:37:48.588Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ production authentication marks its session cookie Secure behind HTTPS (861.3174ms)
+2026-11-01T05:37:48.941Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ production disables password reset routes and emits no reset mail or tokens (355.3245ms)
+2026-11-01T05:37:49.476Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ registration validates input, hides whether an email already exists and never stores a plain password (533.1401ms)
+2026-11-01T05:37:49.925Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:50.116Z WARN [Better Auth]: User not found
+2026-11-01T05:37:50.527Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ sign in uses one error for wrong passwords and unknown emails, sets a safe session cookie and survives refresh (1051.897ms)
+2026-11-01T05:37:51.009Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:51.250Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:51.448Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:51.630Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:51.813Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:51.983Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:52.154Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:52.309Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:52.528Z WARN [Better Auth]: User not found
+2026-11-01T05:37:52.704Z WARN [Better Auth]: User not found
+2026-11-01T05:37:52.892Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.070Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.227Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.383Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.551Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.731Z WARN [Better Auth]: User not found
+2026-11-01T05:37:53.892Z WARN [Better Auth]: User not found
+2026-11-01T05:37:54.075Z WARN [Better Auth]: User not found
+2026-11-01T05:37:54.137Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ repeated wrong passwords lock one account for a while even from different addresses, and IP rate limits stop floods (3612.2714ms)
+2026-11-01T05:37:54.785Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ protected routes reject anonymous users, logout ends the session on the server and old cookies stop working (649.4406ms)
+2026-11-01T05:37:55.193Z ERROR [Better Auth]: Invalid origin: http://evil.example
+2026-11-01T05:37:55.272Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ cross-site requests are blocked and private responses are never cached (487.5639ms)
+2026-11-01T05:37:55.662Z WARN [Better Auth]: Reset Password: User not found
+2026-11-01T05:37:56.129Z WARN [Better Auth]: Invalid password
+2026-11-01T05:37:56.325Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ password reset gives the same answer for every email, sends one single-use link, and ends old sessions (1055.5177ms)
+2026-11-01T05:37:56.626Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ password reset links cannot be requested over and over to flood one inbox (299.5906ms)
+2026-11-01T05:37:57.691Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ each coach sees only their own lessons and media; guesses return 404 and never reveal another coach (1055.2536ms)
+2026-11-01T05:37:58.180Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+✔ lessons that existed before accounts have no owner, stay untouched in the database and are invisible to every coach (501.0257ms)
+2026-11-01T05:37:58.214Z ERROR [Better Auth]: Database schema mismatch
+
+  Missing tables
+    user, session, account, verification, rateLimit
+
+  help: Run `npx auth migrate` to add the missing tables and columns.
+2026-11-01T05:37:58.278Z ERROR [Better Auth]: Provider not found. Make sure to add the provider in your auth config { provider: 'google' }
+✔ Google sign-in is offered only when its credentials are configured on the server (123.2423ms)
+✔ a dry run lists what would be claimed and changes nothing (29.0843ms)
+✔ confirming writes a verified backup first, then hands only the chosen unclaimed lessons and their media to that coach (31.0384ms)
+✔ lessons that already belong to someone can never be claimed, and bad requests change nothing (18.3921ms)
+✔ class rules cover days, audiences, editable defaults and calendar dates (12.258ms)
+✔ class API isolates coaches, preserves lessons, edits ladders, archives and links transactionally (8254.5739ms)
+✔ Add to class waits for explicit multi-selection, sends one link request and preserves failed choices (513.7204ms)
+✔ class page submits blank/dates, reloads assignments and displays errors beside the form (27.4459ms)
+✔ class API reports network, timeout, unreadable and server errors safely (6.0007ms)
+✔ progression uses the next full class week, explicit dates, and only the immediate next day (0.5348ms)
+✔ read-only class lesson card reuses the timeline, coaching notes and media display (33.0686ms)
+✔ database configuration accepts external paths and rejects unsafe paths (1261.8049ms)
+✔ versioned migration, constraints, and persistence across processes (990.3111ms)
+✔ migration failure rolls back the schema and version together (3.7012ms)
+✔ additive audience migration preserves existing lesson fields and is safe to rerun (13.7355ms)
+✔ Fitness migration preserves all old disciplines, IDs and timestamps and accepts nullable class fields (7797.0608ms)
+✔ Fitness validates optional fields, every class/format, Other text and legacy values (14.7717ms)
+✔ Fitness AI sends class type and format with non-contact, equipment, audience and five-section rules (111.2425ms)
+✔ Fitness video search keeps class type, format, beginner and kids/non-contact context (9.247ms)
+✔ Prisma lesson API preserves legacy IDs and saves Fitness metadata without duplicates (408.53ms)
+✔ Fitness controls and cards render while legacy edit options and dashboard filtering remain available (1100.8624ms)
+✔ activity editing preserves cues and supports removal, insertion and bounded reordering (3.8579ms)
+✔ card text keeps blank lines out of a card and activity minutes are summed from headings (1.0124ms)
+✔ lesson cards place each attachment under the first activity with its heading and collect the rest (0.8263ms)
+✔ media fields are detached from the lesson form so Enter can never save the lesson without a pending attachment (7.6206ms)
+✔ minimal AI requests work for every discipline; optional details remain bounded (3.9383ms)
+✔ media matches both discipline and technique with an empty safe fallback (3.0492ms)
+✔ dashboard filters combine discipline and audience without hiding legacy unspecified lessons (1.5092ms)
+✔ timeline separates minutes from cues and preserves media block indices and untimed text (5.3319ms)
+✔ discipline cards map Fitness shortcuts without introducing new disciplines (8.2017ms)
+✔ discipline page defaults preserve Fitness and legacy navigation (0.8833ms)
+✔ Personal Training shortcut includes legacy and Fitness records without changing them (1.7191ms)
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"local_quota"}
+[CoachLab videos] request_received {}
+✔ lesson video suggestions require ownership, respect quotas, and attach only through an approved save (1025.9768ms)
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"search_unavailable"}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"local_quota"}
+✔ video search failure is safe and still consumes the daily allowance (483.8043ms)
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"local_quota"}
+✔ old activity search and lesson suggestions share one user allowance while catalog-only requests remain available (137.6375ms)
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_received {}
+[CoachLab videos] request_failed {"reason":"local_quota"}
+[CoachLab videos] request_received {}
+✔ video suggestions enforce one in-flight search and eighty YouTube searches per server day (3433.4727ms)
+✔ uploads are checked by content, stored in the database, served with range support and never trusted as pages (747.7738ms)
+✔ lessons keep their original fields plus audience while attachments save, reorder, edit, survive restart and disappear with the lesson (500.8414ms)
+✔ links that fail verification or attachments that do not exist stop the save and leave data unchanged (277.1898ms)
+✔ verify and suggest routes validate input, hide failures and limit searches (388.684ms)
+✔ suggest failures return a friendly message and old unattached uploads are purged (214.7292ms)
+[CoachLab videos] start {"key_present":true,"search_terms":"jab Boxing drill beginners","match_terms":"jab"}
+[CoachLab videos] catalog {"candidates":1,"skipped_for_kids":false}
+[CoachLab videos] playback_checks {"checked":1,"passed":1,"link_only":0,"shown":1}
+[CoachLab videos] start {"key_present":true,"search_terms":"jab Boxing drill adults","match_terms":"jab"}
+[CoachLab videos] catalog {"candidates":1,"skipped_for_kids":false}
+[CoachLab videos] playback_checks {"checked":1,"passed":1,"link_only":0,"shown":1}
+[CoachLab videos] start {"key_present":true,"search_terms":"jab Boxing drill kids non contact","match_terms":"jab"}
+[CoachLab videos] catalog {"candidates":1,"skipped_for_kids":true}
+[CoachLab videos] playback_checks {"checked":5,"passed":4,"link_only":1,"shown":5}
+[CoachLab videos] start {"key_present":false,"search_terms":"jab Boxing drill beginners","match_terms":"jab"}
+[CoachLab videos] catalog {"candidates":1,"skipped_for_kids":false}
+[CoachLab videos] playback_checks {"checked":1,"passed":0,"link_only":1,"shown":1}
+✔ YouTube diagnostics report safe statuses, reasons and result counts without secret error bodies or URLs (65.6454ms)
+✔ exact live lesson logs key presence and specific match phrase; missing key differs from zero matches (7.1844ms)
+✔ shared YouTube quota counts actual searches, preserves catalog access and expires after a day (60.9519ms)
+✔ lesson video queries extract unknown techniques across lesson text and keep audience context (4.3615ms)
+✔ video suggestions verify catalog first, avoid YouTube quota when found and never save (3.7968ms)
+✔ YouTube relevance uses the main technique rather than requiring every goal or audience word in a title (3.8502ms)
+✔ video fallback searches once, passes kids context, filters broken links and bounds results (5.827ms)
+✔ video approval creates an editable copy, preserves saved attachments and prevents duplicate additions (2.5315ms)
+✔ file signatures identify supported pictures and videos and reject everything else (2.9828ms)
+✔ YouTube links in every common form resolve to the same 11 character ID (1.9464ms)
+✔ private, loopback and link-local network addresses are never public (36.6689ms)
+✔ safeFetch accepts only plain https, follows a few redirects and rechecks every hop (2.0014ms)
+✔ verifyLink confirms YouTube through oEmbed and images or videos by their real file contents (2.9926ms)
+✔ attachment lists accept saved IDs and new links only, with bounded text (9.7817ms)
+✔ activity helpers keep attachments with the right activity when headings change (1.3586ms)
+✔ Commons search keeps only supported file types that match the technique and carries credit (5.7302ms)
+✔ finder returns only verified media matched to the section that asked for it and never repeats a link (7.5521ms)
+✔ catalog media is matched on the technique the section asked for, not on passing mentions in its instructions (1.7717ms)
+✔ finder uses the optional YouTube key only on the server and drops irrelevant titles (5.2929ms)
+✔ video relevance normalizes plurals and punctuation, checks descriptions and ranks technique matches (4.602ms)
+✔ reported lesson puts the technique before discipline, audience and goal context (1.378ms)
+✔ batch video approval skips existing and repeated IDs without mutating attachments (1.6597ms)
+✔ video selection keeps results open, batches approval and retains selection after failure (515.2621ms)
+Production migrations completed.
+✔ production binds the hosting port while development stays local (9.5557ms)
+✔ production requires one public HTTPS origin and a strong authentication secret (2.8514ms)
+✔ production database configuration rejects unsafe or mismatched targets without connecting (11.5782ms)
+✔ production serves React browser routes without swallowing API or missing assets (405.2341ms)
+✔ production API limiter bounds memory, separates clients and expires limits without blocking health (2.5171ms)
+✔ startup diagnostics identify settings without disclosing their values (6.4755ms)
+✔ startup migrates an empty database before loading application and stops on migration failure (1.2491ms)
+✔ research library stores posts per owner and dedupes by source link (20.1416ms)
+✔ finds the coach account by email and counts accounts and posts (11.9179ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57985.5187
